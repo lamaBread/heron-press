@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{CAT_TITLE}}</title>
+  <link rel="stylesheet" href="/assets/common_template.css">
+  <link rel="icon" href="/assets/favicon.ico">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-title" href="/">siheonlee.com</a>
+      <nav class="site-nav">
+        <a href="/blog/">Blog</a>
+        <a href="/project/">Project</a>
+        <a href="/research/">Research</a>
+        <a href="/study/">Study</a>
+        <a href="/about/">About</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="breadcrumb">
+    <a href="/">Home</a>
+    {{BREADCRUMB}}
+  </div>
+
+  <main class="category-main">
+    <h1 class="category-title">{{CAT_DISPLAY_NAME}}</h1>
+
+    {{SUBCATEGORY_LIST}}
+
+    <ul class="article-list">
+      {{ARTICLE_LIST}}
+    </ul>
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; {{COPYRIGHT_YEAR}} {{COPYRIGHT_HOLDER}}</p>
+  </footer>
+</body>
+</html>

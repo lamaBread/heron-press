@@ -1,0 +1,11 @@
+# legacy-map.yaml — lama.pe.kr 구버전 URL → siheonlee.com slug 매핑 (§ 11)
+#
+# 키: 구버전 URL path (slash 끝맺음, urldecode 된 형태)
+# 값: 신규 slug (string) 또는 null (410 Gone)
+#
+# migrate.py 가 초안을 자동 생성합니다. 운영자가 slug 칸을 채우면 됩니다.
+# 1회 작성 후 영구 고정.
+#
+# 예시:
+# "/Articles/Blog/3D Printing/마스크 흡기구/": mask-intake-3d-printing
+# "/Articles/__inactive/foo/": null

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>siheonlee.com</title>
+  <meta name="description" content="이시헌의 개인 사이트">
+  <link rel="canonical" href="https://siheonlee.com/">
+  <link rel="stylesheet" href="/assets/common_template.css">
+  <link rel="icon" href="/assets/favicon.ico">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-title" href="/">siheonlee.com</a>
+      <nav class="site-nav">
+        <a href="/blog/">Blog</a>
+        <a href="/project/">Project</a>
+        <a href="/research/">Research</a>
+        <a href="/study/">Study</a>
+        <a href="/about/">About</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="home-main">
+    <section class="home-intro">
+      <p>이시헌의 개인 사이트입니다.</p>
+    </section>
+
+    <section class="home-articles">
+      <h2>최근 글</h2>
+      <ul class="article-list">
+        {{ARTICLE_LIST}}
+      </ul>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; {{COPYRIGHT_YEAR}} {{COPYRIGHT_HOLDER}}</p>
+  </footer>
+</body>
+</html>

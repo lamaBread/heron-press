@@ -1,0 +1,54 @@
+# siheonlee.com — 사이트 전역 설정 (§ 13)
+
+# 도메인
+domain: siheonlee.com
+base_url: https://siheonlee.com
+
+# 사이트 정보
+name: siheonlee.com
+default_author: 이시헌
+default_og_image: /assets/default-og.png
+
+# 제목 서식 기본값 (글 meta.yaml 의 seo_title_prefix/suffix 가 null/미작성이면 적용)
+default_title_prefix: ""
+default_title_suffix: " | siheonlee"
+
+# 저작권
+copyright_holder: 이시헌
+copyright_year_start: 2020
+
+# slug 예약어 (글 slug 로 사용 금지)
+reserved_slugs:
+  - src
+  - assets
+  - c
+  - p
+  - api
+  - file
+  - status
+  - blog
+  - project
+  - research
+  - study
+  - about
+
+# 빌드 옵션
+warn_on_underscore_ref: true
+warn_on_missing_asset: true
+warn_on_stale_updated: true
+home_excludes_categories: [About]
+home_sort: date_desc
+
+# SEO 폴백
+description_truncate: 150
+
+# robots.txt 본문 (그대로 dist 에 기록됨)
+robots_txt_main: |
+  User-agent: *
+  Allow: /
+
+  # Sitemap: https://siheonlee.com/sitemap.xml
+
+robots_txt_legacy: |
+  User-agent: *
+  Allow: /

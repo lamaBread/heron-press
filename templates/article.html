@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {{META_TAGS}}
+  <link rel="stylesheet" href="/assets/common_template.css">
+  <link rel="icon" href="/assets/favicon.ico">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-title" href="/">siheonlee.com</a>
+      <nav class="site-nav">
+        <a href="/blog/">Blog</a>
+        <a href="/project/">Project</a>
+        <a href="/research/">Research</a>
+        <a href="/study/">Study</a>
+        <a href="/about/">About</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="breadcrumb">
+    <a href="/">Home</a>
+    {{BREADCRUMB}}
+  </div>
+
+  <main class="article-main">
+    <article>
+      <header class="article-header">
+        <h1 class="article-title">{{ARTICLE_TITLE}}</h1>
+        <div class="article-meta">
+          <time datetime="{{DATE_ISO}}">{{DATE_DISPLAY}}</time>
+          {{UPDATED_META}}
+        </div>
+      </header>
+
+      <div class="article-body">
+        {{BODY}}
+      </div>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; {{COPYRIGHT_YEAR}} {{COPYRIGHT_HOLDER}}</p>
+  </footer>
+
+  <script src="/assets/imgslidebox.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+dist/
+dist-legacy/
+Articles/
+articles/
+__pycache__/
+*.pyc
+.build_cache/
