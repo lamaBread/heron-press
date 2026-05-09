@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """
-siheonlee.com SSG v0.2 — Static Site Generator
-Python 3.x stdlib only, zero external dependencies.
+siheonlee.com SSG v0.3 — Static Site Generator
+Python 3.x stdlib only (markdown parsing may shell out to PHP).
 
-v0.2 차이점 (vs v0.1):
-  - 원본 lama_website-main 의 UI/UX 를 그대로 보존하도록 출력 HTML 변경.
-  - 헤더/네비게이션/푸터/리스트 마크업이 원본 PHP 출력과 동일.
-  - 톱레벨 카테고리만 인덱스 페이지를 생성 (서브카테고리는 톱레벨에서 그룹 표시).
-  - About 페이지는 일반 글(slug=about)로 통합.
+v0.3 차이점 (vs v0.2):
+  - 마크다운 파서를 추상화. site.yaml 의 `markdown_parser` 로 교체 가능.
+      * builtin   — Python-only 자체 파서 (v0.2 의 그것)
+      * parsedown — lama_website-main 에서 사용하는 PHP Parsedown.php 를
+                    `php` 명령으로 호출 (parsers/parsedown/run.php).
+  - meta.yaml 에 `styles:` 필드 추가. p, h1~h6, ul, ol, li, blockquote,
+    a, code, pre, table, th, td, img, strong, em 등 lama_website-main 에서
+    자주 쓰는 태그의 기본 속성을 글 단위로 조정 가능. 결과는 article.html
+    의 `<style>` 블록으로 inject 되어 `section TAG` 선택자로 적용.
+  - YAML 파서가 nested mapping 을 지원 (styles: 트리 파싱용).
 
 Usage:
     python build.py           # full build
@@ -18,6 +23,7 @@ import os
 import re
 import sys
 import shutil
+import subprocess
 import unicodedata
 from pathlib import Path
 from datetime import date as Date
@@ -38,6 +44,7 @@ def _yaml_load(text: str) -> dict:
       - key: "str" / 'str'
       - key: [a, b]  (inline list)
       - key:\n  - item  (block list)
+      - key:\n  subkey: val  (block map, nested mapping — v0.3)
       - key: |  (literal block scalar)
       - # comments
     """
@@ -131,6 +138,51 @@ def _yaml_load(text: str) -> dict:
                 break
         return items
 
+    def parse_block_map(map_indent: int) -> dict:
+        """v0.3: parse nested key-value block at indent==map_indent."""
+        out = {}
+        while i[0] < n:
+            raw = lines[i[0]]
+            stripped = raw.strip()
+            if not stripped or stripped.startswith('#'):
+                i[0] += 1
+                continue
+            indent = get_indent(raw)
+            if indent < map_indent:
+                break
+            if indent != map_indent:
+                # Should not happen given recursive descent; bail to avoid loops.
+                i[0] += 1
+                continue
+            parsed = parse_key_line(raw)
+            if parsed is None:
+                i[0] += 1
+                continue
+            k, v = parsed
+            if v == '|':
+                i[0] += 1
+                out[k] = parse_literal_block(map_indent)
+            elif v.startswith('[') and v.endswith(']'):
+                out[k] = parse_inline_list(v[1:-1])
+                i[0] += 1
+            elif v == '':
+                i[0] += 1
+                if i[0] < n:
+                    nxt = lines[i[0]]
+                    nxt_stripped = nxt.strip()
+                    nxt_indent = get_indent(nxt)
+                    if nxt_indent > map_indent:
+                        if nxt_stripped.startswith('- ') or nxt_stripped == '-':
+                            out[k] = parse_block_list(nxt_indent)
+                        else:
+                            out[k] = parse_block_map(nxt_indent)
+                        continue
+                out[k] = None
+            else:
+                out[k] = parse_scalar(v)
+                i[0] += 1
+        return out
+
     def parse_key_line(raw: str):
         """Return (key, val_str) or None."""
         s = raw.strip()
@@ -175,15 +227,18 @@ def _yaml_load(text: str) -> dict:
             i[0] += 1
         elif val_str == '':
             i[0] += 1
-            # Peek ahead for block list
+            # Peek ahead for block list or nested map (v0.3)
             if i[0] < n:
                 next_raw = lines[i[0]]
                 next_stripped = next_raw.strip()
-                if next_stripped.startswith('- ') or next_stripped == '-':
-                    next_indent = get_indent(next_raw)
-                    if next_indent > base_indent:
+                next_indent = get_indent(next_raw)
+                if next_indent > base_indent and next_stripped:
+                    if next_stripped.startswith('- ') or next_stripped == '-':
                         result[key] = parse_block_list(next_indent)
                         continue
+                    # Nested mapping
+                    result[key] = parse_block_map(next_indent)
+                    continue
             result[key] = None
         else:
             result[key] = parse_scalar(val_str)
@@ -217,6 +272,7 @@ class SiteConfig:
     description_truncate: int
     robots_txt_main: str
     robots_txt_legacy: str
+    markdown_parser: str = 'parsedown'
 
 
 @dataclass
@@ -238,6 +294,9 @@ class ArticleMeta:
     seo_og_type: str = 'article'
     seo_twitter_card: str = 'summary_large_image'
     seo_twitter_image: Optional[str] = None
+    # v0.3: per-document tag style overrides
+    # 예: {"p": {"text-indent": 0, "line-height": "1.5em"}, "h3": {...}}
+    styles: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -334,29 +393,145 @@ def rewrite_asset_paths_in_html(html: str, slug: str) -> str:
 # ════════════════════════════════════════════════════════════════
 # Markdown Parser  (§ 8)
 # ════════════════════════════════════════════════════════════════
+#
+# v0.3 구조:
+#   1. preprocess_md_custom_syntax(text)   — 사용자 정의 문법(imgBox 등)을
+#      raw HTML 으로 치환. 모든 파서 앞단에서 동일하게 수행.
+#   2. MarkdownRenderer.parse(text) -> str — 순수 MD → HTML.
+#      구현체: BuiltinRenderer (Python), ParsedownRenderer (PHP subprocess).
+#   3. _finalize_md_html(html, slug, dir)  — 후처리.
+#
+# 새 파서 추가는 MarkdownRenderer 를 상속하고 make_markdown_renderer 에
+# 한 줄을 추가하면 끝. 파서 교체는 site.yaml 의 `markdown_parser` 만 변경.
 
 def _escape_html(s: str) -> str:
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
-def _render_inline(text: str, slug: str) -> str:
-    """Render inline markdown: bold, italic, code, links, images."""
+# ── Custom syntax preprocessing (parser-agnostic) ─────────────
+
+_IMGBOX_LINE_RE = re.compile(
+    r'^!\[\[([^\]]*)\]\]\(([^)]+)\)(?:\s+\{([^}]*)\})?\s*$',
+    re.MULTILINE,
+)
+
+
+def preprocess_md_custom_syntax(md: str) -> str:
+    """
+    Replace project-specific markdown extensions with raw HTML so that
+    any downstream parser leaves them untouched (Parsedown preserves
+    block-level HTML; the builtin parser routes through its raw-HTML
+    passthrough branch).
+
+    Currently handled:
+      - ![[alt]](url) {desc}  → <div class="imgBox">…</div>
+        (lama_website-main 의 md_imgBox_guide.md 와 동일한 형식)
+    """
+    def replace_imgbox(m: re.Match) -> str:
+        alt = m.group(1) or ''
+        url = m.group(2)
+        desc = m.group(3)
+        alt_e = _escape_html(alt)
+        if desc:
+            desc_e = _escape_html(desc)
+            return (f'<div class="imgBox">\n'
+                    f'  <img src="{url}" alt="{alt_e}">\n'
+                    f'  <p class="caption">{desc_e}</p>\n'
+                    f'</div>')
+        return (f'<div class="imgBox">\n'
+                f'  <img src="{url}" alt="{alt_e}">\n'
+                f'</div>')
+
+    return _IMGBOX_LINE_RE.sub(replace_imgbox, md)
+
+
+# ── MarkdownRenderer interface + implementations ──────────────
+
+class MarkdownRenderer:
+    """
+    교체 가능한 마크다운 파서의 추상 베이스.
+    구현체는 `parse(text) -> str` 만 제공하면 된다.
+    text 는 preprocess_md_custom_syntax 가 적용된 후의 markdown 문자열.
+    반환 HTML 은 후속 단계에서 asset path 재작성, PHP 시뮬레이션 등을 거친다.
+    """
+    name: str = 'abstract'
+
+    def parse(self, text: str) -> str:
+        raise NotImplementedError
+
+
+class BuiltinRenderer(MarkdownRenderer):
+    """순수 Python stdlib 으로 구현된 자체 파서 (v0.2 의 그것)."""
+    name = 'builtin'
+
+    def parse(self, text: str) -> str:
+        return _builtin_md_to_html(text)
+
+
+class ParsedownRenderer(MarkdownRenderer):
+    """
+    parsers/parsedown/Parsedown.php 를 PHP CLI 로 호출.
+    원본 lama_website-main 과 완전히 동일한 출력을 보장.
+    """
+    name = 'parsedown'
+
+    def __init__(self, base_dir: Path, php_bin: str = 'php'):
+        self.runner = base_dir / 'parsers' / 'parsedown' / 'run.php'
+        self.php_bin = php_bin
+        if not self.runner.exists():
+            _die(f'Parsedown runner not found: {self.runner}')
+
+    def parse(self, text: str) -> str:
+        try:
+            proc = subprocess.run(
+                [self.php_bin, str(self.runner)],
+                input=text.encode('utf-8'),
+                capture_output=True,
+                timeout=60,
+            )
+        except FileNotFoundError:
+            _die(f"PHP 실행 파일을 찾을 수 없음: '{self.php_bin}'.\n"
+                 f"       PATH 에 php 를 추가하거나 site.yaml 의\n"
+                 f"       markdown_parser 를 'builtin' 으로 바꾸세요.")
+        if proc.returncode != 0:
+            err = proc.stderr.decode('utf-8', errors='replace').strip()
+            _die(f'Parsedown 실패 (exit={proc.returncode}):\n{err}')
+        return proc.stdout.decode('utf-8')
+
+
+def make_markdown_renderer(name: str, base_dir: Path) -> MarkdownRenderer:
+    """파서 팩토리. 새 파서 추가 시 여기에 한 줄만 더하면 끝."""
+    n = (name or 'builtin').strip().lower()
+    if n in ('builtin', 'python', ''):
+        return BuiltinRenderer()
+    if n in ('parsedown', 'php'):
+        return ParsedownRenderer(base_dir)
+    _die(f"알 수 없는 markdown_parser: '{name}'. "
+         f"지원: builtin, parsedown.")
+
+
+# ── Builtin renderer internals (slug 무관 — 후처리에서 재작성) ──
+
+def _render_inline(text: str) -> str:
+    """Render inline markdown: bold, italic, code, links, images.
+    Asset path 재작성은 finalize 단계에서 일괄 처리하므로 여기서는 URL 을 그대로 둠.
+    """
     # Inline code (escape content)
     def inline_code(m):
         return '<code>' + _escape_html(m.group(1)) + '</code>'
     text = re.sub(r'`([^`]+)`', inline_code, text)
 
-    # Images  ![alt](url)
+    # Images  ![alt](url) — URL 그대로 두고 finalize 에서 재작성
     def image(m):
         alt = m.group(1)
-        url = rewrite_asset_path(m.group(2), slug)
+        url = m.group(2)
         return f'<img src="{url}" alt="{_escape_html(alt)}">'
     text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', image, text)
 
     # Links  [text](url)
     def link(m):
         link_text = m.group(1)
-        url = rewrite_asset_path(m.group(2), slug)
+        url = m.group(2)
         return f'<a href="{url}">{link_text}</a>'
     text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', link, text)
 
@@ -368,20 +543,12 @@ def _render_inline(text: str, slug: str) -> str:
     return text
 
 
-def render_markdown(text: str, slug: str) -> RenderResult:
-    """Parse markdown to HTML. Returns RenderResult with html, first_paragraph, first_image."""
+def _builtin_md_to_html(text: str) -> str:
+    """Builtin Python markdown → HTML (raw, slug 무관)."""
     lines = text.splitlines()
     n = len(lines)
     i = [0]
     output = []
-    first_paragraph = None
-    first_image = [None]
-
-    def track_image(html_fragment: str):
-        if first_image[0] is None:
-            m = re.search(r'<img\s[^>]*src="([^"]+)"', html_fragment)
-            if m:
-                first_image[0] = m.group(1)
 
     while i[0] < n:
         line = lines[i[0]]
@@ -403,7 +570,7 @@ def render_markdown(text: str, slug: str) -> RenderResult:
         hm = re.match(r'^(#{1,6})\s+(.*)', line)
         if hm:
             level = len(hm.group(1))
-            content = _render_inline(hm.group(2).strip(), slug)
+            content = _render_inline(hm.group(2).strip())
             output.append(f'<h{level}>{content}</h{level}>')
             i[0] += 1
             continue
@@ -420,7 +587,7 @@ def render_markdown(text: str, slug: str) -> RenderResult:
             while i[0] < n and (lines[i[0]].startswith('> ') or lines[i[0]] == '>'):
                 quote_lines.append(lines[i[0]][2:] if lines[i[0]].startswith('> ') else '')
                 i[0] += 1
-            inner = _render_inline(' '.join(quote_lines), slug)
+            inner = _render_inline(' '.join(quote_lines))
             output.append(f'<blockquote><p>{inner}</p></blockquote>')
             continue
 
@@ -428,7 +595,7 @@ def render_markdown(text: str, slug: str) -> RenderResult:
         if re.match(r'^[-*+] ', line):
             items = []
             while i[0] < n and re.match(r'^[-*+] ', lines[i[0]]):
-                items.append(f'<li>{_render_inline(lines[i[0]][2:], slug)}</li>')
+                items.append(f'<li>{_render_inline(lines[i[0]][2:])}</li>')
                 i[0] += 1
             output.append('<ul>' + ''.join(items) + '</ul>')
             continue
@@ -438,29 +605,9 @@ def render_markdown(text: str, slug: str) -> RenderResult:
             items = []
             while i[0] < n and re.match(r'^\d+\. ', lines[i[0]]):
                 item_text = re.sub(r'^\d+\. ', '', lines[i[0]])
-                items.append(f'<li>{_render_inline(item_text, slug)}</li>')
+                items.append(f'<li>{_render_inline(item_text)}</li>')
                 i[0] += 1
             output.append('<ol>' + ''.join(items) + '</ol>')
-            continue
-
-        # Custom imgBox  ![[alt]](url) {desc}  (§ 8.2)
-        ibm = re.match(r'^!\[\[([^\]]*)\]\]\(([^)]+)\)(?:\s+\{([^}]*)\})?', line)
-        if ibm:
-            alt = ibm.group(1)
-            url = rewrite_asset_path(ibm.group(2), slug)
-            desc = ibm.group(3)
-            track_image(f'<img src="{url}">')
-            if desc:
-                block = (f'<div class="imgBox">\n'
-                         f'  <img src="{url}" alt="{_escape_html(alt)}">\n'
-                         f'  <p class="caption">{_escape_html(desc)}</p>\n'
-                         f'</div>')
-            else:
-                block = (f'<div class="imgBox">\n'
-                         f'  <img src="{url}" alt="{_escape_html(alt)}">\n'
-                         f'</div>')
-            output.append(block)
-            i[0] += 1
             continue
 
         # Empty line
@@ -469,10 +616,10 @@ def render_markdown(text: str, slug: str) -> RenderResult:
             continue
 
         # Raw HTML passthrough (§ 8.3)
+        # imgBox preprocessing 결과로 생긴 <div class="imgBox"> 도 여기서 통과.
         if line.lstrip().startswith('<') and not line.lstrip().startswith('<p'):
             html_lines = [line]
             i[0] += 1
-            # Collect continued HTML block (non-empty, non-structural)
             while i[0] < n:
                 next_line = lines[i[0]]
                 if not next_line.strip():
@@ -481,10 +628,7 @@ def render_markdown(text: str, slug: str) -> RenderResult:
                     break
                 html_lines.append(next_line)
                 i[0] += 1
-            html_block = '\n'.join(html_lines)
-            html_block = rewrite_asset_paths_in_html(html_block, slug)
-            track_image(html_block)
-            output.append(html_block)
+            output.append('\n'.join(html_lines))
             continue
 
         # Paragraph
@@ -497,22 +641,154 @@ def render_markdown(text: str, slug: str) -> RenderResult:
                 break
             if re.match(r'^[-_*]{3,}\s*$', l.strip()):
                 break
-            if re.match(r'^!\[\[', l):
-                break
             para_lines.append(l)
             i[0] += 1
         if para_lines:
-            para_html = _render_inline(' '.join(para_lines), slug)
+            para_html = _render_inline(' '.join(para_lines))
             output.append(f'<p>{para_html}</p>')
-            if first_paragraph is None:
-                first_paragraph = re.sub(r'<[^>]+>', '', para_html).strip()
-            track_image(para_html)
+
+    return '\n'.join(output)
+
+
+# ── Common finalize stage (parser-agnostic) ───────────────────
+
+_FIRST_P_RE = re.compile(r'<p[^>]*>(.*?)</p>', re.DOTALL)
+_FIRST_IMG_RE = re.compile(r'<img\s[^>]*src="([^"]+)"')
+
+
+def finalize_md_html(html: str, slug: str, article_dir: Path) -> RenderResult:
+    """Run project-specific HTML post-processing on parser output:
+       - asset path rewriting
+       - PHP function simulation (imgBox / imgSlideBox)
+       - first paragraph / first image extraction
+    """
+    final = rewrite_asset_paths_in_html(html, slug)
+    final = _simulate_php_in_html(final, slug, article_dir)
+
+    p_match = _FIRST_P_RE.search(final)
+    first_paragraph = ''
+    if p_match:
+        first_paragraph = re.sub(r'<[^>]+>', '', p_match.group(1)).strip()
+
+    img_match = _FIRST_IMG_RE.search(final)
+    first_image = img_match.group(1) if img_match else None
 
     return RenderResult(
-        html='\n'.join(output),
-        first_paragraph=first_paragraph or '',
-        first_image=first_image[0],
+        html=final,
+        first_paragraph=first_paragraph,
+        first_image=first_image,
     )
+
+
+def render_article_md(text: str, slug: str, article_dir: Path,
+                      renderer: MarkdownRenderer) -> RenderResult:
+    """End-to-end: 사용자 정의 문법 전처리 → 파서 호출 → 후처리."""
+    pre = preprocess_md_custom_syntax(text)
+    raw_html = renderer.parse(pre)
+    return finalize_md_html(raw_html, slug, article_dir)
+
+
+# ════════════════════════════════════════════════════════════════
+# Per-article tag style overrides  (v0.3)
+# ════════════════════════════════════════════════════════════════
+#
+# meta.yaml 예시:
+#
+#   styles:
+#     p:
+#       text-indent: 0
+#       line-height: 1.5em
+#       margin-top: 0.4em
+#       margin-bottom: 0.4em
+#     h3:
+#       margin-top: 1em
+#     ul:
+#       padding-left: 1em
+#     blockquote:
+#       border-left: 4px solid #ccc
+#     a:
+#       text-decoration: underline
+#
+# 결과로 article.html head 에 다음 형태의 <style> 가 inject 됨:
+#
+#   <style>
+#   section p { text-indent: 0; line-height: 1.5em; ... }
+#   section h3 { margin-top: 1em; }
+#   ...
+#   </style>
+#
+# 선택자는 항상 `section TAG` 로 묶여 common_template.css 의 같은 선택자
+# (specificity 0,0,2) 를 source order 로 덮는다. 글마다 독립적으로 작동.
+
+# section TAG 형태로 자동 wrap 할 화이트리스트.
+# lama_website-main 의 common_template.css 에서 직접 스타일링하는 태그들.
+_SECTION_SCOPED_TAGS = {
+    'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'ul', 'ol', 'li',
+    'blockquote',
+    'a',
+    'pre', 'code',
+    'table', 'th', 'td',
+    'img', 'strong', 'em', 'small', 'hr',
+    'div', 'section',
+}
+
+
+def _normalize_styles(raw) -> dict:
+    """meta.yaml 에서 읽은 styles 값을 표준 dict[str, dict[str, str]] 로 정규화."""
+    if not raw or not isinstance(raw, dict):
+        return {}
+    out = {}
+    for tag, props in raw.items():
+        if not isinstance(props, dict):
+            continue
+        normalized_props = {}
+        for prop, value in props.items():
+            if value is None:
+                continue
+            normalized_props[str(prop).strip()] = str(value).strip()
+        if normalized_props:
+            out[str(tag).strip()] = normalized_props
+    return out
+
+
+def _resolve_selector(tag_or_selector: str) -> str:
+    """
+    meta.yaml 의 키를 CSS 선택자로 변환:
+      - 화이트리스트의 단일 태그 → `section TAG`
+      - 그 외 (콤마, 공백, > 등 포함) → 그대로 사용 (사용자 책임)
+    """
+    raw = tag_or_selector.strip()
+    if not raw:
+        return ''
+    # complex selector — leave as-is
+    if any(ch in raw for ch in (' ', ',', '>', '+', '~', '.', '#', ':')):
+        return raw
+    if raw in _SECTION_SCOPED_TAGS:
+        return f'section {raw}'
+    # unknown bare token — still scope to section to avoid leakage
+    return f'section {raw}'
+
+
+def render_article_styles(styles: dict) -> str:
+    """
+    meta.yaml 의 styles dict 를 <style>…</style> 블록으로 변환.
+    빈 dict 면 빈 문자열 반환.
+    """
+    if not styles:
+        return ''
+    rules = []
+    for tag, props in styles.items():
+        if not props:
+            continue
+        selector = _resolve_selector(tag)
+        if not selector:
+            continue
+        decls = '; '.join(f'{p}: {v}' for p, v in props.items())
+        rules.append(f'    {selector} {{ {decls}; }}')
+    if not rules:
+        return ''
+    return '<style>\n' + '\n'.join(rules) + '\n  </style>'
 
 
 # ════════════════════════════════════════════════════════════════
@@ -585,25 +861,20 @@ def _parse_php_args(args_str: str) -> list:
     return args
 
 
-def process_html(text: str, slug: str, article_dir: Path) -> RenderResult:
-    """Process content.html: simulate PHP functions, rewrite asset paths."""
-    first_paragraph = [None]
-    first_image = [None]
+_PHP_CALL_RE = re.compile(r'<\?php\s+(\w+)\(([^)]*)\)\s*\?>')
 
+
+def _simulate_php_in_html(text: str, slug: str, article_dir: Path) -> str:
+    """imgBox / imgSlideBox PHP 호출을 정적 HTML 로 치환."""
     def replace_php_call(m: re.Match) -> str:
         func = m.group(1)
-        args_str = m.group(2)
-        args = _parse_php_args(args_str)
+        args = _parse_php_args(m.group(2))
 
         if func == 'imgBox':
             src = args[0] if len(args) > 0 else ''
             exp = args[1] if len(args) > 1 else ''
             alt = args[2] if len(args) > 2 else ''
-            result = _simulate_imgbox(src, exp, alt, slug)
-            if first_image[0] is None:
-                url = rewrite_asset_path(src, slug)
-                first_image[0] = url
-            return result
+            return _simulate_imgbox(src, exp, alt, slug)
 
         if func == 'imgSlideBox':
             dir_path = args[0] if args else ''
@@ -612,26 +883,26 @@ def process_html(text: str, slug: str, article_dir: Path) -> RenderResult:
         # Unknown PHP function — return as-is (§ 9.3)
         return m.group(0)
 
-    # Simulate PHP function calls: <?php funcName("arg1", "arg2") ?>
-    php_call_pattern = r'<\?php\s+(\w+)\(([^)]*)\)\s*\?>'
-    text = re.sub(php_call_pattern, replace_php_call, text)
+    return _PHP_CALL_RE.sub(replace_php_call, text)
 
-    # Rewrite asset paths
+
+def process_html(text: str, slug: str, article_dir: Path) -> RenderResult:
+    """Process content.html: simulate PHP functions, rewrite asset paths."""
+    text = _simulate_php_in_html(text, slug, article_dir)
     text = rewrite_asset_paths_in_html(text, slug)
 
-    # Extract first paragraph and first image for SEO fallback
-    p_match = re.search(r'<p[^>]*>(.*?)</p>', text, re.DOTALL)
+    p_match = _FIRST_P_RE.search(text)
+    first_paragraph = ''
     if p_match:
-        first_paragraph[0] = re.sub(r'<[^>]+>', '', p_match.group(1)).strip()
+        first_paragraph = re.sub(r'<[^>]+>', '', p_match.group(1)).strip()
 
-    img_match = re.search(r'<img\s[^>]*src="([^"]+)"', text)
-    if img_match and first_image[0] is None:
-        first_image[0] = img_match.group(1)
+    img_match = _FIRST_IMG_RE.search(text)
+    first_image = img_match.group(1) if img_match else None
 
     return RenderResult(
         html=text,
-        first_paragraph=first_paragraph[0] or '',
-        first_image=first_image[0],
+        first_paragraph=first_paragraph,
+        first_image=first_image,
     )
 
 
@@ -814,6 +1085,7 @@ class Builder:
         self.articles: list = []
         self.slug_to_article: dict = {}
         self.categories: dict = {}   # slug_path tuple → Category
+        self.markdown_renderer: MarkdownRenderer = None  # set after _load_config
 
     # ── [1] Config load ──────────────────────────────────────
 
@@ -846,12 +1118,19 @@ class Builder:
             description_truncate=int(get('description_truncate') or 150),
             robots_txt_main=get('robots_txt_main') or 'User-agent: *\nAllow: /\n',
             robots_txt_legacy=get('robots_txt_legacy') or 'User-agent: *\nAllow: /\n',
+            markdown_parser=str(get('markdown_parser') or 'parsedown'),
         )
 
         legacy_yaml = self.base / 'legacy-map.yaml'
         if legacy_yaml.exists():
             self.legacy_map = _yaml_load(legacy_yaml.read_text(encoding='utf-8'))
             # Remove comment-only keys (None values from comment parsing)
+
+        # v0.3: 선택된 마크다운 파서 인스턴스화
+        self.markdown_renderer = make_markdown_renderer(
+            self.site.markdown_parser, self.base
+        )
+        print(f'[markdown] using parser: {self.markdown_renderer.name}')
 
     # ── [2] Content scan ──────────────────────────────────────
 
@@ -944,6 +1223,7 @@ class Builder:
                 seo_og_type=raw.get('seo_og_type') or 'article',
                 seo_twitter_card=raw.get('seo_twitter_card') or 'summary_large_image',
                 seo_twitter_image=raw.get('seo_twitter_image') or None,
+                styles=_normalize_styles(raw.get('styles')),
             )
 
     # ── [4] Validation ──────────────────────────────────────
@@ -1202,9 +1482,12 @@ class Builder:
 
             content_text = content_path.read_text(encoding='utf-8')
 
-            # 본문 렌더링
+            # 본문 렌더링 (v0.3: 파서 추상화)
             if content_path.suffix == '.md':
-                rr = render_markdown(content_text, m.slug)
+                rr = render_article_md(
+                    content_text, m.slug, article.source_dir,
+                    self.markdown_renderer,
+                )
                 body_html = (f"<div class='gap'>\n"
                              f"    <p>{_escape_html(m.title)}</p>\n"
                              f"</div>\n"
@@ -1212,6 +1495,9 @@ class Builder:
             else:
                 rr = process_html(content_text, m.slug, article.source_dir)
                 body_html = rr.html
+
+            # v0.3: meta.yaml 의 styles 필드를 <style> 블록으로 변환
+            article_styles = render_article_styles(m.styles)
 
             # _ 접두 자원 참조 경고
             if self.site.warn_on_underscore_ref:
@@ -1244,6 +1530,7 @@ class Builder:
 
             vars = {
                 'META_TAGS': meta_tags,
+                'ARTICLE_STYLES': article_styles,
                 'PAGE_TITLE': _escape_html(page_title),
                 'MAIN_TITLE': _escape_html(self.site.main_title),
                 'NAV_TRACKER': nav_tracker,

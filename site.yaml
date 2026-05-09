@@ -1,7 +1,8 @@
-# siheonlee.com — 사이트 전역 설정 (v0.2)
+# siheonlee.com — 사이트 전역 설정 (v0.3)
 #
-# v0.2: 원본 lama_website-main 의 UI/UX 를 그대로 보존하면서
-#       내부 시스템(SSG)만 v0.1 의 구조를 사용한다.
+# v0.3 차이점:
+#   - 마크다운 파서를 lama_website-main 의 Parsedown.php 로 교체.
+#   - meta.yaml 의 styles: 로 본문 태그 속성을 글 단위로 조정 가능.
 
 # 도메인
 domain: siheonlee.com
@@ -48,6 +49,12 @@ home_sort: date_desc
 
 # SEO 폴백
 description_truncate: 150
+
+# 마크다운 파서 (v0.3)
+#   parsedown — lama_website-main 과 동일한 Parsedown.php (PHP 필요).
+#               운영 환경에 `php` 명령이 없으면 builtin 으로 대체.
+#   builtin   — Python stdlib 만으로 동작하는 자체 파서 (v0.2 의 그것).
+markdown_parser: parsedown
 
 # robots.txt (원본 사이트는 noindex 메타 태그 사용 — robots.txt 는 보존)
 robots_txt_main: |
