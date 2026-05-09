@@ -1,7 +1,45 @@
-# siheonlee.com — 사용설명서 & 시스템 문서
+# siheonlee.com v0.2 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**  
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
+
+## v0.2 의 핵심 — 원본 UI/UX 보존
+
+v0.2 는 **v0.1 의 SSG 내부 시스템은 그대로 유지하면서, 출력 HTML/CSS 만 원본 `lama_website-main` 의 UI/UX 와 동일**하도록 변경한 버전입니다.
+
+| 영역 | v0.1 | v0.2 (= 원본) |
+|---|---|---|
+| 헤더 | `siheonlee.com` 사이트 타이틀 + nav 통합 | `Lama` 헤더 + nav 분리 |
+| 네비게이션 순서 | `Blog \| Project \| Research \| Study \| About` | `About \| Blog \| Project \| Research \| Study` |
+| Breadcrumb | `Home › Blog › 글` (chevron) | `Home / Blog / 글` (slash, nav 안에 nav-tracker) |
+| 홈 글 목록 | `<ul class="article-list"><li>` | `<div class="listup_module_div">` + `<span class="listup_module_title/date">` |
+| 카테고리 인덱스 | 모든 카테고리·서브카테고리에 인덱스 페이지 생성 | 톱레벨 카테고리에서 서브카테고리 그룹으로 표시 |
+| 푸터 | `© 2026 이시헌` | `Copyright© 2026. 이시헌. All rights reserved.` |
+| `<title>` | `{글제목} \| siheonlee` | `Lama` (원본은 페이지마다 단순 "Lama") |
+| `<meta name="robots">` | 없음 (검색엔진 인덱스) | `noindex` (원본 그대로) |
+| CSS | v0.1 자체 디자인 | 원본 `common_template.css` 그대로 (30% 양 마진, sticky nav 등) |
+
+**기존 lama.pe.kr 방문자 입장에서는 URL 만 새 slug 형식(`/{slug}/`) 으로 바뀌고, 그 외 화면 구성은 모두 동일하게 보입니다.**
+
+## v0.1 → v0.2 마이그레이션 / 운영자가 알아둘 것
+
+- About 페이지는 `Articles/About/meta.yaml` + `content.html` 의 일반 글로 통합 (slug=about). `reserved_slugs` 에서 `about` 제거함.
+- 톱레벨 카테고리 (Blog/Project/Research/Study) 만 `dist/{cat}/index.html` 생성됨. 서브카테고리(`/blog/3d-printing/`)는 별도 인덱스 페이지가 없음. 원본 동작과 동일. 글 페이지의 breadcrumb 에서 서브카테고리 링크는 톱레벨로 이동 (원본 quirk 그대로 보존).
+- 네비게이션 링크는 `Articles/` 직속 폴더를 자동 스캔. About 우선, 나머지는 알파벳 정렬 (원본 PHP `generateNavLinks()` 와 동일).
+- `site.yaml` 에 `main_title` 추가 (헤더 좌상단 큰 글씨, 기본값 "Lama").
+- 푸터의 연도는 빌드 시점의 현재 연도. 시작 연도 범위 표시 안 함 (원본은 단일 "2025" 로 하드코딩).
+
+## 원본과의 의도적 차이 (내부 개선)
+
+다음은 화면에 보이지 않는 내부 차이로, 원본 방문자 경험에는 영향 없음:
+
+- 글 본문 head 에 `description / og:* / twitter:*` 등 SEO meta 태그 추가 (원본은 noindex 만). `noindex` 가 우선이므로 검색 노출은 동일.
+- CSS·JS 가 `/assets/` 경로로 정리됨 (원본은 `/common_template.css` 루트). 화면 렌더 결과는 동일.
+- 글 폴더 안의 파일은 `/src/{slug}/` 로 복사됨 (원본은 글 폴더 절대경로). 글 본문 안의 상대 경로 `./imgs/x.jpg` 는 자동 변환.
+
+---
+
+이하는 v0.1 부터 이어진 SSG 시스템 일반 설명서입니다. v0.1 과 동일한 사용 방법이 적용됩니다.
 
 ---
 

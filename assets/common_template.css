@@ -1,416 +1,303 @@
-/* siheonlee.com — 공용 스타일시트 */
-
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
-:root {
-  --color-bg: #ffffff;
-  --color-text: #333333;
-  --color-text-muted: #666666;
-  --color-link: #0066cc;
-  --color-link-hover: #004499;
-  --color-border: #dddddd;
-  --color-code-bg: #f5f5f5;
-  --color-header-bg: #f8f8f8;
-  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  --max-width: 800px;
-}
-
-html {
-  font-size: 16px;
-  line-height: 1.6;
-}
-
 body {
-  margin: 0;
-  padding: 0;
-  font-family: var(--font-body);
-  color: var(--color-text);
-  background: var(--color-bg);
+    font-family: Arial, sans-serif;
+    margin-left: 30%;
+    margin-right: 30%;
+    margin-top: 7%;
+    padding: 0;
+    background-color: #f4f4f4;
 }
 
-a {
-  color: var(--color-link);
-  text-decoration: none;
+header {
+    text-align: left;
+    padding: 1em 1em 0em 0.9em;
+    /* top - right - bottom - left */
 }
 
-a:hover {
-  color: var(--color-link-hover);
-  text-decoration: underline;
+nav {
+    position: sticky;
+    top: -1px;
+    /*알 수 없는 이유로 0으로 설정시 얇은 틈이 존재한다.*/
+    
+    z-index: 9;  /* .colorscripter-code 클래스가 nav보다 위에 뜨는 것을 막기 위함.*/
+
+    background-color: #f4f4f4;
+
+    color: 	#AFAFAF;
+    padding-bottom: 1em;
+    padding: 1em;
+    /* top - right - bottom - left */
+    text-align: left;
+    word-wrap: break-word;  /*자동줄바꿈*/
 }
 
-/* ── 헤더 ── */
-
-.site-header {
-  background: var(--color-header-bg);
-  border-bottom: 1px solid var(--color-border);
-  padding: 0 1rem;
+#nav-tracker{
+    padding-bottom: 0.3em;
+}
+#nav-tracker a{
+    text-decoration: none;
+    color: black;
+    font-size: 0.9em;
+}
+nav>a {
+    /*id : nav-tracker인 div태그 안의 a태그에 영향 끼치면 안됨.*/
+    font-size: 0.9em;
+    color: #0172d5;
+    text-decoration: none;
+}
+nav>span{
+    margin: 0.6em;
 }
 
-.header-inner {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 3rem;
+#TITLE {
+    text-decoration: none;
+    color: black;
+    margin-bottom: 0;
+    font-size: 1.5em;
 }
 
-.site-title {
-  font-weight: 700;
-  font-size: 1.1rem;
-  color: var(--color-text);
+/* div로 img를 감쌀 때 사용.*/
+.imgBox{
+    border: solid black 1px;
+    margin-bottom: 10px;
+}
+.imgBox img{
+    width: 100%;
 }
 
-.site-title:hover {
-  text-decoration: none;
-  color: var(--color-link);
+.gap{
+  padding: 0.3em 1em 0em 1em;
+  /* top - right - bottom - left */
+}
+.gap *{
+  margin-bottom: 0;
+}
+section {
+    padding: 0.75em 1.2em 0.8em 1.2em;
+    /* top - right - bottom - left */
+    /*이상하게 상단 여백이 약간 커 보인다. 그래서 0.05만큼 뺐다.*/
+    margin: 10px;
+    background-color: #fff;
+    border-radius: 5px;
+}
+section>h3:nth-child(1){
+    margin-top: 0.3em;
+    margin-bottom: 0.4em;
+}
+section>h4:nth-child(1){
+    margin-top: 0.2em;
+    margin-bottom: 0.5em;
+}
+section>h5:nth-child(1){
+    font-size: 0.9em;
+    margin-top: 0.2em;
+    margin-bottom: 0.5em;
+}
+section>h3:nth-child(n+2){
+    margin-top: 3em;    /*큰 범주이므로, 상단 넓은 간격 부여. (1. 대분류)*/
+    margin-bottom: 0.4em;
+}
+section>h4:nth-child(n+2){
+    margin-top: 1.6em;    /*큰 범주이므로, 상단 넓은 간격 부여. (1.1. 중분류)*/
+    margin-bottom: 0.5em;
+}
+section>h5:nth-child(n+2){
+    font-size: 0.9em;
+    margin-top: 0.5em;  /*소 범주, 상단 간격 축소. (1.1.1. 소제목)*/
+    margin-bottom: 0.25em;
+}
+section p{
+    font-size: 0.9em;
+    line-height: 1.9em;
+    text-indent: 1.5em;
+    margin-bottom: 0.2em;
+    margin-top: 0.2em;
+}
+section small{
+    font-size: 0.75em;
 }
 
-.site-nav {
-  display: flex;
-  gap: 1.25rem;
-  font-size: 0.9rem;
+section>ul{
+    margin-top: 0.2em;
+}
+section>ul>li:nth-child(1){
+    margin-top: 0.2em;
 }
 
-.site-nav a {
-  color: var(--color-text-muted);
+section li{
+    font-size: 0.9em;
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+    line-height: 1.5em;
+}
+.Qlist li::marker {
+    /* for ol tag, marker of li tag change to Qn mark. */
+    content: "Q" counter(list-item) ". ";
+    font-weight: bold;
+    margin-right: 0.8em;
+}
+section ol{
+    padding-left: 1.7em;
+}
+section blockquote{
+    border-left: 4px solid #ccc;
+    padding-left: 1em;
+    margin-left: 1.5em;
+    margin-right: 0;
+    font-size: 0.8em;
+}
+section table{
+    border: none;
+    border-collapse: collapse;
+    font-size: 0.8em;
+    text-align: left;
+
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+}
+section th, td{
+    border: 1px solid black;
+    padding: 0.2em 0.5em;
+}
+section a{
+    text-decoration: none;
 }
 
-.site-nav a:hover {
-  color: var(--color-link);
-  text-decoration: none;
+section pre{
+    max-width: 100%;
+    overflow-x: auto;
+    background-color: #afafaf41;
+    border: 1em;
 }
 
-/* ── 빵 부스러기 ── */
-
-.breadcrumb {
-  max-width: var(--max-width);
-  margin: 0.75rem auto 0;
-  padding: 0 1rem;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
+section code{
+    background-color: #afafaf41;
+    padding: 0.2em;
+}
+section pre>code{
+    /*section code 때문에 pre>code 내부의 모든 행에 진하게 색상이 겹친다. 해당 문제 해결을 위해, section code 아래에 현재 CSS를 추가하여 우선 적용. (CSS는 아래 것이 우선 적용됨.)*/
+    background-color: transparent;
+    padding: inherit;
 }
 
-.breadcrumb a {
-  color: var(--color-text-muted);
+
+/*
+적절한 다른 수단이 필요하다...
+스크롤이 안예뻐...
+.mainPage_section{
+    height: 6em;
+    overflow-y: scroll;
+    scrollbar-width: thin;
+}
+*/
+.listup_module_div{
+    margin-top: 0.4em;
+    margin-bottom: 0.4em;
+}
+.listup_module_title>a{
+    font-style: italic;
+    font-size: 0.9em;
+    text-decoration: none;
+}
+* a:link{
+    color: #0172d5;
+}
+.listup_module_date{
+    width: 100%;
+    font-size: 0.7em;
 }
 
-.breadcrumb a:hover {
-  color: var(--color-link);
+footer {
+    font-size: 0.8em;
+    color: black;
+    text-align: left;
+    padding: 1em;
+    /*position: fixed;
+    bottom: 0;
+    width: 60%;*/
+    background-color: #f4f4f4;
 }
 
-.breadcrumb .sep {
-  margin: 0 0.4rem;
+.colorscripter-code div{
+    z-index: 1;  /* nav 영역보다 더 위에 뜨는 것을 막기 위함.*/
 }
 
-/* ── 글 페이지 ── */
-
-.article-main {
-  max-width: var(--max-width);
-  margin: 2rem auto;
-  padding: 0 1rem;
+.imgBox{  /* section 내부의 이미지와, 이미지 설명을 묶는 div 박스에 지정할 클래스.*/
+    width: 65%;
+}
+.imgBox small{
+    margin-left: 0.4em;
 }
 
-.article-header {
-  margin-bottom: 2rem;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 1rem;
+@media (min-width: 993px) and (max-width: 1430px) {
+    body {
+        font-family: Arial, sans-serif;
+        margin-left: 20%;
+        margin-right: 20%;
+        margin-top: 7%;
+        padding: 0;
+        background-color: #f4f4f4;
+    }
+
+    .colorscripter-code div{
+        z-index: 1;  /* nav 영역보다 더 위에 뜨는 것을 막기 위함.*/
+        font-size: 0.8em;
+    }
+    .colorscripter-code td{
+        font-size: 0.8em;
+    }
+
+    .imgBox{  /* section 내부의 이미지와, 이미지 설명을 묶는 div 박스에 지정할 클래스.*/
+        width: 80%;
+    }
 }
 
-.article-title {
-  margin: 0 0 0.5rem;
-  font-size: 1.8rem;
-  line-height: 1.3;
+@media (min-width: 601px) and (max-width: 992px) {
+    body {
+        font-family: Arial, sans-serif;
+        margin-left: 10%;
+        margin-right: 10%;
+        margin-top: 7%;
+        padding: 0;
+        background-color: #f4f4f4;
+    }
+
+    .colorscripter-code div{
+        z-index: 1;  /* nav 영역보다 더 위에 뜨는 것을 막기 위함.*/
+        font-size: 0.8em;
+    }
+    .colorscripter-code td{
+        font-size: 0.8em;
+    }
+
+    .imgBox{  /* section 내부의 이미지와, 이미지 설명을 묶는 div 박스에 지정할 클래스.*/
+        width: 80%;
+    }
+}
+@media screen and (max-width: 600px) {
+    body {
+        font-family: Arial, sans-serif;
+        margin-left: 3%;
+        margin-right: 3%;
+        margin-top: 7%;
+        padding: 0;
+        background-color: #f4f4f4;
+    }
+    .gap{
+        padding: 0.1em 1em 0em 1em;
+        /* top - right - bottom - left */
+    }
+
+    .colorscripter-code div{
+        z-index: 1;  /* nav 영역보다 더 위에 뜨는 것을 막기 위함.*/
+        font-size: 0.7em;
+    }
+    .colorscripter-code td{
+        font-size: 0.7em;
+    }
+
+    .imgBox{  /* section 내부의 이미지와, 이미지 설명을 묶는 div 박스에 지정할 클래스.*/
+        width: 100%;
+    }
 }
 
-.article-meta {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
-
-.article-meta .updated {
-  margin-left: 0.75rem;
-}
-
-.article-body h1,
-.article-body h2,
-.article-body h3,
-.article-body h4,
-.article-body h5,
-.article-body h6 {
-  margin-top: 1.75rem;
-  margin-bottom: 0.5rem;
-  line-height: 1.3;
-}
-
-.article-body p {
-  margin: 0 0 1rem;
-}
-
-.article-body ul,
-.article-body ol {
-  margin: 0 0 1rem 1.5rem;
-  padding: 0;
-}
-
-.article-body li {
-  margin-bottom: 0.25rem;
-}
-
-.article-body blockquote {
-  margin: 1rem 0;
-  padding: 0.5rem 1rem;
-  border-left: 4px solid var(--color-border);
-  color: var(--color-text-muted);
-}
-
-.article-body blockquote p {
-  margin: 0;
-}
-
-.article-body hr {
-  border: none;
-  border-top: 1px solid var(--color-border);
-  margin: 2rem 0;
-}
-
-.article-body code {
-  font-family: var(--font-mono);
-  font-size: 0.875em;
-  background: var(--color-code-bg);
-  padding: 0.15em 0.3em;
-  border-radius: 3px;
-}
-
-.article-body pre {
-  background: var(--color-code-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  padding: 1rem;
-  overflow-x: auto;
-  margin: 0 0 1rem;
-}
-
-.article-body pre code {
-  background: none;
-  padding: 0;
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.article-body img {
-  max-width: 100%;
-  height: auto;
-  display: block;
-}
-
-/* ── imgBox (캡션 이미지) ── */
-
-.imgBox {
-  margin: 1.5rem 0;
-  text-align: center;
-}
-
-.imgBox img {
-  max-width: 100%;
-  height: auto;
-  display: block;
-  margin: 0 auto;
-}
-
-.imgBox .caption {
-  margin: 0.5rem 0 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-}
-
-/* ── imgSlideBox (슬라이드 이미지) ── */
-
-.imgSlideBox {
-  position: relative;
-  margin: 1.5rem 0;
-  text-align: center;
-}
-
-.imgSlideBox .slide {
-  display: none;
-  max-width: 100%;
-  height: auto;
-}
-
-.imgSlideBox .slide.active {
-  display: block;
-  margin: 0 auto;
-}
-
-.imgSlideBox .prev,
-.imgSlideBox .next {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
-  border: none;
-  padding: 0.5rem 0.75rem;
-  font-size: 1.25rem;
-  cursor: pointer;
-  border-radius: 3px;
-  user-select: none;
-}
-
-.imgSlideBox .prev { left: 0.5rem; }
-.imgSlideBox .next { right: 0.5rem; }
-
-.imgSlideBox .prev:hover,
-.imgSlideBox .next:hover {
-  background: rgba(0, 0, 0, 0.65);
-}
-
-/* ── 카테고리 색인 ── */
-
-.category-main {
-  max-width: var(--max-width);
-  margin: 2rem auto;
-  padding: 0 1rem;
-}
-
-.category-title {
-  margin: 0 0 1.5rem;
-  font-size: 1.6rem;
-}
-
-.subcategory-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 1.5rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.subcategory-list li a {
-  display: inline-block;
-  padding: 0.3rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 3px;
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
-}
-
-.subcategory-list li a:hover {
-  border-color: var(--color-link);
-  color: var(--color-link);
-  text-decoration: none;
-}
-
-/* ── 글 목록 ── */
-
-.article-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.article-list li {
-  border-bottom: 1px solid var(--color-border);
-  padding: 0.75rem 0;
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-}
-
-.article-list li:first-child {
-  border-top: 1px solid var(--color-border);
-}
-
-.article-list .date {
-  flex-shrink: 0;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-  width: 6rem;
-}
-
-.article-list a {
-  color: var(--color-text);
-}
-
-.article-list a:hover {
-  color: var(--color-link);
-}
-
-/* ── 홈 ── */
-
-.home-main {
-  max-width: var(--max-width);
-  margin: 2rem auto;
-  padding: 0 1rem;
-}
-
-.home-intro {
-  margin-bottom: 2.5rem;
-  font-size: 1.05rem;
-}
-
-.home-articles h2 {
-  margin: 0 0 0.75rem;
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-/* ── 404 ── */
-
-.error-main {
-  max-width: var(--max-width);
-  margin: 4rem auto;
-  padding: 0 1rem;
-  text-align: center;
-}
-
-.error-main .gap {
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
-  color: var(--color-text-muted);
-}
-
-/* ── 푸터 ── */
-
-.site-footer {
-  border-top: 1px solid var(--color-border);
-  padding: 1.5rem 1rem;
-  text-align: center;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-  margin-top: 4rem;
-}
-
-.site-footer p {
-  margin: 0;
-}
-
-/* ── 반응형 ── */
-
-@media (max-width: 600px) {
-  .header-inner {
-    flex-direction: column;
-    height: auto;
-    padding: 0.5rem 0;
-    gap: 0.25rem;
-  }
-
-  .site-nav {
-    gap: 0.75rem;
-  }
-
-  .article-list li {
-    flex-direction: column;
-    gap: 0.1rem;
-  }
-
-  .article-list .date {
-    width: auto;
-  }
-}

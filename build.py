@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
-siheonlee.com SSG v0.1 — Static Site Generator
-Python 3.x stdlib only, zero external dependencies. (§ 0)
+siheonlee.com SSG v0.2 — Static Site Generator
+Python 3.x stdlib only, zero external dependencies.
+
+v0.2 차이점 (vs v0.1):
+  - 원본 lama_website-main 의 UI/UX 를 그대로 보존하도록 출력 HTML 변경.
+  - 헤더/네비게이션/푸터/리스트 마크업이 원본 PHP 출력과 동일.
+  - 톱레벨 카테고리만 인덱스 페이지를 생성 (서브카테고리는 톱레벨에서 그룹 표시).
+  - About 페이지는 일반 글(slug=about)로 통합.
 
 Usage:
     python build.py           # full build
@@ -195,6 +201,7 @@ class SiteConfig:
     domain: str
     base_url: str
     name: str
+    main_title: str
     default_author: str
     default_og_image: str
     default_title_prefix: str
@@ -688,7 +695,9 @@ def build_meta_tags(article: 'Article', rr: RenderResult, site: SiteConfig) -> t
         """Escape for HTML attribute value."""
         return (s or '').replace('&', '&amp;').replace('"', '&quot;')
 
-    tags = [f'<title>{e(full_title)}</title>']
+    # v0.2: <title> 은 템플릿의 PAGE_TITLE 가 처리 (원본 UI = "Lama" 고정).
+    #       META_TAGS 에는 description 부터 출력.
+    tags = []
 
     if desc:
         tags.append(f'<meta name="description" content="{e(desc)}">')
@@ -820,7 +829,8 @@ class Builder:
         self.site = SiteConfig(
             domain=get('domain', 'siheonlee.com'),
             base_url=get('base_url', 'https://siheonlee.com'),
-            name=get('name', 'siheonlee.com'),
+            name=get('name', 'Lama'),
+            main_title=get('main_title') or get('name', 'Lama'),
             default_author=get('default_author', ''),
             default_og_image=get('default_og_image', '/assets/default-og.png'),
             default_title_prefix=get('default_title_prefix') or '',
@@ -1088,25 +1098,100 @@ class Builder:
     # ── [5] Article render + output ──────────────────────────
 
     def _copyright_year(self) -> str:
+        """원본은 푸터에 단일 연도만 표시 (예: 'Copyright© 2025.')."""
         import datetime
-        current_year = datetime.date.today().year
-        start = self.site.copyright_year_start
-        if current_year > start:
-            return f'{start}–{current_year}'
-        return str(start)
+        return str(datetime.date.today().year)
 
-    def _make_breadcrumb(self, parts: list) -> str:
-        """Build breadcrumb HTML from list of (label, url) tuples."""
-        html = ''
-        for label, url in parts:
-            if url:
-                html += f'<span class="sep">›</span> <a href="{url}">{label}</a>'
+    # ── 네비게이션 헬퍼 (원본 PHP WebPage 동작 재현) ──────────
+
+    def _top_level_entries(self) -> list:
+        """Articles/ 직속 항목들을 [(folder_name, slug, is_article), ...] 로 반환.
+
+        원본 PHP generateNavLinks() 와 동일하게:
+          - '_' 접두 폴더 제외
+          - 'About' 우선, 나머지 알파벳 정렬
+        """
+        if not self.articles_dir.is_dir():
+            return []
+
+        entries = []
+        for child in self.articles_dir.iterdir():
+            if not child.is_dir():
+                continue
+            if child.name.startswith('_'):
+                continue
+            # 톱레벨 글 (meta.yaml 직접 보유) vs 카테고리 폴더 구분
+            meta_file = child / 'meta.yaml'
+            if meta_file.exists():
+                # 톱레벨 글 — slug 는 meta.yaml 에서
+                article = next(
+                    (a for a in self.articles
+                     if a.source_dir == child),
+                    None,
+                )
+                slug = article.meta.slug if article else child.name.lower()
+                entries.append((child.name, slug, True))
             else:
-                html += f'<span class="sep">›</span> <span>{label}</span>'
+                # 카테고리 폴더 — 카테고리 트리에서 slug 조회
+                key = (child.name,)
+                cat = self.categories.get(key)
+                slug = cat.slug if cat else category_slug_from_name(child.name)
+                entries.append((child.name, slug, False))
+
+        # About 우선, 나머지 알파벳
+        about = [e for e in entries if e[0] == 'About']
+        others = sorted(
+            (e for e in entries if e[0] != 'About'),
+            key=lambda e: e[0],
+        )
+        return about + others
+
+    def _nav_links_html(self) -> str:
+        """원본 generateNavLinks() 출력 형식 그대로:
+            <a href='/about/'>About</a><span>|</span> <a href='/blog/'>Blog</a><span>|</span> ...
+        """
+        entries = self._top_level_entries()
+        if not entries:
+            return ''
+        parts = []
+        for folder, slug, _is_article in entries:
+            parts.append(f"<a href='/{slug}/'>{_escape_html(folder)}</a>")
+        return '<span>|</span> '.join(parts)
+
+    def _nav_tracker_for_path(self, breadcrumb_parts: list) -> str:
+        """원본 getNavTracker() 와 같은 형식으로 nav-tracker HTML 생성.
+
+        breadcrumb_parts: [(label, url_or_None), ...] — 'Home' 은 자동으로 앞에 추가됨.
+            url=None 이면 마지막 글 항목으로 간주, onClick reload 처리.
+        """
+        html = "<a href='/'>Home</a>"
+        for label, url in breadcrumb_parts:
+            label_safe = _escape_html(label)
+            if url is None:
+                # 원본 마지막 글 segment: clickable 모양 + reload
+                html += (f"<a onClick='window.location.reload()' "
+                         f"style='cursor: pointer;'> / {label_safe} </a>")
+            else:
+                html += f"<a href='{url}'> / {label_safe}</a>"
         return html
 
+    def _top_category_for_article(self, article: 'Article'):
+        """글이 속한 톱레벨 카테고리 (Category 또는 None)."""
+        if not article.category_path or len(article.category_path) < 2:
+            return None
+        top = (article.category_path[0],)
+        return self.categories.get(top)
+
     def _render_articles(self):
+        """원본 lama_website-main 의 ArticlePage / WebPage 렌더링을 재현.
+
+        - content.md: 원본 ArticlePage 처럼 <div class='gap'><p>{title}</p></div>
+                      <section>...md...</section> 로 감싸 출력.
+        - content.html: 원본 WebPage 처럼 본문을 그대로 (자체 gap+section 구조 유지).
+        """
         tpl = _load_template(self.templates_dir, 'article.html')
+        nav_links = self._nav_links_html()
+
         for article in self.articles:
             m = article.meta
             content_path = article.content_file
@@ -1117,13 +1202,18 @@ class Builder:
 
             content_text = content_path.read_text(encoding='utf-8')
 
-            # Render content
+            # 본문 렌더링
             if content_path.suffix == '.md':
                 rr = render_markdown(content_text, m.slug)
+                body_html = (f"<div class='gap'>\n"
+                             f"    <p>{_escape_html(m.title)}</p>\n"
+                             f"</div>\n"
+                             f"<section>\n{rr.html}\n</section>")
             else:
                 rr = process_html(content_text, m.slug, article.source_dir)
+                body_html = rr.html
 
-            # Warn on _-referenced assets in body
+            # _ 접두 자원 참조 경고
             if self.site.warn_on_underscore_ref:
                 for pattern in [r'src="([^"]+)"', r'href="([^"]+)"']:
                     for url_match in re.finditer(pattern, rr.html):
@@ -1131,45 +1221,40 @@ class Builder:
                         if '/_' in ref or ref.startswith('_'):
                             _warn(f'{m.slug}: referenced excluded asset {ref}')
 
-            # SEO
-            meta_tags, full_title = build_meta_tags(article, rr, self.site)
+            # SEO meta (visible UI 영향 없음 — head 의 noindex 가 우선)
+            meta_tags, _full_title = build_meta_tags(article, rr, self.site)
 
-            # Breadcrumb: all category levels
+            # nav-tracker: Home / 톱카테고리 / 서브카테고리 / 글
+            # 원본 PHP getNavTracker() 의 quirk 재현:
+            #   서브카테고리 링크는 톱카테고리 페이지로 이동.
             crumb_parts = []
-            slug_path_so_far = []
-            cat_key = tuple(article.category_path[:-1])
-            cat = self.categories.get(cat_key)
-            if cat:
-                for sp in cat.slug_path:
-                    slug_path_so_far.append(sp)
-                    folder_idx = len(slug_path_so_far) - 1
-                    label = cat.path[folder_idx] if folder_idx < len(cat.path) else sp
-                    url = '/' + '/'.join(slug_path_so_far) + '/'
-                    crumb_parts.append((label, url))
+            top_cat = self._top_category_for_article(article)
+            if top_cat:
+                top_url = f"/{top_cat.slug}/"
+                crumb_parts.append((top_cat.folder_name, top_url))
+                # 서브카테고리들 — 모두 톱카테고리 URL 로 (원본 quirk)
+                middle_folders = article.category_path[1:-1]
+                for folder in middle_folders:
+                    crumb_parts.append((folder, top_url))
+            # 마지막 글 segment — 원본은 reload onClick
             crumb_parts.append((article.category_path[-1], None))
-            breadcrumb_html = self._make_breadcrumb(crumb_parts)
+            nav_tracker = self._nav_tracker_for_path(crumb_parts)
 
-            # Date display
-            date_display = m.date
-            updated_html = ''
-            if m.updated:
-                updated_html = (f'<span class="updated">'
-                                f'(updated: {m.updated})</span>')
+            page_title = self.site.name
 
             vars = {
                 'META_TAGS': meta_tags,
-                'BREADCRUMB': breadcrumb_html,
-                'ARTICLE_TITLE': _escape_html(m.title),
-                'DATE_ISO': m.date,
-                'DATE_DISPLAY': date_display,
-                'UPDATED_META': updated_html,
-                'BODY': rr.html,
+                'PAGE_TITLE': _escape_html(page_title),
+                'MAIN_TITLE': _escape_html(self.site.main_title),
+                'NAV_TRACKER': nav_tracker,
+                'NAV_LINKS': nav_links,
+                'BODY': body_html,
                 'COPYRIGHT_YEAR': self._copyright_year(),
                 'COPYRIGHT_HOLDER': _escape_html(self.site.copyright_holder),
             }
             page_html = _render(tpl, vars)
 
-            # PHP detection → ext
+            # PHP 검출 → 확장자
             ext = 'php' if has_live_php(page_html) else 'html'
 
             out_dir = self.dist / m.slug
@@ -1228,94 +1313,130 @@ class Builder:
 
     # ── [7] Category indexes ──────────────────────────────────
 
+    def _listup_module_html(self, article: 'Article') -> str:
+        """원본 listup_module_div 마크업 재현.
+
+        원본 HomePage / CategoryPage 의 article 링크 텍스트는 data.json 의 title.
+        v0.2 도 meta.yaml 의 title 을 그대로 사용.
+        """
+        link_text = article.meta.title
+        return (f"<div class='listup_module_div'>"
+                f"<span class='listup_module_title'>"
+                f"<a href='/{article.meta.slug}/'> "
+                f"{_escape_html(link_text)} </a>"
+                f"</span>"
+                f"<span class='listup_module_date'> &nbsp;&nbsp; "
+                f"{article.meta.date}</span>"
+                f"</div>")
+
     def _build_categories(self):
+        """원본 CategoryPage.generateCategoryArticleListBySubcategory() 재현.
+
+        - 톱레벨 카테고리(예: Blog) 만 인덱스 페이지 생성.
+        - 직속 서브카테고리별로 <div class='gap'><p>{name}</p></div><section>...</section> 그룹.
+        - 서브카테고리 내 글은 재귀 수집 후 날짜 내림차순.
+        - 원본 quirk 동일: 톱레벨 카테고리에 직접 위치한 글은 표시되지 않음
+          (글들은 항상 서브카테고리 안에 있다는 원본 가정).
+        """
         tpl = _load_template(self.templates_dir, 'category.html')
+        nav_links = self._nav_links_html()
 
         for path_tuple, cat in self.categories.items():
-            all_articles = self._collect_articles(cat)
+            # 톱레벨만
+            if len(cat.path) != 1:
+                continue
 
-            # Sort: date desc
-            all_articles.sort(key=lambda a: a.meta.date, reverse=True)
+            # 서브카테고리별 그룹 섹션
+            sections = []
+            sorted_children = sorted(cat.children, key=lambda c: c.folder_name)
+            for child in sorted_children:
+                articles = self._collect_articles(child)
+                articles.sort(key=lambda a: a.meta.date, reverse=True)
 
-            # Article list HTML
-            article_items = ''
-            for a in all_articles:
-                link_text = a.category_path[-1]  # folder name (§ 4.6)
-                article_items += (
-                    f'<li>'
-                    f'<span class="date">{a.meta.date}</span>'
-                    f'<a href="/{a.meta.slug}/">{_escape_html(link_text)}</a>'
-                    f'</li>\n'
+                if not articles:
+                    inner = "<p>No articles found in this subcategory</p>"
+                else:
+                    inner = '\n'.join(
+                        self._listup_module_html(a) for a in articles
+                    )
+
+                sections.append(
+                    f"<div class='gap'><p>{_escape_html(child.folder_name)}</p></div>\n"
+                    f"<section>\n{inner}\n</section>"
                 )
 
-            # Subcategory list
-            sub_html = ''
-            if cat.children:
-                sub_html = '<ul class="subcategory-list">\n'
-                for child in sorted(cat.children, key=lambda c: c.folder_name):
-                    child_url = '/' + '/'.join(child.slug_path) + '/'
-                    sub_html += f'<li><a href="{child_url}">{_escape_html(child.folder_name)}</a></li>\n'
-                sub_html += '</ul>\n'
+            # 직속 글 (원본은 표시 안 했지만, fallback 으로 직속 글이 있으면 카테고리 자체 섹션에 표시)
+            if cat.articles and not sorted_children:
+                articles = sorted(cat.articles, key=lambda a: a.meta.date, reverse=True)
+                inner = '\n'.join(self._listup_module_html(a) for a in articles)
+                sections.append(
+                    f"<div class='gap'><p>{_escape_html(cat.folder_name)}</p></div>\n"
+                    f"<section>\n{inner}\n</section>"
+                )
 
-            # Breadcrumb
-            crumb_parts = []
-            for depth in range(1, len(cat.slug_path)):
-                partial_path = cat.path[:depth]
-                partial_slug = cat.slug_path[:depth]
-                label = partial_path[-1]
-                url = '/' + '/'.join(partial_slug) + '/'
-                crumb_parts.append((label, url))
-            crumb_parts.append((cat.folder_name, None))
-            breadcrumb_html = self._make_breadcrumb(crumb_parts)
+            subcategory_sections = '\n'.join(sections) if sections else (
+                f"<div class='gap'><p>{_escape_html(cat.folder_name)}</p></div>\n"
+                f"<section><p>No articles found</p></section>"
+            )
 
-            cat_url = '/' + '/'.join(cat.slug_path) + '/'
-            cat_title = f'{cat.folder_name} | {self.site.name}'
+            # nav-tracker: Home / 카테고리명 (원본 case 2)
+            crumb_parts = [(cat.folder_name, f"/{cat.slug}/")]
+            nav_tracker = self._nav_tracker_for_path(crumb_parts)
+
+            page_title = self.site.name
 
             vars = {
-                'CAT_TITLE': _escape_html(cat_title),
-                'BREADCRUMB': breadcrumb_html,
-                'CAT_DISPLAY_NAME': _escape_html(cat.folder_name),
-                'SUBCATEGORY_LIST': sub_html,
-                'ARTICLE_LIST': article_items,
+                'PAGE_TITLE': _escape_html(page_title),
+                'MAIN_TITLE': _escape_html(self.site.main_title),
+                'NAV_TRACKER': nav_tracker,
+                'NAV_LINKS': nav_links,
+                'SUBCATEGORY_SECTIONS': subcategory_sections,
                 'COPYRIGHT_YEAR': self._copyright_year(),
                 'COPYRIGHT_HOLDER': _escape_html(self.site.copyright_holder),
             }
             page_html = _render(tpl, vars)
 
-            out_dir = self.dist / Path(*cat.slug_path)
+            out_dir = self.dist / cat.slug
             out_dir.mkdir(parents=True, exist_ok=True)
             (out_dir / 'index.html').write_text(page_html, encoding='utf-8')
 
     # ── [8] Home page ─────────────────────────────────────────
 
     def _build_home(self):
+        """원본 HomePage.generateHomepageArticleList() 재현.
+
+        - About 카테고리 글은 제외 (원본도 동일).
+        - 모든 글을 평면 리스트로 날짜 내림차순 정렬.
+        - 출력은 listup_module_div 마크업 그대로.
+        """
         tpl = _load_template(self.templates_dir, 'home.html')
 
         exclude_top = set(self.site.home_excludes_categories)
 
-        # Collect all articles not in excluded top-level categories
         home_articles = []
         for article in self.articles:
             if article.category_path:
                 top_cat = article.category_path[0]
                 if top_cat in exclude_top:
                     continue
+            # 톱레벨 글 (예: About 자체) 도 home_excludes_categories 로 필터
+            if (len(article.category_path) == 1
+                    and article.category_path[0] in exclude_top):
+                continue
             home_articles.append(article)
 
-        # Sort date desc
         home_articles.sort(key=lambda a: a.meta.date, reverse=True)
 
-        article_items = ''
-        for a in home_articles:
-            link_text = a.category_path[-1]
-            article_items += (
-                f'<li>'
-                f'<span class="date">{a.meta.date}</span>'
-                f'<a href="/{a.meta.slug}/">{_escape_html(link_text)}</a>'
-                f'</li>\n'
-            )
+        article_items = '\n'.join(
+            self._listup_module_html(a) for a in home_articles
+        )
+
+        page_title = self.site.name
 
         vars = {
+            'PAGE_TITLE': _escape_html(page_title),
+            'MAIN_TITLE': _escape_html(self.site.main_title),
+            'NAV_LINKS': self._nav_links_html(),
             'ARTICLE_LIST': article_items,
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': _escape_html(self.site.copyright_holder),
@@ -1339,12 +1460,14 @@ class Builder:
     # ── [10] 404 page ─────────────────────────────────────────
 
     def _build_404(self):
+        """원본 ErrorPage 재현."""
         tpl = _load_template(self.templates_dir, '404.html')
-        error_title = (f'{self.site.default_title_prefix}'
-                       f'Error 404'
-                       f'{self.site.default_title_suffix}')
+        # 원본 ErrorPage 의 title 은 'Error 404'
+        page_title = 'Error 404'
         vars = {
-            'ERROR_TITLE': _escape_html(error_title),
+            'PAGE_TITLE': _escape_html(page_title),
+            'MAIN_TITLE': _escape_html(self.site.main_title),
+            'NAV_LINKS': self._nav_links_html(),
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': _escape_html(self.site.copyright_holder),
         }

@@ -1,37 +1,30 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang='ko'>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ERROR_TITLE}}</title>
-  <link rel="stylesheet" href="/assets/common_template.css">
-  <link rel="icon" href="/assets/favicon.ico">
+    <meta charset='UTF-8'>
+    <meta name='robots' content='noindex'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <link href='/assets/common_template.css' rel='stylesheet' type='text/css'>
+    <title>{{PAGE_TITLE}}</title>
 </head>
 <body>
-  <header class="site-header">
-    <div class="header-inner">
-      <a class="site-title" href="/">siheonlee.com</a>
-      <nav class="site-nav">
-        <a href="/blog/">Blog</a>
-        <a href="/project/">Project</a>
-        <a href="/research/">Research</a>
-        <a href="/study/">Study</a>
-        <a href="/about/">About</a>
-      </nav>
-    </div>
-  </header>
-
-  <main class="error-main">
+    <header>
+        <a id='TITLE' href='/'>
+            {{MAIN_TITLE}}
+        </a>
+    </header>
+    <nav>
+        <div id='nav-tracker'><a href='/'>Home</a></div>
+        {{NAV_LINKS}}
+    </nav>
     <div class="gap">
-      <p>Not Found</p>
+        <p>Not Found</p>
     </div>
     <section>
-      <p style="font-size: 1.5em;">문서가 이동되었거나 삭제되었습니다.</p>
+        <p style="font-size: 1.5em;">문서가 이동되었거나 삭제되었습니다.</p>
     </section>
-  </main>
-
-  <footer class="site-footer">
-    <p>&copy; {{COPYRIGHT_YEAR}} {{COPYRIGHT_HOLDER}}</p>
-  </footer>
+    <footer>
+        <p>Copyright&copy; {{COPYRIGHT_YEAR}}. {{COPYRIGHT_HOLDER}}. All rights reserved.</p>
+    </footer>
 </body>
 </html>
