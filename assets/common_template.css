@@ -301,3 +301,134 @@ footer {
     }
 }
 
+
+/* ════════════════════════════════════════════════════════════════
+   Search UI  (v0.3.1)
+   - .nav-search   : 모든 페이지의 nav 우측 상단 작은 검색창
+   - .home-search  : 메인 페이지 / 검색 결과 페이지의 section 상단 inline 폼
+   - .search-result, .search-snippet, .search-hint : 결과 페이지 표시
+   - mark           : 본문/제목 매치 강조
+   ════════════════════════════════════════════════════════════════ */
+
+/* nav 우측 작은 검색 input. nav 가 sticky 라 absolute 가 nav 기준으로 안착. */
+.nav-search {
+    position: absolute;
+    top: 0.85em;
+    right: 1em;
+    margin: 0;
+    z-index: 10;
+}
+.nav-search input[type='search'] {
+    width: 8em;
+    padding: 0.2em 0.5em;
+    border: 1px solid #c0c0c0;
+    border-radius: 3px;
+    background-color: #fff;
+    font-size: 0.8em;
+    font-family: Arial, sans-serif;
+    color: #333;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+}
+.nav-search input[type='search']::placeholder {
+    color: #afafaf;
+}
+.nav-search input[type='search']:focus {
+    outline: none;
+    border-color: #0172d5;
+    width: 12em;
+    transition: width 0.18s ease;
+}
+
+/* 메인/검색 페이지 inline 폼. section 내부에 들어감. */
+.home-search {
+    display: flex;
+    gap: 0.4em;
+    margin: 0 0 0.8em 0;
+    padding: 0;
+}
+.home-search input[type='search'] {
+    flex: 1;
+    min-width: 0;
+    padding: 0.4em 0.6em;
+    border: 1px solid #c0c0c0;
+    border-radius: 3px;
+    background-color: #fff;
+    font-size: 0.9em;
+    font-family: Arial, sans-serif;
+    color: #333;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+}
+.home-search input[type='search']::placeholder {
+    color: #afafaf;
+}
+.home-search input[type='search']:focus {
+    outline: none;
+    border-color: #0172d5;
+}
+.home-search button {
+    padding: 0.4em 1em;
+    border: 1px solid #0172d5;
+    border-radius: 3px;
+    background-color: #fff;
+    color: #0172d5;
+    font-size: 0.85em;
+    font-family: Arial, sans-serif;
+    cursor: pointer;
+    line-height: 1.2;
+}
+.home-search button:hover {
+    background-color: #0172d5;
+    color: #fff;
+}
+
+/* 결과 페이지 — 한 글의 카드 */
+.search-result {
+    margin-bottom: 0.8em;
+}
+.search-snippet {
+    font-size: 0.8em;
+    color: #555;
+    line-height: 1.5em;
+    margin: 0.15em 0 0.3em 0.4em;
+    text-indent: 0;
+    /* section p 의 글로벌 스타일을 덮기 위함 */
+}
+
+/* 결과 없음 / 입력 안내 — section p 의 들여쓰기/큰 line-height 를 무력화 */
+.search-hint {
+    font-size: 0.9em !important;
+    color: #666;
+    line-height: 1.5em !important;
+    text-indent: 0 !important;
+    margin: 0.4em 0 0.2em 0 !important;
+}
+
+/* 매치 강조. lama 의 #afafaf41 code 배경색과 톤을 맞춤. */
+mark {
+    background-color: #fff3cd;
+    color: inherit;
+    padding: 0 0.1em;
+}
+
+/* nav-search 의 반응형:
+   - 993~1430: 좁아진 폭에 맞춰 input 축소
+   - 601~992 : 한층 더 축소
+   - <=600   : 완전 숨김 (모바일 사용자는 Home → home-search 사용) */
+@media (min-width: 993px) and (max-width: 1430px) {
+    .nav-search input[type='search'] { width: 7em; }
+    .nav-search input[type='search']:focus { width: 10em; }
+}
+@media (min-width: 601px) and (max-width: 992px) {
+    .nav-search input[type='search'] { width: 6em; }
+    .nav-search input[type='search']:focus { width: 9em; }
+}
+@media screen and (max-width: 600px) {
+    .nav-search { display: none; }
+    .home-search button {
+        padding: 0.4em 0.7em;
+        font-size: 0.8em;
+    }
+}
+

@@ -1,4 +1,7 @@
-# siheonlee.com — 사이트 전역 설정 (v0.3)
+# siheonlee.com — 사이트 전역 설정 (v0.3.1)
+#
+# v0.3.1 차이점:
+#   - reserved_slugs 에 'search' 추가 (검색 엔드포인트 /search.php 와 충돌 방지).
 #
 # v0.3 차이점:
 #   - 마크다운 파서를 lama_website-main 의 Parsedown.php 로 교체.
@@ -39,6 +42,7 @@ reserved_slugs:
   - project
   - research
   - study
+  - search        # v0.3.1 — /search.php 검색 엔드포인트와 충돌 방지
 
 # 빌드 옵션
 warn_on_underscore_ref: true

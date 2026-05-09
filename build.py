@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
 """
-siheonlee.com SSG v0.3 — Static Site Generator
+siheonlee.com SSG v0.3.1 — Static Site Generator
 Python 3.x stdlib only (markdown parsing may shell out to PHP).
+
+v0.3.1 차이점 (vs v0.3):
+  - 검색 기능 추가. 빌드 시 dist/search-index.json (한글 bigram + 영문 토큰
+    역색인) 과 dist/search.php (검색 엔드포인트) 를 생성. 클라이언트 JS
+    없이 서버 PHP 가 인덱스를 읽어 결과를 HTML 로 렌더.
+  - 모든 페이지 nav 우측에 작은 검색창, 메인 페이지 section 상단에 inline
+    검색창 추가. lama 미학에 맞춰 최소 장식.
+  - tokenize() 의 Python·PHP 양쪽 일관성이 동작의 핵심. search.php 의
+    search_tokenize() 와 build.py 의 _search_tokenize() 는 동일 로직.
 
 v0.3 차이점 (vs v0.2):
   - 마크다운 파서를 추상화. site.yaml 의 `markdown_parser` 로 교체 가능.
@@ -22,6 +31,7 @@ Usage:
 import os
 import re
 import sys
+import json
 import shutil
 import subprocess
 import unicodedata
@@ -1012,6 +1022,70 @@ def build_meta_tags(article: 'Article', rr: RenderResult, site: SiteConfig) -> t
 
 
 # ════════════════════════════════════════════════════════════════
+# Search index — tokenizer & body extractor  (v0.3.1)
+# ════════════════════════════════════════════════════════════════
+#
+# 빌드 시 dist/search-index.json 을 만들고, 검색은 dist/search.php 가
+# 그 인덱스를 읽어 처리한다 (서버측). 클라이언트 JS 0줄.
+#
+# 토크나이저 규칙 — Python 과 PHP 양쪽이 반드시 동일 출력을 내야 한다:
+#   - 영문/숫자 (lowercase)  : 단어 단위로 그대로
+#   - 한글 (가-힣)          : 음절 2-gram (bigram). 한 글자는 그대로.
+#   - 그 외 문자             : 토큰 분리자로만 작용
+#
+# 예: "Hello 마스크 3D프린팅" →
+#     ['hello', '마스', '스크', '3d', '프린', '린팅']
+#
+# bigram 인덱스이므로 부분 검색이 자연스럽다. "프린" 만 입력해도
+# "프린팅", "프린터" 모두 매치. 영어는 정확 단어 매치.
+
+_SEARCH_LATIN_RE = re.compile(r'[a-z0-9]+')
+_SEARCH_HAN_RE = re.compile(r'[가-힣]+')
+
+
+def _search_tokenize(text: str) -> list:
+    """build.py / search.php 가 동일하게 사용하는 토크나이저.
+
+    PHP 측 search_tokenize() (templates/search.php) 와 출력이 일치해야 한다.
+    변경 시 양쪽 동시 수정 필수.
+    """
+    if not text:
+        return []
+    text = text.lower()
+    tokens = []
+    for m in _SEARCH_LATIN_RE.finditer(text):
+        tokens.append(m.group())
+    for m in _SEARCH_HAN_RE.finditer(text):
+        word = m.group()
+        if len(word) == 1:
+            tokens.append(word)
+        else:
+            for i in range(len(word) - 1):
+                tokens.append(word[i:i + 2])
+    return tokens
+
+
+_TAG_STRIP_RE = re.compile(r'<[^>]+>')
+_STYLE_SCRIPT_RE = re.compile(
+    r'<(style|script)\b[^>]*>.*?</\1>', re.DOTALL | re.IGNORECASE
+)
+_WS_COLLAPSE_RE = re.compile(r'\s+')
+
+
+def _html_to_plain(html: str) -> str:
+    """렌더된 본문 HTML 에서 태그를 제거한 평문. 공백은 1개로 압축.
+
+    <style> / <script> 블록은 내용까지 통째로 제거한다 — content.html 이
+    인라인 스타일을 갖는 경우 (예: About 페이지) CSS 가 검색 인덱스에
+    들어가 노이즈를 만드는 것을 방지.
+    """
+    s = _STYLE_SCRIPT_RE.sub(' ', html or '')
+    s = _TAG_STRIP_RE.sub(' ', s)
+    s = _WS_COLLAPSE_RE.sub(' ', s).strip()
+    return s
+
+
+# ════════════════════════════════════════════════════════════════
 # Template Renderer
 # ════════════════════════════════════════════════════════════════
 
@@ -1086,6 +1160,8 @@ class Builder:
         self.slug_to_article: dict = {}
         self.categories: dict = {}   # slug_path tuple → Category
         self.markdown_renderer: MarkdownRenderer = None  # set after _load_config
+        # v0.3.1: slug → 평문 본문. _render_articles 가 채우고 _build_search 가 사용.
+        self.rendered_bodies: dict = {}
 
     # ── [1] Config load ──────────────────────────────────────
 
@@ -1496,6 +1572,9 @@ class Builder:
                 rr = process_html(content_text, m.slug, article.source_dir)
                 body_html = rr.html
 
+            # v0.3.1: 검색 인덱스용 평문 캐시 (재렌더링 방지)
+            self.rendered_bodies[m.slug] = _html_to_plain(rr.html)
+
             # v0.3: meta.yaml 의 styles 필드를 <style> 블록으로 변환
             article_styles = render_article_styles(m.styles)
 
@@ -1812,7 +1891,95 @@ class Builder:
             '\n'.join(lines), encoding='utf-8'
         )
 
-    # ── [13] Global orphan pruning ────────────────────────────
+    # ── [13] Search index + search.php  (v0.3.1) ──────────────
+
+    def _build_search(self):
+        """Build dist/search-index.json + dist/search.php.
+
+        인덱스 포맷:
+          {
+            "version": 1,
+            "docs":  [{"slug","title","date","category","body"}, ...],
+            "index":       {"<token>": [[doc_id, tf], ...], ...},  # 본문
+            "title_index": {"<token>": [[doc_id, tf], ...], ...}   # 제목
+          }
+
+        body 는 스니펫 추출용 평문 (HTML 태그 제거 후, 공백 압축).
+        about 카테고리 등 site.yaml 의 home_excludes_categories 도 검색 대상에 포함
+        (검색은 글 모두를 대상으로 — 홈 노출 정책과 별개).
+        """
+        docs = []
+        body_index = {}    # token -> {doc_id: tf}
+        title_index = {}
+
+        # 안정적인 doc_id 를 위해 slug 정렬
+        sorted_articles = sorted(self.articles, key=lambda a: a.meta.slug)
+
+        for doc_id, article in enumerate(sorted_articles):
+            m = article.meta
+            body_plain = self.rendered_bodies.get(m.slug, '')
+
+            top_cat = ''
+            if len(article.category_path) > 1:
+                top_cat = article.category_path[0]
+
+            # 본문 저장 길이 제한 (스니펫엔 충분, 인덱스 크기 통제)
+            body_for_doc = body_plain[:5000]
+
+            docs.append({
+                'slug': m.slug,
+                'title': m.title,
+                'date': m.date,
+                'category': top_cat,
+                'body': body_for_doc,
+            })
+
+            body_tf = {}
+            for t in _search_tokenize(body_plain):
+                body_tf[t] = body_tf.get(t, 0) + 1
+            for t, tf in body_tf.items():
+                body_index.setdefault(t, {})[doc_id] = tf
+
+            title_tf = {}
+            for t in _search_tokenize(m.title):
+                title_tf[t] = title_tf.get(t, 0) + 1
+            for t, tf in title_tf.items():
+                title_index.setdefault(t, {})[doc_id] = tf
+
+        def compact(idx):
+            return {tok: [[d, tf] for d, tf in posting.items()]
+                    for tok, posting in idx.items()}
+
+        index_data = {
+            'version': 1,
+            'docs': docs,
+            'index': compact(body_index),
+            'title_index': compact(title_index),
+        }
+
+        self.dist.mkdir(parents=True, exist_ok=True)
+        (self.dist / 'search-index.json').write_text(
+            json.dumps(index_data, ensure_ascii=False, separators=(',', ':')),
+            encoding='utf-8',
+        )
+
+        # search.php 템플릿 substitute
+        tpl_path = self.templates_dir / 'search.php'
+        if not tpl_path.exists():
+            _warn('templates/search.php not found, skipping search page build')
+            return
+        tpl = tpl_path.read_text(encoding='utf-8')
+        vars = {
+            'PAGE_TITLE': _escape_html(self.site.name),
+            'MAIN_TITLE': _escape_html(self.site.main_title),
+            'NAV_LINKS': self._nav_links_html(),
+            'COPYRIGHT_YEAR': self._copyright_year(),
+            'COPYRIGHT_HOLDER': _escape_html(self.site.copyright_holder),
+        }
+        page = _render(tpl, vars)
+        (self.dist / 'search.php').write_text(page, encoding='utf-8')
+
+    # ── [14] Global orphan pruning ────────────────────────────
 
     def _prune_orphans(self):
         """§ 7.4 — remove dist directories for deleted/renamed slugs and categories."""
@@ -1861,7 +2028,8 @@ class Builder:
         self._build_404()                      # [10]
         self._build_robots()                   # [11]
         self._build_dispatcher()               # [12]
-        self._prune_orphans()                  # [13]
+        self._build_search()                   # [13]  v0.3.1
+        self._prune_orphans()                  # [14]
 
         warn_count = len(_warnings)
         art_count = len(self.articles)

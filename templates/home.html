@@ -14,6 +14,9 @@
         </a>
     </header>
     <nav>
+        <form class='nav-search' action='/search.php' method='get' role='search'>
+            <input type='search' name='q' placeholder='검색' aria-label='Search'>
+        </form>
         <div id='nav-tracker'><a href='/'>Home</a></div>
         {{NAV_LINKS}}
     </nav>
@@ -21,6 +24,10 @@
         <p>Recent posts</p>
     </div>
     <section>
+        <form class='home-search' action='/search.php' method='get' role='search'>
+            <input type='search' name='q' placeholder='글 검색...' aria-label='Search'>
+            <button type='submit'>검색</button>
+        </form>
         {{ARTICLE_LIST}}
     </section>
     <footer>
