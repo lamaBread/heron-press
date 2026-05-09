@@ -1,4 +1,16 @@
-# siheonlee.com — 사이트 전역 설정 (v0.3.1)
+# siheonlee.com — 사이트 전역 설정 (v0.3.2)
+#
+# v0.3.2 차이점:
+#   - 검색 UI 정리: home-search (Recent posts 위 인라인 폼) 제거.
+#                  nav-search (우측 상단 작은 입력) 만 남김.
+#   - nav-search 노출 페이지: home.html, category.html 만.
+#                           article.html, 404.html 에서는 제외.
+#   - nav-search 미관: 배경/테두리 없이 nav 색상에 녹아드는 italic placeholder,
+#                     focus 시 가로로 확장.
+#   - 검색 범위 스코핑: 카테고리 인덱스 페이지에서 검색 시
+#                     해당 카테고리 내부 글로 한정 (?cat=<slug>).
+#                     홈에서 검색 시 전체 글 대상.
+#                     search.php 가 결과 헤더에 검색 범위를 표기.
 #
 # v0.3.1 차이점:
 #   - reserved_slugs 에 'search' 추가 (검색 엔드포인트 /search.php 와 충돌 방지).

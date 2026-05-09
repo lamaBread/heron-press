@@ -1,14 +1,30 @@
 #!/usr/bin/env python3
 """
-siheonlee.com SSG v0.3.1 — Static Site Generator
+siheonlee.com SSG v0.3.2 — Static Site Generator
 Python 3.x stdlib only (markdown parsing may shell out to PHP).
+
+v0.3.2 차이점 (vs v0.3.1):
+  - 검색 UI 정리.
+      * 메인페이지 section 내부 home-search 폼 제거. nav-search (우측 상단)
+        만 남김.
+      * nav-search 는 home / category 인덱스 페이지에만 노출. 개별 글과
+        about, 404 에서는 노출하지 않음.
+      * nav-search 미관: 배경/테두리 없이 nav 색상에 녹아드는 italic
+        placeholder, focus 시 가로 확장. 모든 뷰포트에서 노출.
+  - 검색 범위 스코핑.
+      * 카테고리 인덱스 페이지(예: /blog/) 의 nav-search 는 hidden
+        cat=<slug> 를 함께 전송 → search.php 가 해당 카테고리 내부 글로
+        한정해 검색.
+      * 홈페이지의 nav-search 는 cat 미전송 → 전체 글 대상.
+      * 결과 헤더에 검색 범위 표기 + (스코프 검색일 때) "전체에서 검색"
+        토글 링크.
+  - search-index.json 포맷 v2 로 확장: docs[i].category_slug 추가, 톱레벨
+    카테고리 slug→folder_name map (`categories`) 추가.
 
 v0.3.1 차이점 (vs v0.3):
   - 검색 기능 추가. 빌드 시 dist/search-index.json (한글 bigram + 영문 토큰
     역색인) 과 dist/search.php (검색 엔드포인트) 를 생성. 클라이언트 JS
     없이 서버 PHP 가 인덱스를 읽어 결과를 HTML 로 렌더.
-  - 모든 페이지 nav 우측에 작은 검색창, 메인 페이지 section 상단에 inline
-    검색창 추가. lama 미학에 맞춰 최소 장식.
   - tokenize() 의 Python·PHP 양쪽 일관성이 동작의 핵심. search.php 의
     search_tokenize() 와 build.py 의 _search_tokenize() 는 동일 로직.
 
@@ -1756,6 +1772,7 @@ class Builder:
                 'MAIN_TITLE': _escape_html(self.site.main_title),
                 'NAV_TRACKER': nav_tracker,
                 'NAV_LINKS': nav_links,
+                'NAV_SEARCH_CAT': _escape_html(cat.slug),
                 'SUBCATEGORY_SECTIONS': subcategory_sections,
                 'COPYRIGHT_YEAR': self._copyright_year(),
                 'COPYRIGHT_HOLDER': _escape_html(self.site.copyright_holder),
@@ -1891,15 +1908,16 @@ class Builder:
             '\n'.join(lines), encoding='utf-8'
         )
 
-    # ── [13] Search index + search.php  (v0.3.1) ──────────────
+    # ── [13] Search index + search.php  (v0.3.1, v0.3.2) ──────
 
     def _build_search(self):
         """Build dist/search-index.json + dist/search.php.
 
-        인덱스 포맷:
+        인덱스 포맷 (v0.3.2 의 v2):
           {
-            "version": 1,
-            "docs":  [{"slug","title","date","category","body"}, ...],
+            "version": 2,
+            "docs":  [{"slug","title","date","category","category_slug","body"}, ...],
+            "categories":  {"<top_slug>": "<folder_name>", ...},
             "index":       {"<token>": [[doc_id, tf], ...], ...},  # 본문
             "title_index": {"<token>": [[doc_id, tf], ...], ...}   # 제목
           }
@@ -1907,6 +1925,10 @@ class Builder:
         body 는 스니펫 추출용 평문 (HTML 태그 제거 후, 공백 압축).
         about 카테고리 등 site.yaml 의 home_excludes_categories 도 검색 대상에 포함
         (검색은 글 모두를 대상으로 — 홈 노출 정책과 별개).
+
+        category_slug 는 카테고리 인덱스 페이지의 nav-search 가 보내는
+        ?cat=<slug> 와 매칭되어 검색 범위를 한정한다. 톱레벨 카테고리에
+        속하지 않은 글 (예: About) 은 빈 문자열.
         """
         docs = []
         body_index = {}    # token -> {doc_id: tf}
@@ -1919,9 +1941,9 @@ class Builder:
             m = article.meta
             body_plain = self.rendered_bodies.get(m.slug, '')
 
-            top_cat = ''
-            if len(article.category_path) > 1:
-                top_cat = article.category_path[0]
+            top_cat_obj = self._top_category_for_article(article)
+            top_cat_name = top_cat_obj.folder_name if top_cat_obj else ''
+            top_cat_slug = top_cat_obj.slug if top_cat_obj else ''
 
             # 본문 저장 길이 제한 (스니펫엔 충분, 인덱스 크기 통제)
             body_for_doc = body_plain[:5000]
@@ -1930,7 +1952,8 @@ class Builder:
                 'slug': m.slug,
                 'title': m.title,
                 'date': m.date,
-                'category': top_cat,
+                'category': top_cat_name,
+                'category_slug': top_cat_slug,
                 'body': body_for_doc,
             })
 
@@ -1950,9 +1973,17 @@ class Builder:
             return {tok: [[d, tf] for d, tf in posting.items()]
                     for tok, posting in idx.items()}
 
+        # 톱레벨 카테고리 slug → folder_name (PHP 의 라벨 표시용)
+        categories_map = {
+            cat.slug: cat.folder_name
+            for path_tuple, cat in self.categories.items()
+            if len(path_tuple) == 1
+        }
+
         index_data = {
-            'version': 1,
+            'version': 2,
             'docs': docs,
+            'categories': categories_map,
             'index': compact(body_index),
             'title_index': compact(title_index),
         }

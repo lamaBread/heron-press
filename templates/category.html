@@ -15,6 +15,7 @@
     </header>
     <nav>
         <form class='nav-search' action='/search.php' method='get' role='search'>
+            <input type='hidden' name='cat' value='{{NAV_SEARCH_CAT}}'>
             <input type='search' name='q' placeholder='검색' aria-label='Search'>
         </form>
         <div id='nav-tracker'>{{NAV_TRACKER}}</div>

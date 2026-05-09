@@ -303,84 +303,76 @@ footer {
 
 
 /* ════════════════════════════════════════════════════════════════
-   Search UI  (v0.3.1)
-   - .nav-search   : 모든 페이지의 nav 우측 상단 작은 검색창
-   - .home-search  : 메인 페이지 / 검색 결과 페이지의 section 상단 inline 폼
+   Search UI  (v0.3.2)
+   - .nav-search  : 홈/카테고리 인덱스 nav 우측 상단의 미세한 검색 입력
+                   배경/테두리 없음, italic placeholder, focus 시 가로 확장
+                   모든 뷰포트 폭에서 노출 (모바일 포함)
+   - .search-scope : 결과 페이지 헤더의 스코프 안내 영역
    - .search-result, .search-snippet, .search-hint : 결과 페이지 표시
-   - mark           : 본문/제목 매치 강조
+   - mark          : 본문/제목 매치 강조
    ════════════════════════════════════════════════════════════════ */
 
-/* nav 우측 작은 검색 input. nav 가 sticky 라 absolute 가 nav 기준으로 안착. */
+/* nav 우측의 검색 입력. nav 가 sticky 라 absolute 가 nav 기준으로 안착.
+   배경/테두리 없음 — nav 톤에 자연스럽게 녹아드는 italic placeholder 만 보임. */
 .nav-search {
     position: absolute;
-    top: 0.85em;
+    top: 1em;
     right: 1em;
     margin: 0;
     z-index: 10;
+    line-height: 1;
 }
 .nav-search input[type='search'] {
-    width: 8em;
-    padding: 0.2em 0.5em;
-    border: 1px solid #c0c0c0;
-    border-radius: 3px;
-    background-color: #fff;
-    font-size: 0.8em;
+    width: 4.5em;
+    /* 우측 padding 을 추가로 둔다 — Windows 의 Malgun Gothic 같은 한글 fallback
+       폰트는 진짜 italic 글리프가 없어 브라우저가 faux italic (skew) 로 합성한다.
+       skew 는 마지막 글자의 우측 상단을 컨텐츠 박스 너머로 밀어내므로 잘려 보인다.
+       0.6em 의 우측 padding 으로 그 overflow 를 흡수. */
+    padding: 0.1em 0.6em 0.1em 0.2em;
+    border: none;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
+    background-color: transparent;
     font-family: Arial, sans-serif;
-    color: #333;
+    font-size: 0.85em;
+    font-style: italic;
+    color: #AFAFAF;  /* nav 글자 색과 동일 */
     box-sizing: border-box;
     -webkit-appearance: none;
+    appearance: none;
+    transition: width 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 .nav-search input[type='search']::placeholder {
-    color: #afafaf;
+    color: #AFAFAF;
+    font-style: italic;
+    opacity: 1;  /* Firefox 의 기본 0.54 무력화 */
+}
+/* WebKit/Chromium 의 검색 의사요소 — appearance:none 만으로 일부 빌드에서
+   완전히 사라지지 않을 수 있어 명시적으로 제거. */
+.nav-search input[type='search']::-webkit-search-decoration,
+.nav-search input[type='search']::-webkit-search-cancel-button,
+.nav-search input[type='search']::-webkit-search-results-button,
+.nav-search input[type='search']::-webkit-search-results-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
 }
 .nav-search input[type='search']:focus {
     outline: none;
-    border-color: #0172d5;
     width: 12em;
-    transition: width 0.18s ease;
+    color: #333;
+    border-bottom-color: #c0c0c0;
 }
 
-/* 메인/검색 페이지 inline 폼. section 내부에 들어감. */
-.home-search {
-    display: flex;
-    gap: 0.4em;
-    margin: 0 0 0.8em 0;
-    padding: 0;
-}
-.home-search input[type='search'] {
-    flex: 1;
-    min-width: 0;
-    padding: 0.4em 0.6em;
-    border: 1px solid #c0c0c0;
-    border-radius: 3px;
-    background-color: #fff;
-    font-size: 0.9em;
-    font-family: Arial, sans-serif;
-    color: #333;
-    box-sizing: border-box;
-    -webkit-appearance: none;
-}
-.home-search input[type='search']::placeholder {
-    color: #afafaf;
-}
-.home-search input[type='search']:focus {
-    outline: none;
-    border-color: #0172d5;
-}
-.home-search button {
-    padding: 0.4em 1em;
-    border: 1px solid #0172d5;
-    border-radius: 3px;
-    background-color: #fff;
-    color: #0172d5;
+/* 결과 페이지 — 스코프 안내 (예: "Blog 카테고리에서 검색") */
+.search-scope {
     font-size: 0.85em;
-    font-family: Arial, sans-serif;
-    cursor: pointer;
-    line-height: 1.2;
+    color: #888;
+    margin-left: 0.4em;
 }
-.home-search button:hover {
-    background-color: #0172d5;
-    color: #fff;
+.search-scope a {
+    color: #0172d5;
+    text-decoration: none;
 }
 
 /* 결과 페이지 — 한 글의 카드 */
@@ -412,23 +404,20 @@ mark {
     padding: 0 0.1em;
 }
 
-/* nav-search 의 반응형:
-   - 993~1430: 좁아진 폭에 맞춰 input 축소
-   - 601~992 : 한층 더 축소
-   - <=600   : 완전 숨김 (모바일 사용자는 Home → home-search 사용) */
+/* nav-search 반응형 — 모든 폭에서 노출.
+   좁은 화면에서는 시작 폭/확장 폭만 줄여 nav 다른 요소를 덮지 않게 한다.
+   폭 값에는 위 규칙의 우측 padding 0.6em 을 흡수할 만큼의 여유가 포함되어 있다. */
 @media (min-width: 993px) and (max-width: 1430px) {
-    .nav-search input[type='search'] { width: 7em; }
-    .nav-search input[type='search']:focus { width: 10em; }
+    .nav-search input[type='search'] { width: 4.5em; }
+    .nav-search input[type='search']:focus { width: 11em; }
 }
 @media (min-width: 601px) and (max-width: 992px) {
-    .nav-search input[type='search'] { width: 6em; }
-    .nav-search input[type='search']:focus { width: 9em; }
+    .nav-search input[type='search'] { width: 4em; }
+    .nav-search input[type='search']:focus { width: 10em; }
 }
 @media screen and (max-width: 600px) {
-    .nav-search { display: none; }
-    .home-search button {
-        padding: 0.4em 0.7em;
-        font-size: 0.8em;
-    }
+    .nav-search { top: 1.05em; right: 0.7em; }
+    .nav-search input[type='search'] { width: 3.7em; font-size: 0.8em; }
+    .nav-search input[type='search']:focus { width: 8em; }
 }
 
