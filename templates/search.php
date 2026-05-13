@@ -2,12 +2,17 @@
 declare(strict_types=1);
 
 // ════════════════════════════════════════════════════════════════
-// search.php — siheonlee.com 검색 엔드포인트  (v0.4.0)
+// search.php — siheonlee.com 검색 엔드포인트  (v0.4.2)
 // ════════════════════════════════════════════════════════════════
 //
 // 빌드 시 build.py 가 dist/ 로 복사하면서 {{...}} placeholder 만 치환.
 // 런타임에 dist/search-index.json (build.py 가 같은 빌드에서 생성) 을
 // 읽어 한글 bigram + 영문 토큰 역색인 위에서 검색을 수행한다.
+//
+// v0.4.2 변경:
+//   - 검색 결과 페이지에 `<meta name='robots' content='noindex,follow'>` 추가.
+//     v0.4.0 의 "전역 noindex 폐기" 정책의 예외. ?q=… 같은 thin/duplicate
+//     content 가 색인되는 것을 방지하되, follow 로 결과 링크는 추적 허용.
 //
 // v0.4.0 변경:
 //   - 토크나이저 함수가 별도 파일 (search_tokenize.php) 로 분리됨.
@@ -15,7 +20,8 @@ declare(strict_types=1);
 //     자동 검증된다.
 //   - 한국어 1글자 쿼리는 자연스럽게 빈 토큰 셋 → 결과 없음.
 //   - 본문 5000자 절단 제거됨 (인덱스 측). 스니펫은 평문 본문 전체에서.
-//   - 전역 noindex 제거. 사이트 정책은 '검색 가능' 이 기본.
+//   - 전역 noindex 제거. 사이트 정책은 '검색 가능' 이 기본 (검색 결과
+//     페이지는 v0.4.2 부터 예외).
 //
 // 인덱스 포맷 (build.py 의 search.build_search_index() 참조):
 //   {
@@ -156,6 +162,7 @@ if ($q === '') {
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <meta name='robots' content='noindex,follow'>
     <link href='/assets/common_template.css' rel='stylesheet' type='text/css'>
     <title>{{PAGE_TITLE}}</title>
 </head>

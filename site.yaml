@@ -1,4 +1,11 @@
-# siheonlee.com — 사이트 전역 설정 (v0.4.1)
+# siheonlee.com — 사이트 전역 설정 (v0.4.2)
+#
+# v0.4.2 변경 요약:
+#   - 빌드 검증 강화: 글 slug ↔ 톱레벨 카테고리 slug 충돌이 빌드 초입에서 차단.
+#   - 레거시 redirect.php 가 도메인 하드코딩 대신 이 파일의 base_url 을 사용.
+#   - search.php 결과 페이지에 noindex,follow 메타 태그.
+#   - imgBox/imgSlideBox 인자 파싱이 nested parens 와 quoted `)` 정상 처리.
+#   - article.html 의 {{ROBOTS_META}} placeholder 가 들여쓰기와 무관.
 #
 # v0.4.1 변경 요약:
 #   - 마크다운 빌드용 PHP CLI 의존성 제거. Parsedown.php 를 scripts/parsedown.py

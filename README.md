@@ -1,10 +1,12 @@
-# siheonlee.com v0.4.1 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.4.2 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
+> **v0.4.2 의 위치:** v0.4.1 의 큰 구조 변경 (Parsedown Python 포팅, 빌드 PHP 의존 제거) 위에 v0.4.0 ~ v0.4.1 검토에서 드러난 여섯 가지 정합성 갭을 채운 점진 버전입니다. 글 산출물의 바이트 단위 출력은 v0.4.1 과 동일합니다 (회귀 0). 차이는 (a) slug ↔ 카테고리 slug 충돌의 명시 검증, (b) 레거시 redirect.php 의 도메인 하드코딩 제거, (c) search.php 의 noindex,follow, (d) imgBox/imgSlideBox 인자 파서의 nested parens 처리, (e) {{ROBOTS_META}} placeholder 들여쓰기 일반화, (f) README §15 하위 번호 보정입니다.
+>
 > **v0.4.1 의 위치:** v0.4.0 의 "PHP 기반" 캐치프레이즈가 정당화된 PHP 사용처는 (1) 마크다운 파서 (Parsedown), (2) 검색 엔드포인트 (search.php), (3) 구 도메인 리다이렉트 (redirect.php) 셋이었습니다. v0.4.1 에서 (1) 이 **순수 Python** 으로 바뀌었습니다 (Parsedown.php 를 [scripts/parsedown.py](scripts/parsedown.py) 로 충실 포팅). 빌드 머신에는 더 이상 PHP 가 필요하지 않습니다. 런타임 PHP 의존성 (검색·리다이렉트) 은 여전히 남아 있으므로 캐치프레이즈는 그대로 유지합니다.
 
 | 핵심 가치 | 어떻게 보장하는가 |
@@ -1312,7 +1314,7 @@ python scripts/migrate.py --dry-run
 
 이 시스템은 `.htaccess` 파일을 사용하지 않습니다. 모든 서버 규칙은 Apache 메인 설정(VirtualHost 또는 httpd.conf) 에 등록합니다.
 
-### 14-1. siheonlee.com (신규 도메인)
+### 15-1. siheonlee.com (신규 도메인)
 
 `dist/` 폴더의 내용을 서버의 DocumentRoot 에 업로드합니다:
 
@@ -1360,7 +1362,7 @@ rsync -avz --delete dist/ user@siheonlee.com:/var/www/siheonlee.com/
 </VirtualHost>
 ```
 
-### 14-2. lama.pe.kr (구 도메인 — 리다이렉트 전용)
+### 15-2. lama.pe.kr (구 도메인 — 리다이렉트 전용)
 
 `dist-legacy/` 폴더의 내용을 서버에 **한 번만** 올립니다. 이후에는 수정할 일이 없습니다:
 
@@ -1402,13 +1404,13 @@ rsync -avz dist-legacy/ user@lama.pe.kr:/var/www/lama.pe.kr/
 </VirtualHost>
 ```
 
-### 14-3. 빌드 머신 vs 배포 서버의 PHP
+### 15-3. 빌드 머신 vs 배포 서버의 PHP
 
 > **(v0.4.1)** 빌드 머신에는 PHP 가 필요하지 않습니다. 마크다운 파서가 순수 Python 으로 포팅되었기 때문입니다. PHP CLI 가 있으면 빌드 시 토크나이저 패리티 검증이 자동 실행되고, 없으면 워닝과 함께 검증을 건너뜁니다.
 >
 > **배포 서버** 는 v0.4.0 과 동일하게 PHP 모듈이 필요합니다 — 검색 엔드포인트 (`search.php`) 와 구 도메인 리다이렉트 (`dist-legacy/redirect.php`) 가 런타임 PHP 를 사용하기 때문입니다. 또한 글에 처리되지 않은 `<?php` 가 남아 `.php` 로 출력되는 경우도 배포 서버 PHP 가 필요합니다.
 
-### 14-4. 배포 검증 체크리스트
+### 15-4. 배포 검증 체크리스트
 
 배포 후 다음을 확인하세요:
 
@@ -1518,7 +1520,7 @@ python build.py --clean
 
 9. **단일 진실원의 토크나이저 (v0.4.0)** — Python/PHP 양쪽 토크나이저의 동등성을 빌드마다 fixture 패리티 테스트로 자동 검증.
 
-### 현재 버전(v0.4.1) 의 한계
+### 현재 버전(v0.4.2) 의 한계
 
 | 한계 | 내용 |
 |---|---|
@@ -1533,25 +1535,49 @@ python build.py --clean
 | Parsedown 업데이트 비용 | 원본 Parsedown 신버전이 나오면 [scripts/parsedown.py](scripts/parsedown.py) 의 메서드를 수동으로 동기화해야 함 (v0.4.0 까지의 "Parsedown.php 만 교체" 보다 비용 증가). |
 | 한국어 폴더명 가독성 (v0.4.0+) | 비ASCII 카테고리 폴더는 hex 코드포인트 slug 로 자동 변환 (`/be94-b85c-adf8/`). 가독성 위해 ASCII 폴더명 권장. |
 | YAML 파서 자체 구현 | 자체 구현 부분 YAML 파서를 사용 중. PyYAML 도입 검토는 v0.4.1 단계에서 보류 (외부 의존성 추가 없이도 충분히 동작). |
-| 테스트 부족 | 단위 테스트 없음. 빌드 시 토크나이저 패리티 fixture (PHP 있을 때) 만 자동 실행. 마크다운 파서 (Parsedown 포팅) 의 PHP↔Python 동등성은 v0.4.1 출시 시점에 일회성 스크립트로 검증되었으나 재현 가능한 형태로 트리에 동봉되지는 않음 (§ 12 참조). |
+| 테스트 부족 | 단위 테스트 없음. 빌드 시 토크나이저 패리티 fixture (PHP 있을 때) 만 자동 실행. 마크다운 파서 (Parsedown 포팅) 의 PHP↔Python 동등성은 v0.4.1 출시 시점에 일회성 스크립트로 검증되었으나 재현 가능한 형태로 트리에 동봉되지는 않음 (§ 12 참조). v0.5.x 로드맵 후보. |
+| 정적 검색 인덱스 본문 포함 | search-index.json 에 모든 글의 평문 본문 전체가 들어 있어 매 검색 요청마다 PHP 가 통째 로드. 글 200건 기준 인덱스 ~900KB. 글 늘면 인덱스 본문 분리 / 카테고리별 분할 검토 (§ 13 의 "고급 — 검색 비활성화" 참조). |
 
 ---
 
 ## 18. 업데이트 로그
 
-일곱 버전의 차이를 한눈에:
+여덟 버전의 차이를 한눈에:
 
-| 영역 | v0.1 | v0.2 | v0.3 | v0.3.1 | v0.3.2 | v0.4.0 | v0.4.1 (현재) |
-|---|---|---|---|---|---|---|---|
-| 시스템 정체성 | "SSG" | "SSG" | "SSG" | "SSG (런타임 PHP 검색 포함)" | (동일) | **"PHP 기반 경량 웹 사이트 생성기"** | (동일 — 런타임 PHP 의존은 여전. 빌드 PHP 의존만 사라짐.) |
-| 출력 UI/UX | v0.1 자체 디자인 | 원본 `lama_website-main` 와 동일 | 원본 + 글마다 스타일 오버라이드 가능 | (동일) + 모든 페이지 nav 우측 검색창 + Recent posts 위 inline 폼 | (동일) — nav-search 만 (홈/카테고리 인덱스 한정), 카테고리별 스코프 검색 | (동일) — nav-search 의 italic placeholder 제거, padding 좌우 동일로 정리 | (동일) |
-| 색인 정책 | 전역 noindex | 전역 noindex (원본 보존) | (동일) | (동일) | (동일) | **전역 noindex 제거. 글마다 `noindex: true` 로 개별 차단** | (동일) |
-| 마크다운 파서 | Python stdlib 자체 파서 | (동일) | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | (동일) | (동일) | (동일) | **scripts/parsedown.py — Parsedown 1.7.4 Python 포팅 (단일)** |
-| meta.yaml 필드 | slug, title, date, seo_* | (동일) | + **`styles:`** | (동일) | (동일) | + **`noindex:`** / − **`seo_keywords:` 폐기** | (동일) |
-| 검색 토크나이저 | — | — | — | 1글자 한국어 그대로 인덱싱 | (동일) | **1글자 한국어 제외 (bigram 만). 본문 길이 절단 폐지. Py↔PHP 패리티 자동 검증** | (동일 — PHP 없으면 워닝 후 건너뜀) |
-| 카테고리 한국어 폴더 | — | — | _meta.yaml 슬러그 오버라이드 | (동일) | (동일) | **_meta.yaml 오버라이드 폐기. hex 코드포인트 자동 변환 + 워닝** | (동일) |
-| 빌드 모듈 구조 | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py (2085줄) | **build.py + scripts/ 패키지 (yaml/models/slugs/markdown/seo/search/builder)** | + scripts/parsedown.py |
-| 외부 의존성 | Python 3 | (동일) | Python 3 + (parsedown 시) PHP CLI | Python 3 + PHP CLI (빌드) + PHP runtime (검색) | (동일) | (동일, 다만 캐치프레이즈로 솔직 표기) | **Python 3 만 (빌드). PHP runtime 은 검색·리다이렉트용으로 여전 필요.** |
+| 영역 | v0.1 | v0.2 | v0.3 | v0.3.1 | v0.3.2 | v0.4.0 | v0.4.1 | v0.4.2 (현재) |
+|---|---|---|---|---|---|---|---|---|
+| 시스템 정체성 | "SSG" | "SSG" | "SSG" | "SSG (런타임 PHP 검색 포함)" | (동일) | **"PHP 기반 경량 웹 사이트 생성기"** | (동일 — 빌드 PHP 의존만 사라짐) | (동일) |
+| 출력 UI/UX | v0.1 자체 디자인 | 원본 `lama_website-main` 와 동일 | 원본 + 글마다 스타일 오버라이드 가능 | (동일) + 모든 페이지 nav 우측 검색창 + Recent posts 위 inline 폼 | (동일) — nav-search 만 (홈/카테고리 인덱스 한정), 카테고리별 스코프 검색 | (동일) — nav-search 의 italic placeholder 제거, padding 좌우 동일로 정리 | (동일) | (동일) |
+| 색인 정책 | 전역 noindex | 전역 noindex (원본 보존) | (동일) | (동일) | (동일) | **전역 noindex 제거. 글마다 `noindex: true` 로 개별 차단** | (동일) | + **검색 결과 페이지에 noindex,follow** (전역 정책의 thin-content 예외) |
+| 마크다운 파서 | Python stdlib 자체 파서 | (동일) | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | (동일) | (동일) | (동일) | **scripts/parsedown.py — Parsedown 1.7.4 Python 포팅 (단일)** | (동일) |
+| meta.yaml 필드 | slug, title, date, seo_* | (동일) | + **`styles:`** | (동일) | (동일) | + **`noindex:`** / − **`seo_keywords:` 폐기** | (동일) | (동일) |
+| 검색 토크나이저 | — | — | — | 1글자 한국어 그대로 인덱싱 | (동일) | **1글자 한국어 제외 (bigram 만). 본문 길이 절단 폐지. Py↔PHP 패리티 자동 검증** | (동일 — PHP 없으면 워닝 후 건너뜀) | (동일) |
+| 빌드 검증 | slug 정규식, 날짜 형식, slug 중복 | (동일) | (동일) | (동일) | (동일) | + 토크나이저 패리티 | (동일) | + **slug ↔ 카테고리 slug 충돌 차단** |
+| 레거시 dispatcher | 도메인 하드코딩 | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **site.yaml 의 base_url 사용** |
+| PHP 함수 시뮬레이션 | — | imgBox/imgSlideBox | (동일) | (동일) | (동일) | (동일) | (동일) — 단순 정규식 (`[^)]*`) | **balanced parser — nested parens + quoted `)` 정상 처리** |
+| 카테고리 한국어 폴더 | — | — | _meta.yaml 슬러그 오버라이드 | (동일) | (동일) | **_meta.yaml 오버라이드 폐기. hex 코드포인트 자동 변환 + 워닝** | (동일) | (동일) |
+| 빌드 모듈 구조 | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py (2085줄) | **build.py + scripts/ 패키지** | + scripts/parsedown.py | (동일) |
+| 외부 의존성 | Python 3 | (동일) | Python 3 + (parsedown 시) PHP CLI | Python 3 + PHP CLI (빌드) + PHP runtime (검색) | (동일) | (동일, 다만 캐치프레이즈로 솔직 표기) | **Python 3 만 (빌드). PHP runtime 은 검색·리다이렉트용으로 여전 필요.** | (동일) |
+
+### v0.4.2 (2026-05-14) — 정합성 갭 정리 (회귀 0, 출력 동등)
+
+v0.4.1 의 종합 검토에서 드러난 여섯 가지 작은 정합성 이슈를 한 번에 정리한 점진 버전. 글 페이지 출력은 v0.4.1 의 dist/ 와 바이트 단위로 동일 (Hello World + About 기준).
+
+| 개선 | 내용 |
+|---|---|
+| 글 slug ↔ 카테고리 slug 충돌 검증 | [scripts/builder.py](scripts/builder.py) 의 `_validate()` 가 톱레벨 카테고리 slug 와 글 slug 의 충돌을 빌드 초입에서 차단. 이전엔 `_prune_orphans` 의 사후 정리에 맡겨져 무엇이 무엇을 덮어쓰는지 비결정적이었음. README §11 이 약속하던 동작을 실제 코드로 구현. |
+| 레거시 dispatcher 의 base_url 사용 | `dist-legacy/redirect.php` 의 `Location:` 헤더에 박혀 있던 `https://siheonlee.com/` 리터럴 제거. 빌드 시 site.yaml 의 `base_url` 을 PHP 변수 `$BASE_URL` 로 내보내 사용. "사이트 전역 설정은 site.yaml 한 곳" 원칙과 동기화. |
+| search.php 의 noindex,follow | 검색 결과 페이지가 `?q=…` 노이즈로 색인되는 것을 차단. v0.4.0 의 "전역 noindex 폐기" 정책에서 의도된 예외. follow 는 유지하므로 결과 링크는 외부 크롤러가 추적 가능. |
+| imgBox/imgSlideBox 인자 파싱 강화 | 이전의 `<\?php\s+(\w+)\(([^)]*)\)\s*\?>` 정규식이 인자 안의 `)` 를 처리하지 못해 `imgBox("a(b).jpg", "caption")` 같은 입력이 깨졌음. balanced parser (`_scan_php_args`) 로 교체. 실제 운영 글에 그런 입력이 없어 회귀는 없지만 표면적 갭 해소. |
+| {{ROBOTS_META}} placeholder 일반화 | article.html 의 들여쓰기 (4공백) 와 강결합되어 있던 라인 제거 패턴을 정규식으로 일반화. 누군가 템플릿 들여쓰기를 2공백으로 바꾸어도 빈 줄이 남지 않음. |
+| README §15 하위 번호 보정 | "14-1, 14-2, 14-3, 14-4" → "15-1, 15-2, 15-3, 15-4". 문서 신뢰도. |
+
+#### v0.4.1 → v0.4.2 마이그레이션 시 주의
+
+- **출력 동등성** — Hello World 와 About 글의 `dist/` 산출물은 v0.4.1 과 바이트 단위로 동일합니다. 글 페이지 본문 렌더 결과의 후방 호환을 의미.
+- **레거시 redirect.php 변화** — 출력에 `$BASE_URL = '...'` 한 줄이 추가됩니다. 배포 후 `curl -I https://lama.pe.kr/Articles/...` 로 301 위치가 의도대로 가는지 확인하세요.
+- **검색 결과 페이지 색인** — `/search.php?q=...` 같은 URL 이 이미 외부 검색엔진에 색인돼 있었다면, 다음 크롤 때 자연스럽게 제외됩니다. 즉시 제거가 필요하면 Google Search Console 의 URL 제거 도구 사용.
+- **카테고리/글 slug 충돌이 있던 사이트** — v0.4.1 까지는 어찌어찌 빌드가 되었지만 v0.4.2 에서는 빌드 실패합니다. 차단되면 카테고리 폴더명 또는 글 slug 를 변경하세요.
 
 ### v0.4.1 (2026-05-14) — 빌드 PHP 의존 제거 (Parsedown 의 Python 포팅)
 

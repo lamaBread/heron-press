@@ -294,6 +294,21 @@ class Builder:
 
         self._build_category_tree()
 
+        # 글 slug ↔ 톱레벨 카테고리 slug 충돌 검증 (v0.4.2).
+        # 둘 다 dist/{slug}/index.html 자리에 떨어지므로, _prune_orphans 의
+        # 사후 정리에 맡기지 말고 검증 단계에서 차단한다.
+        cat_slugs = {
+            cat.slug: cat
+            for cat in self.categories.values()
+            if len(cat.path) == 1
+        }
+        for article in self.articles:
+            if article.meta.slug in cat_slugs:
+                cat = cat_slugs[article.meta.slug]
+                die(f"slug 충돌 (글 ↔ 카테고리): {repr(article.meta.slug)}\n"
+                    f"       at {article.source_dir / 'meta.yaml'}\n"
+                    f"          (카테고리 폴더: Articles/{'/'.join(cat.path)})")
+
         for cat in self.categories.values():
             all_articles = self._collect_articles(cat)
             if not all_articles:
@@ -493,13 +508,20 @@ class Builder:
 
             # noindex 가 켜진 글은 robots meta 한 줄을 넣고, 꺼진 글은
             # placeholder 가 자리한 라인 자체를 통째로 제거 — 빈 줄 잔존 방지.
+            # v0.4.2: 들여쓰기에 무관하게 라인 단위로 제거 (이전 버전은
+            # '    {{ROBOTS_META}}\n' 4공백 하드코딩).
             if m.noindex:
                 tpl_local = tpl.replace(
                     '{{ROBOTS_META}}',
                     "<meta name='robots' content='noindex'>",
                 )
             else:
-                tpl_local = tpl.replace('    {{ROBOTS_META}}\n', '')
+                tpl_local = re.sub(
+                    r'^[ \t]*\{\{ROBOTS_META\}\}[ \t]*\r?\n',
+                    '',
+                    tpl,
+                    flags=re.MULTILINE,
+                )
 
             page_title = self.site.name
 
@@ -722,7 +744,12 @@ class Builder:
     # ── [12] Legacy dispatcher ────────────────────────────────
 
     def _build_dispatcher(self):
+        # v0.4.2: site.yaml 의 base_url 을 사용 (이전 버전은 도메인 하드코딩).
+        base_url = self.site.base_url.rstrip('/')
+        base_url_php = base_url.replace("'", "\\'")
+
         lines = ["<?php"]
+        lines.append(f"$BASE_URL = '{base_url_php}';")
         lines.append("$map = [")
         for url_path, slug in self.legacy_map.items():
             key_escaped = url_path.replace("'", "\\'")
@@ -742,12 +769,12 @@ class Builder:
         lines.append("        echo '410 Gone';")
         lines.append("        exit;")
         lines.append("    }")
-        lines.append("    header(\"Location: https://siheonlee.com/{$slug}/\", true, 301);")
+        lines.append("    header(\"Location: {$BASE_URL}/{$slug}/\", true, 301);")
         lines.append("    exit;")
         lines.append("}")
         lines.append("")
         lines.append("http_response_code(404);")
-        lines.append("header(\"Location: https://siheonlee.com/404.html\", true, 302);")
+        lines.append("header(\"Location: {$BASE_URL}/404.html\", true, 302);")
         lines.append("exit;")
 
         self.dist_legacy.mkdir(parents=True, exist_ok=True)

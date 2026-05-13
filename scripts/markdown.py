@@ -165,27 +165,77 @@ def _parse_php_args(args_str: str) -> list:
     return args
 
 
-_PHP_CALL_RE = re.compile(r'<\?php\s+(\w+)\(([^)]*)\)\s*\?>')
+_PHP_CALL_OPEN_RE = re.compile(r'<\?php\s+(\w+)\(')
+_PHP_CLOSE_RE = re.compile(r'\s*\?>')
+
+
+def _scan_php_args(text: str, start: int) -> tuple:
+    """`(` 직후부터 짝맞춤 `)` 까지 quote/nested parens 인식하며 스캔.
+
+    v0.4.2: 이전의 `\\(([^)]*)\\)` 정규식은 인자 안의 `)` 를 처리 못 해
+    `imgBox("a(b).jpg", ...)` 같은 입력이 깨졌다. 이제 nested parens 와
+    quote 안의 `)` 모두 정상 처리.
+
+    반환: (args_str, close_paren_index)  매칭 실패 시 (None, None).
+    """
+    depth = 1
+    in_q = None
+    i = start
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if in_q:
+            if ch == in_q:
+                in_q = None
+        elif ch in ('"', "'"):
+            in_q = ch
+        elif ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+            if depth == 0:
+                return text[start:i], i
+        i += 1
+    return None, None
 
 
 def simulate_php_in_html(text: str, slug: str, article_dir: Path) -> str:
-    def replace_php_call(m: re.Match) -> str:
+    out = []
+    pos = 0
+    while True:
+        m = _PHP_CALL_OPEN_RE.search(text, pos)
+        if not m:
+            break
+        args_str, close_paren = _scan_php_args(text, m.end())
+        if args_str is None:
+            out.append(text[pos:m.end()])
+            pos = m.end()
+            continue
+        close_m = _PHP_CLOSE_RE.match(text, close_paren + 1)
+        if not close_m:
+            out.append(text[pos:m.end()])
+            pos = m.end()
+            continue
+
         func = m.group(1)
-        args = _parse_php_args(m.group(2))
+        args = _parse_php_args(args_str)
+        out.append(text[pos:m.start()])
 
         if func == 'imgBox':
             src = args[0] if len(args) > 0 else ''
             exp = args[1] if len(args) > 1 else ''
             alt = args[2] if len(args) > 2 else ''
-            return _simulate_imgbox(src, exp, alt, slug)
-
-        if func == 'imgSlideBox':
+            out.append(_simulate_imgbox(src, exp, alt, slug))
+        elif func == 'imgSlideBox':
             dir_path = args[0] if args else ''
-            return _simulate_imgslidebox(dir_path, slug, article_dir)
+            out.append(_simulate_imgslidebox(dir_path, slug, article_dir))
+        else:
+            out.append(text[m.start():close_m.end()])
 
-        return m.group(0)
+        pos = close_m.end()
 
-    return _PHP_CALL_RE.sub(replace_php_call, text)
+    out.append(text[pos:])
+    return ''.join(out)
 
 
 def has_live_php(html: str) -> bool:

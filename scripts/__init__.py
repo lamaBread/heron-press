@@ -1,4 +1,4 @@
-"""siheonlee.com v0.4.0 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v0.4.2 — 빌더 내부 모듈 묶음.
 
 루트의 build.py 가 이 패키지를 import 한다.
 모듈 분할 (v0.4.0):

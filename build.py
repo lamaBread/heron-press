@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.4.0 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.4.2 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -7,6 +7,18 @@
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
+
+v0.4.2 변경 사항 (vs v0.4.1):
+  - 글 slug ↔ 톱레벨 카테고리 slug 충돌을 검증 단계에서 차단.
+  - dist-legacy/redirect.php 가 site.yaml 의 base_url 을 사용 (도메인
+    하드코딩 제거).
+  - 검색 결과 페이지에 noindex,follow 메타 태그 추가.
+  - imgBox/imgSlideBox 인자 파서가 nested parens + quoted `)` 정상 처리.
+  - article.html 의 {{ROBOTS_META}} placeholder 들여쓰기 일반화.
+
+v0.4.1 변경 사항 (vs v0.4.0):
+  - Parsedown.php → scripts/parsedown.py 포팅. 빌드 PHP 의존 제거.
+  - 마크다운 파서 추상화 폐지 (단일 파서).
 
 v0.4.0 변경 사항 (vs v0.3.2):
   - 시스템 캐치프레이즈: SSG → PHP 기반 경량 웹 사이트 생성기.
