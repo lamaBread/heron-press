@@ -1,23 +1,14 @@
-# siheonlee.com — 사이트 전역 설정 (v0.3.2)
+# siheonlee.com — 사이트 전역 설정 (v0.4.0)
 #
-# v0.3.2 차이점:
-#   - 검색 UI 정리: home-search (Recent posts 위 인라인 폼) 제거.
-#                  nav-search (우측 상단 작은 입력) 만 남김.
-#   - nav-search 노출 페이지: home.html, category.html 만.
-#                           article.html, 404.html 에서는 제외.
-#   - nav-search 미관: 배경/테두리 없이 nav 색상에 녹아드는 italic placeholder,
-#                     focus 시 가로로 확장.
-#   - 검색 범위 스코핑: 카테고리 인덱스 페이지에서 검색 시
-#                     해당 카테고리 내부 글로 한정 (?cat=<slug>).
-#                     홈에서 검색 시 전체 글 대상.
-#                     search.php 가 결과 헤더에 검색 범위를 표기.
-#
-# v0.3.1 차이점:
-#   - reserved_slugs 에 'search' 추가 (검색 엔드포인트 /search.php 와 충돌 방지).
-#
-# v0.3 차이점:
-#   - 마크다운 파서를 lama_website-main 의 Parsedown.php 로 교체.
-#   - meta.yaml 의 styles: 로 본문 태그 속성을 글 단위로 조정 가능.
+# v0.4.0 변경 요약:
+#   - 시스템 캐치프레이즈: SSG → PHP 기반 경량 웹 사이트 생성기.
+#   - 전역 noindex 정책 폐기. 글마다 meta.yaml 의 `noindex: true` 로 개별 차단.
+#   - 검색 토크나이저: 1글자 한국어 인덱싱 제외. 본문 길이 절단 폐지.
+#   - 카테고리 폴더의 _meta.yaml 슬러그 오버라이드 제거 (한국어 폴더명은
+#     자동으로 hex 코드포인트 slug 로 변환 + 워닝).
+#   - reserved_slugs 청소: 미사용 토큰 (c, p, api, file, status, blog, project,
+#     research, study) 일괄 제거.
+#   - meta.yaml 의 seo_keywords 필드 폐기 (검색엔진 가중치 없음).
 
 # 도메인
 domain: siheonlee.com
@@ -40,21 +31,12 @@ copyright_holder: 이시헌
 copyright_year_start: 2025
 
 # slug 예약어 (글 slug 로 사용 금지)
-# 카테고리 폴더에서 자동으로 파생되는 slug 들과 충돌 방지.
+# v0.4.0 에서 정리: 실제 디렉터리/엔드포인트 충돌 가능성이 있는 항목만 유지.
 # About 페이지는 slug=about 으로 사용하므로 reserved 에서 제외.
 reserved_slugs:
-  - src
-  - assets
-  - c
-  - p
-  - api
-  - file
-  - status
-  - blog
-  - project
-  - research
-  - study
-  - search        # v0.3.1 — /search.php 검색 엔드포인트와 충돌 방지
+  - src       # /src/{slug}/ — 글 자원 디렉터리
+  - assets    # /assets/    — 사이트 공용 자원 디렉터리
+  - search    # /search.php — 검색 엔드포인트
 
 # 빌드 옵션
 warn_on_underscore_ref: true
@@ -66,13 +48,13 @@ home_sort: date_desc
 # SEO 폴백
 description_truncate: 150
 
-# 마크다운 파서 (v0.3)
+# 마크다운 파서
 #   parsedown — lama_website-main 과 동일한 Parsedown.php (PHP 필요).
-#               운영 환경에 `php` 명령이 없으면 builtin 으로 대체.
-#   builtin   — Python stdlib 만으로 동작하는 자체 파서 (v0.2 의 그것).
+#   builtin   — Python stdlib 만으로 동작하는 자체 파서 (fallback 용).
 markdown_parser: parsedown
 
-# robots.txt (원본 사이트는 noindex 메타 태그 사용 — robots.txt 는 보존)
+# robots.txt — 사이트 정책은 '모든 글이 검색 가능' 이 기본.
+# 개별 글의 비공개는 meta.yaml 의 `noindex: true` 로 처리.
 robots_txt_main: |
   User-agent: *
   Allow: /

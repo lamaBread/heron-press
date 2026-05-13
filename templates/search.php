@@ -2,21 +2,22 @@
 declare(strict_types=1);
 
 // ════════════════════════════════════════════════════════════════
-// search.php — siheonlee.com 검색 엔드포인트  (v0.3.2)
+// search.php — siheonlee.com 검색 엔드포인트  (v0.4.0)
 // ════════════════════════════════════════════════════════════════
 //
 // 빌드 시 build.py 가 dist/ 로 복사하면서 {{...}} placeholder 만 치환.
 // 런타임에 dist/search-index.json (build.py 가 같은 빌드에서 생성) 을
 // 읽어 한글 bigram + 영문 토큰 역색인 위에서 검색을 수행한다.
 //
-// v0.3.2 차이점:
-//   - ?cat=<slug> 으로 카테고리 스코프 검색 지원.
-//     cat 미지정 → 전체 글 대상.
-//     cat 지정    → docs[i].category_slug == cat 인 글만 후보.
-//   - 결과 헤더에 검색 범위 표기 + 스코프 ↔ 전체 토글 링크.
-//   - section 내부 home-search 폼 제거. 재검색은 nav-search 만 사용.
+// v0.4.0 변경:
+//   - 토크나이저 함수가 별도 파일 (search_tokenize.php) 로 분리됨.
+//     이 파일이 single source of truth. Python ↔ PHP 패리티가 빌드마다
+//     자동 검증된다.
+//   - 한국어 1글자 쿼리는 자연스럽게 빈 토큰 셋 → 결과 없음.
+//   - 본문 5000자 절단 제거됨 (인덱스 측). 스니펫은 평문 본문 전체에서.
+//   - 전역 noindex 제거. 사이트 정책은 '검색 가능' 이 기본.
 //
-// 인덱스 포맷 (build.py 의 _build_search() 참조):
+// 인덱스 포맷 (build.py 의 search.build_search_index() 참조):
 //   {
 //     "version": 2,
 //     "docs":  [{"slug","title","date","category","category_slug","body"}, ...],
@@ -24,6 +25,8 @@ declare(strict_types=1);
 //     "index":       {"<token>": [[doc_id, tf], ...]},  # 본문
 //     "title_index": {"<token>": [[doc_id, tf], ...]}   # 제목 (가중치 ×5)
 //   }
+
+require_once __DIR__ . '/search_tokenize.php';
 
 $INDEX_PATH = __DIR__ . '/search-index.json';
 if (!is_readable($INDEX_PATH)) {
@@ -40,37 +43,11 @@ if (!is_array($INDEX) || !isset($INDEX['docs'])) {
 $CATEGORIES = isset($INDEX['categories']) && is_array($INDEX['categories'])
     ? $INDEX['categories'] : [];
 
-// build.py 의 _search_tokenize() 와 출력이 100% 일치해야 한다.
-// 변경 시 build.py 의 _search_tokenize() 도 동시에 수정.
-function search_tokenize(string $text): array {
-    if ($text === '') return [];
-    $text = mb_strtolower($text, 'UTF-8');
-    $tokens = [];
-    if (preg_match_all('/[a-z0-9]+/', $text, $m)) {
-        foreach ($m[0] as $w) $tokens[] = $w;
-    }
-    if (preg_match_all('/[\x{AC00}-\x{D7A3}]+/u', $text, $m)) {
-        foreach ($m[0] as $word) {
-            $chars = preg_split('//u', $word, -1, PREG_SPLIT_NO_EMPTY);
-            $len = count($chars);
-            if ($len === 1) {
-                $tokens[] = $chars[0];
-            } else {
-                for ($i = 0; $i < $len - 1; $i++) {
-                    $tokens[] = $chars[$i] . $chars[$i + 1];
-                }
-            }
-        }
-    }
-    return $tokens;
-}
-
 $q_raw = isset($_GET['q']) ? (string)$_GET['q'] : '';
 $q = trim(mb_substr($q_raw, 0, 100, 'UTF-8'));  // 길이 제한 (남용 방지)
 
 $cat_raw = isset($_GET['cat']) ? (string)$_GET['cat'] : '';
 $cat = trim($cat_raw);
-// cat 화이트리스트: 인덱스에 등재된 슬러그만 허용 (잘못된 입력은 전체 검색으로 폴백)
 if ($cat !== '' && !isset($CATEGORIES[$cat])) {
     $cat = '';
 }
@@ -133,9 +110,6 @@ function snippet(string $body, string $q, int $context = 40): string {
 function highlight_html(string $text, string $q): string {
     $escaped = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     if ($q === '') return $escaped;
-    // 리터럴 쿼리 + bigram 토큰을 하나의 alternation 정규식으로 묶어
-    // 한 번만 치환한다. 길이 내림차순 정렬로 가장 긴 매치를 우선.
-    // (단일 preg_replace 는 오버랩하지 않으므로 nested <mark> 가 안 생김.)
     $patterns = array_unique(array_filter(
         array_merge([$q], search_tokenize($q)),
         fn($p) => $p !== ''
@@ -158,7 +132,6 @@ $cat_attr = htmlspecialchars($cat, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $cat_name = $cat !== '' ? ($CATEGORIES[$cat] ?? $cat) : '';
 $cat_name_html = htmlspecialchars($cat_name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
-// 결과 헤더 라벨 + 스코프 안내
 if ($q === '') {
     $result_label = $cat !== ''
         ? ($cat_name_html . ' 카테고리에서 검색')
@@ -168,7 +141,6 @@ if ($q === '') {
     $count = count($hits);
     if ($cat !== '') {
         $result_label = '검색결과: ' . $count . '건';
-        // 전체 검색 토글 링크
         $all_url = '/search.php?q=' . rawurlencode($q);
         $scope_html = '<span class="search-scope">— ' . $cat_name_html
             . ' 카테고리에서 검색 (<a href="' . htmlspecialchars($all_url, ENT_QUOTES, 'UTF-8')
@@ -183,7 +155,6 @@ if ($q === '') {
 <html lang='ko'>
 <head>
     <meta charset='UTF-8'>
-    <meta name='robots' content='noindex'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <link href='/assets/common_template.css' rel='stylesheet' type='text/css'>
     <title>{{PAGE_TITLE}}</title>

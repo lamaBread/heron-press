@@ -5,10 +5,12 @@ siheonlee.com migrate.py — 일회성 마이그레이션 스크립트 (§ 14)
 기존 lama_website-main 의 data.json → meta.yaml 변환,
 legacy-map.yaml 초안 생성, todo 파일 산출.
 
-Usage:
-    python migrate.py              # 1차 변환 (백업 포함)
-    python migrate.py --check      # 검증 모드 (파일 수정 없음)
-    python migrate.py --dry-run    # 시뮬레이트 (파일 수정 없음)
+v0.4.0: scripts/ 디렉터리로 이동. 프로젝트 루트는 부모 디렉터리.
+
+Usage (프로젝트 루트에서):
+    python scripts/migrate.py              # 1차 변환 (백업 포함)
+    python scripts/migrate.py --check      # 검증 모드 (파일 수정 없음)
+    python scripts/migrate.py --dry-run    # 시뮬레이트 (파일 수정 없음)
 """
 
 import os
@@ -21,7 +23,7 @@ from pathlib import Path
 from datetime import datetime, date
 
 
-BASE = Path(__file__).parent
+BASE = Path(__file__).resolve().parent.parent
 ARTICLES = BASE / 'Articles'
 
 

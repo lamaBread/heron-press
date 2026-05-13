@@ -303,9 +303,9 @@ footer {
 
 
 /* ════════════════════════════════════════════════════════════════
-   Search UI  (v0.3.2)
+   Search UI  (v0.4.0)
    - .nav-search  : 홈/카테고리 인덱스 nav 우측 상단의 미세한 검색 입력
-                   배경/테두리 없음, italic placeholder, focus 시 가로 확장
+                   배경/테두리 없음, focus 시 가로 확장
                    모든 뷰포트 폭에서 노출 (모바일 포함)
    - .search-scope : 결과 페이지 헤더의 스코프 안내 영역
    - .search-result, .search-snippet, .search-hint : 결과 페이지 표시
@@ -313,7 +313,7 @@ footer {
    ════════════════════════════════════════════════════════════════ */
 
 /* nav 우측의 검색 입력. nav 가 sticky 라 absolute 가 nav 기준으로 안착.
-   배경/테두리 없음 — nav 톤에 자연스럽게 녹아드는 italic placeholder 만 보임. */
+   배경/테두리 없음 — nav 톤에 자연스럽게 녹아드는 placeholder 만 보임. */
 .nav-search {
     position: absolute;
     top: 1em;
@@ -324,18 +324,13 @@ footer {
 }
 .nav-search input[type='search'] {
     width: 4.5em;
-    /* 우측 padding 을 추가로 둔다 — Windows 의 Malgun Gothic 같은 한글 fallback
-       폰트는 진짜 italic 글리프가 없어 브라우저가 faux italic (skew) 로 합성한다.
-       skew 는 마지막 글자의 우측 상단을 컨텐츠 박스 너머로 밀어내므로 잘려 보인다.
-       0.6em 의 우측 padding 으로 그 overflow 를 흡수. */
-    padding: 0.1em 0.6em 0.1em 0.2em;
+    padding: 0.1em 0.3em;
     border: none;
     border-bottom: 1px solid transparent;
     border-radius: 0;
     background-color: transparent;
     font-family: Arial, sans-serif;
     font-size: 0.85em;
-    font-style: italic;
     color: #AFAFAF;  /* nav 글자 색과 동일 */
     box-sizing: border-box;
     -webkit-appearance: none;
@@ -344,7 +339,6 @@ footer {
 }
 .nav-search input[type='search']::placeholder {
     color: #AFAFAF;
-    font-style: italic;
     opacity: 1;  /* Firefox 의 기본 0.54 무력화 */
 }
 /* WebKit/Chromium 의 검색 의사요소 — appearance:none 만으로 일부 빌드에서
@@ -405,8 +399,7 @@ mark {
 }
 
 /* nav-search 반응형 — 모든 폭에서 노출.
-   좁은 화면에서는 시작 폭/확장 폭만 줄여 nav 다른 요소를 덮지 않게 한다.
-   폭 값에는 위 규칙의 우측 padding 0.6em 을 흡수할 만큼의 여유가 포함되어 있다. */
+   좁은 화면에서는 시작 폭/확장 폭만 줄여 nav 다른 요소를 덮지 않게 한다. */
 @media (min-width: 993px) and (max-width: 1430px) {
     .nav-search input[type='search'] { width: 4.5em; }
     .nav-search input[type='search']:focus { width: 11em; }
