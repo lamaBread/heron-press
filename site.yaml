@@ -1,4 +1,10 @@
-# siheonlee.com — 사이트 전역 설정 (v0.4.0)
+# siheonlee.com — 사이트 전역 설정 (v0.4.1)
+#
+# v0.4.1 변경 요약:
+#   - 마크다운 빌드용 PHP CLI 의존성 제거. Parsedown.php 를 scripts/parsedown.py
+#     로 완전히 옮겨 빌드 머신에 PHP 가 없어도 마크다운이 동작.
+#   - site.yaml 의 `markdown_parser:` 설정 폐기 (단일 파서).
+#   - parsers/ 디렉터리 삭제.
 #
 # v0.4.0 변경 요약:
 #   - 시스템 캐치프레이즈: SSG → PHP 기반 경량 웹 사이트 생성기.
@@ -47,11 +53,6 @@ home_sort: date_desc
 
 # SEO 폴백
 description_truncate: 150
-
-# 마크다운 파서
-#   parsedown — lama_website-main 과 동일한 Parsedown.php (PHP 필요).
-#   builtin   — Python stdlib 만으로 동작하는 자체 파서 (fallback 용).
-markdown_parser: parsedown
 
 # robots.txt — 사이트 정책은 '모든 글이 검색 가능' 이 기본.
 # 개별 글의 비공개는 meta.yaml 의 `noindex: true` 로 처리.

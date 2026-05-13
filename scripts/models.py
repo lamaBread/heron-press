@@ -28,7 +28,6 @@ class SiteConfig:
     description_truncate: int
     robots_txt_main: str
     robots_txt_legacy: str
-    markdown_parser: str = 'parsedown'
 
 
 @dataclass

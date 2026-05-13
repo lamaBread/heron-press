@@ -1,20 +1,22 @@
-"""마크다운 파서 추상화 + 본문 후처리.
+"""마크다운 렌더링 + 본문 후처리.
 
-파이프라인:
+파이프라인 (글 .md 한 편 기준):
   1. preprocess_md_custom_syntax(text) — 사용자 정의 문법(imgBox 등) → raw HTML
-  2. MarkdownRenderer.parse(text) → str — 순수 MD → HTML
-     구현체: BuiltinRenderer (Python), ParsedownRenderer (PHP subprocess)
+  2. Parsedown().text(text) → str — 순수 MD → HTML (parsedown.py)
   3. finalize_md_html(html, slug, dir) — asset path 재작성, PHP 함수 시뮬레이션,
                                          first paragraph / image 추출
 
-v0.4.0 변경 없음 (v0.3 의 파서 추상화 + per-article styles 그대로).
+v0.4.1 변경:
+  - PHP CLI 의존 제거. 마크다운 파서는 scripts/parsedown.py (Parsedown 1.7.4
+    Python 포팅) 하나만 사용.
+  - 추상화 (MarkdownRenderer / BuiltinRenderer / ParsedownRenderer / 팩토리)
+    제거 — 단일 파서이므로 인터페이스 불필요.
 """
 import re
-import subprocess
 from pathlib import Path
-from typing import Optional
 
 from .models import RenderResult
+from .parsedown import Parsedown
 
 
 def escape_html(s: str) -> str:
@@ -88,186 +90,12 @@ def rewrite_asset_paths_in_html(html: str, slug: str) -> str:
 
 
 # ════════════════════════════════════════════════════════════════
-# MarkdownRenderer interface + implementations
+# Markdown rendering  (Parsedown 1.7.4 Python 포팅 — parsedown.py)
 # ════════════════════════════════════════════════════════════════
 
-class MarkdownRenderer:
-    """교체 가능한 마크다운 파서의 추상 베이스.
-    구현체는 `parse(text) -> str` 만 제공하면 된다.
-    text 는 preprocess_md_custom_syntax 가 적용된 후의 markdown 문자열.
-    """
-    name: str = 'abstract'
-
-    def parse(self, text: str) -> str:
-        raise NotImplementedError
-
-
-class BuiltinRenderer(MarkdownRenderer):
-    """순수 Python stdlib 으로 구현된 자체 파서."""
-    name = 'builtin'
-
-    def parse(self, text: str) -> str:
-        return _builtin_md_to_html(text)
-
-
-class ParsedownRenderer(MarkdownRenderer):
-    """parsers/parsedown/Parsedown.php 를 PHP CLI 로 호출.
-    원본 lama_website-main 과 완전히 동일한 출력을 보장.
-    """
-    name = 'parsedown'
-
-    def __init__(self, base_dir: Path, die_fn, php_bin: str = 'php'):
-        self.runner = base_dir / 'parsers' / 'parsedown' / 'run.php'
-        self.php_bin = php_bin
-        self._die = die_fn
-        if not self.runner.exists():
-            die_fn(f'Parsedown runner not found: {self.runner}')
-
-    def parse(self, text: str) -> str:
-        try:
-            proc = subprocess.run(
-                [self.php_bin, str(self.runner)],
-                input=text.encode('utf-8'),
-                capture_output=True,
-                timeout=60,
-            )
-        except FileNotFoundError:
-            self._die(f"PHP 실행 파일을 찾을 수 없음: '{self.php_bin}'.\n"
-                      f"       PATH 에 php 를 추가하거나 site.yaml 의\n"
-                      f"       markdown_parser 를 'builtin' 으로 바꾸세요.")
-        if proc.returncode != 0:
-            err = proc.stderr.decode('utf-8', errors='replace').strip()
-            self._die(f'Parsedown 실패 (exit={proc.returncode}):\n{err}')
-        return proc.stdout.decode('utf-8')
-
-
-def make_markdown_renderer(name: str, base_dir: Path, die_fn) -> MarkdownRenderer:
-    n = (name or 'builtin').strip().lower()
-    if n in ('builtin', 'python', ''):
-        return BuiltinRenderer()
-    if n in ('parsedown', 'php'):
-        return ParsedownRenderer(base_dir, die_fn)
-    die_fn(f"알 수 없는 markdown_parser: '{name}'. 지원: builtin, parsedown.")
-
-
-# ── Builtin renderer internals ────────────────────────────────
-
-def _render_inline(text: str) -> str:
-    def inline_code(m):
-        return '<code>' + escape_html(m.group(1)) + '</code>'
-    text = re.sub(r'`([^`]+)`', inline_code, text)
-
-    def image(m):
-        alt = m.group(1)
-        url = m.group(2)
-        return f'<img src="{url}" alt="{escape_html(alt)}">'
-    text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', image, text)
-
-    def link(m):
-        link_text = m.group(1)
-        url = m.group(2)
-        return f'<a href="{url}">{link_text}</a>'
-    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', link, text)
-
-    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
-    text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
-    return text
-
-
-def _builtin_md_to_html(text: str) -> str:
-    lines = text.splitlines()
-    n = len(lines)
-    i = [0]
-    output = []
-
-    while i[0] < n:
-        line = lines[i[0]]
-
-        if line.startswith('```'):
-            lang = line[3:].strip()
-            code_lines = []
-            i[0] += 1
-            while i[0] < n and not lines[i[0]].startswith('```'):
-                code_lines.append(escape_html(lines[i[0]]))
-                i[0] += 1
-            i[0] += 1  # skip closing ```
-            lang_attr = f' class="language-{escape_html(lang)}"' if lang else ''
-            output.append(f'<pre><code{lang_attr}>{chr(10).join(code_lines)}</code></pre>')
-            continue
-
-        hm = re.match(r'^(#{1,6})\s+(.*)', line)
-        if hm:
-            level = len(hm.group(1))
-            content = _render_inline(hm.group(2).strip())
-            output.append(f'<h{level}>{content}</h{level}>')
-            i[0] += 1
-            continue
-
-        if re.match(r'^[-_*]{3,}\s*$', line.strip()):
-            output.append('<hr>')
-            i[0] += 1
-            continue
-
-        if line.startswith('> ') or line == '>':
-            quote_lines = []
-            while i[0] < n and (lines[i[0]].startswith('> ') or lines[i[0]] == '>'):
-                quote_lines.append(lines[i[0]][2:] if lines[i[0]].startswith('> ') else '')
-                i[0] += 1
-            inner = _render_inline(' '.join(quote_lines))
-            output.append(f'<blockquote><p>{inner}</p></blockquote>')
-            continue
-
-        if re.match(r'^[-*+] ', line):
-            items = []
-            while i[0] < n and re.match(r'^[-*+] ', lines[i[0]]):
-                items.append(f'<li>{_render_inline(lines[i[0]][2:])}</li>')
-                i[0] += 1
-            output.append('<ul>' + ''.join(items) + '</ul>')
-            continue
-
-        if re.match(r'^\d+\. ', line):
-            items = []
-            while i[0] < n and re.match(r'^\d+\. ', lines[i[0]]):
-                item_text = re.sub(r'^\d+\. ', '', lines[i[0]])
-                items.append(f'<li>{_render_inline(item_text)}</li>')
-                i[0] += 1
-            output.append('<ol>' + ''.join(items) + '</ol>')
-            continue
-
-        if not line.strip():
-            i[0] += 1
-            continue
-
-        if line.lstrip().startswith('<') and not line.lstrip().startswith('<p'):
-            html_lines = [line]
-            i[0] += 1
-            while i[0] < n:
-                next_line = lines[i[0]]
-                if not next_line.strip():
-                    break
-                if re.match(r'^(#{1,6} |```|> |[-*+] |\d+\. )', next_line):
-                    break
-                html_lines.append(next_line)
-                i[0] += 1
-            output.append('\n'.join(html_lines))
-            continue
-
-        para_lines = []
-        while i[0] < n:
-            l = lines[i[0]]
-            if not l.strip():
-                break
-            if re.match(r'^(#{1,6} |```|> |[-*+] |\d+\. )', l):
-                break
-            if re.match(r'^[-_*]{3,}\s*$', l.strip()):
-                break
-            para_lines.append(l)
-            i[0] += 1
-        if para_lines:
-            para_html = _render_inline(' '.join(para_lines))
-            output.append(f'<p>{para_html}</p>')
-
-    return '\n'.join(output)
+def render_markdown(text: str) -> str:
+    """preprocess 가 끝난 markdown 을 HTML 로 렌더."""
+    return Parsedown().text(text)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -391,10 +219,9 @@ def finalize_md_html(html: str, slug: str, article_dir: Path) -> RenderResult:
     )
 
 
-def render_article_md(text: str, slug: str, article_dir: Path,
-                      renderer: MarkdownRenderer) -> RenderResult:
+def render_article_md(text: str, slug: str, article_dir: Path) -> RenderResult:
     pre = preprocess_md_custom_syntax(text)
-    raw_html = renderer.parse(pre)
+    raw_html = render_markdown(pre)
     return finalize_md_html(raw_html, slug, article_dir)
 
 

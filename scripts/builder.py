@@ -37,7 +37,6 @@ from .models import SiteConfig, ArticleMeta, Article, Category
 from .slugs import category_slug_from_name, is_underscore_path, has_non_ascii
 from .markdown import (
     escape_html,
-    make_markdown_renderer,
     render_article_md,
     render_article_styles,
     normalize_styles,
@@ -126,7 +125,6 @@ class Builder:
         self.articles: list = []
         self.slug_to_article: dict = {}
         self.categories: dict = {}      # path_tuple → Category
-        self.markdown_renderer = None
         self.rendered_bodies: dict = {} # slug → plain text body (검색용)
 
     # ── [1] Config load ──────────────────────────────────────
@@ -160,17 +158,11 @@ class Builder:
             description_truncate=int(get('description_truncate') or 150),
             robots_txt_main=get('robots_txt_main') or 'User-agent: *\nAllow: /\n',
             robots_txt_legacy=get('robots_txt_legacy') or 'User-agent: *\nAllow: /\n',
-            markdown_parser=str(get('markdown_parser') or 'parsedown'),
         )
 
         legacy_yaml = self.base / 'legacy-map.yaml'
         if legacy_yaml.exists():
             self.legacy_map = yaml_load(legacy_yaml.read_text(encoding='utf-8'))
-
-        self.markdown_renderer = make_markdown_renderer(
-            self.site.markdown_parser, self.base, die
-        )
-        print(f'[markdown] using parser: {self.markdown_renderer.name}')
 
         # 토크나이저 패리티 검증 (PHP 없으면 워닝만)
         run_parity_test(self.templates_dir, php_bin='php',
@@ -466,7 +458,6 @@ class Builder:
             if content_path.suffix == '.md':
                 rr = render_article_md(
                     content_text, m.slug, article.source_dir,
-                    self.markdown_renderer,
                 )
                 body_html = (f"<div class='gap'>\n"
                              f"    <p>{escape_html(m.title)}</p>\n"
