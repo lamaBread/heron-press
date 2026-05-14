@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang='ko'>
+<html lang='{{LANG}}'>
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
@@ -22,11 +22,13 @@
     <div class="gap">
         <p>Recent posts</p>
     </div>
-    <section>
+    <section class="paginated" data-pagination-group="home-recent" data-per-page="{{HOME_PER_PAGE}}">
         {{ARTICLE_LIST}}
     </section>
+    {{PAGINATION_NAV}}
     <footer>
         <p>Copyright&copy; {{COPYRIGHT_YEAR}}. {{COPYRIGHT_HOLDER}}. All rights reserved.</p>
     </footer>
+    <script src="/assets/pagination.js"></script>
 </body>
 </html>

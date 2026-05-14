@@ -1,4 +1,20 @@
-# siheonlee.com — 사이트 전역 설정 (v0.4.4)
+# siheonlee.com — 사이트 전역 설정 (v0.4.5)
+#
+# v0.4.5 변경 요약:
+#   - 다국어 지원: `lang:` 전역 디폴트 도입 (기본 ko). 글 meta.yaml /
+#     카테고리 meta.yaml 의 `lang:` 으로 페이지마다 오버라이드 가능.
+#     템플릿의 `<html lang='...'>` 가 더 이상 'ko' 로 하드코딩되어 있지 않음.
+#   - 페이지네이션: 메인페이지 Recent / 카테고리 인덱스 (대분류·소분류) /
+#     상위 인덱스의 서브카테고리 section 마다 독립적인 페이지 컨트롤.
+#     JS 기반 DOM hide/show — 모든 항목은 SSR 되므로 SEO 영향 없음.
+#     `home_per_page` / `category_per_page` / `category_preview_per_page` 가
+#     사이트 전역 디폴트, 카테고리 폴더의 meta.yaml 로 카테고리별 오버라이드.
+#   - 카테고리 meta.yaml 신설: per_page / preview_per_page / layout / styles /
+#     lang. `Articles/<카테고리경로>/meta.yaml` 에 두면 그 카테고리에만 적용.
+#   - 서브카테고리 인덱스 페이지 신설: 톱레벨 외에 서브카테고리도 자기
+#     자신의 인덱스 페이지를 갖는다. URL = `/{top-slug}/{sub-slug}/`.
+#     v0.4.4 까지는 원본 lama.pe.kr quirk 때문에 톱레벨만 인덱스가 있었음.
+#   - sitemap.xml 에 서브카테고리 인덱스 URL 도 포함.
 #
 # v0.4.4 변경 요약:
 #   - sitemap.xml 자동 생성. scripts/sitemap.py 가 글·톱레벨 카테고리·홈
@@ -52,6 +68,11 @@ main_title: Lama
 default_author: 이시헌
 default_og_image: /assets/default-og.png
 
+# v0.4.5: 다국어 — 모든 페이지의 <html lang> 디폴트.
+# 글 meta.yaml 의 `lang: en` 등이 있으면 그 글에 한해 오버라이드.
+# 카테고리 meta.yaml 의 `lang:` 이 있으면 그 카테고리 인덱스 페이지에 한해 오버라이드.
+lang: ko
+
 # 글 페이지 <title> 의 기본 prefix/suffix.
 # v0.4.3 부터 글 페이지의 <title> 은 `{prefix}{title}{suffix}` 형태.
 # meta.yaml 의 `seo.title_prefix` / `seo.title_suffix` 로 글마다 override 가능.
@@ -76,6 +97,19 @@ warn_on_missing_asset: true
 warn_on_stale_updated: true
 home_excludes_categories: [About]
 home_sort: date_desc
+
+# v0.4.5: 페이지네이션 디폴트.
+#   home_per_page                — 메인페이지 Recent section 한 페이지 글 개수.
+#   category_per_page            — 카테고리 인덱스 페이지가 *자기 자신* 의 글
+#                                  목록을 표시할 때 한 페이지 글 개수 (소분류 등).
+#   category_preview_per_page    — 카테고리가 *상위 카테고리* 의 인덱스 페이지에
+#                                  section 으로 임베드될 때 한 페이지 글 개수.
+# 모두 카테고리 폴더의 meta.yaml 로 카테고리별 오버라이드 가능. 소분류의
+# `per_page` 는 그 소분류의 *자기 자신 페이지* 에서 사용되고, `preview_per_page`
+# 는 그 소분류가 톱레벨 페이지의 section 으로 임베드될 때 사용된다.
+home_per_page: 5
+category_per_page: 20
+category_preview_per_page: 5
 
 # SEO 폴백
 description_truncate: 150

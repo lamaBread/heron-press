@@ -1,11 +1,19 @@
-# siheonlee.com v0.4.4 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.4.5 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.4.4 의 위치:** sitemap.xml 자동 생성. v0.4.0 의 전역 noindex 폐기로 글이 검색엔진에 색인되기 시작한 뒤, 검색엔진이 사이트 구조를 더 빠르고 정확하게 파악하도록 sitemap 을 제공합니다. [scripts/sitemap.py](scripts/sitemap.py) 가 글·톱레벨 카테고리·홈 URL 을 sitemaps.org 0.9 스키마로 빌드하고, robots.txt 의 `Sitemap:` 디렉티브가 더 이상 주석 처리되지 않습니다. meta.yaml 의 `noindex: true` 글은 sitemap 에서도 제외되며, lastmod 는 `updated` (없으면 `date`) 를 사용합니다.
+> **v0.4.5 의 위치:** 인덱스 페이지의 형식과 다국어 표현을 보강한 점진 버전. 다섯 갈래 변경이 한데 묶여 있습니다.
+>
+> 1. **페이지네이션.** 메인페이지 Recent / 카테고리 인덱스 (대분류·소분류) / 상위 카테고리에 임베드된 서브카테고리 section 마다 독립적인 페이지 컨트롤이 부착됩니다. 모든 항목은 서버에서 렌더되고 (SEO 친화), [assets/pagination.js](assets/pagination.js) 가 클라이언트에서 DOM 을 hide/show 합니다. 디자인은 사이트의 nav-search 입력과 톤을 맞춘 미니멀한 회색 회전 화살표 + 페이지 번호.
+> 2. **다국어 지원.** 템플릿의 `<html lang='ko'>` 하드코딩 제거. site.yaml 의 `lang:` 이 사이트 전역 디폴트가 되고, 글 meta.yaml 의 `lang:` 으로 글마다, 카테고리 meta.yaml 의 `lang:` 으로 카테고리 인덱스마다 오버라이드 가능합니다.
+> 3. **서브카테고리 인덱스 페이지.** v0.4.4 까지는 원본 lama.pe.kr quirk 를 보존해 톱레벨 카테고리만 자기 인덱스 페이지를 가졌습니다. v0.4.5 에서 서브카테고리도 자기 인덱스 페이지 (`/{top-slug}/{sub-slug}/`) 를 갖습니다. 톱레벨 페이지는 그대로 유지 (서브카테고리들이 section 으로 임베드되는 점도 그대로). sitemap.xml 도 서브카테고리 URL 을 포함합니다.
+> 4. **카테고리 meta.yaml.** 각 카테고리 폴더 (대분류·소분류) 마다 `meta.yaml` 을 둘 수 있습니다 — 글의 meta.yaml 과 형식이 다릅니다 (slug/title/date 없음). 현재 지원 필드: `per_page` (이 카테고리의 자기 인덱스 페이지의 페이지당 글 수), `preview_per_page` (이 카테고리가 상위 카테고리의 인덱스 페이지에 section 으로 임베드될 때의 페이지당 글 수), `layout` (`list` 기본; 'gallery' 등 미래 확장 예정), `styles` (이 카테고리 인덱스 페이지에만 적용할 CSS), `lang`. 빌더는 폴더에 content.md / content.html 이 있으면 글, 없으면 카테고리로 구분합니다.
+> 5. **비ASCII 폴더명 워닝 메시지 보강.** v0.4.0 부터 `Articles/` 의 한국어 폴더명은 자동으로 hex 코드포인트 slug 로 변환되었지만, 빌드 로그의 메시지가 다소 모호했습니다. v0.4.5 의 메시지는 *어떤 폴더가 어떤 slug 로 변환되었는지* 를 명시하고, ASCII rename 권장을 한 번 더 강조합니다.
+>
+> **v0.4.4 의 위치:** sitemap.xml 자동 생성. v0.4.0 의 전역 noindex 폐기로 글이 검색엔진에 색인되기 시작한 뒤, 검색엔진이 사이트 구조를 더 빠르고 정확하게 파악하도록 sitemap 을 제공합니다. [scripts/sitemap.py](scripts/sitemap.py) 가 글·톱레벨 카테고리·홈 URL 을 sitemaps.org 0.9 스키마로 빌드하고, robots.txt 의 `Sitemap:` 디렉티브가 더 이상 주석 처리되지 않습니다. meta.yaml 의 `noindex: true` 글은 sitemap 에서도 제외되며, lastmod 는 `updated` (없으면 `date`) 를 사용합니다. (v0.4.5: 서브카테고리 URL 도 포함.)
 >
 > **v0.4.3 의 위치:** 글 페이지의 `<title>` 정상화 + 마크다운 본문의 섹션 분할 문법 + meta.yaml 의 SEO 필드 그룹화. 세 변경의 공통 동기는 *글의 의미 단위 표현* 을 일관되게 만드는 것입니다.
 >
@@ -705,18 +713,62 @@ Articles/
 폴더명: 01 - Side Project   → slug: 01-side-project
 ```
 
-> **v0.4.0 변경:** 비ASCII 폴더명에 대해 빌드 시 워닝이 한 번 출력됩니다 ("non-ASCII folder name '블로그' — 가급적 ASCII 로 작성하세요. 자동으로 hex 코드포인트 slug 로 변환됩니다."). 결과 URL 이 `/be94-b85c-adf8/` 처럼 사람이 읽기 어려운 형태가 되므로, 가능하면 ASCII 폴더명을 권장합니다.
+> **v0.4.5 변경:** 비ASCII 폴더명 워닝 메시지가 보강되었습니다. 어떤 폴더명이 어떤 slug 로 변환되었는지를 빌드 로그에 명시합니다 — 예: `[WARN] URL slug 에 비ASCII 문자 포함: '블로그' → 'be94-b85c-adf8'`. 결과 URL 이 사람이 읽기 어려운 형태가 되므로, URL 가독성/공유성을 위해 가능하면 ASCII 폴더명을 권장합니다.
 >
-> v0.3 까지 지원되던 카테고리별 **`_meta.yaml` 슬러그 오버라이드는 v0.4.0 에서 폐기**되었습니다. 한국어 폴더명도 결정론적으로 slug 가 생성되므로 오버라이드 메커니즘이 불필요해졌습니다. 기존에 `_meta.yaml` 을 두었던 카테고리는 오버라이드가 무시되고 자동 변환된 hex slug 가 적용됩니다 (URL 변경 가능 — 영향 받는 카테고리는 폴더명을 ASCII 로 바꾸어 안정된 slug 를 확보하는 것이 좋습니다).
+> **v0.4.0 변경:** v0.3 까지 지원되던 카테고리별 **`_meta.yaml` 슬러그 오버라이드는 v0.4.0 에서 폐기**되었습니다. 한국어 폴더명도 결정론적으로 slug 가 생성되므로 오버라이드 메커니즘이 불필요해졌습니다. 기존에 `_meta.yaml` 을 두었던 카테고리는 오버라이드가 무시되고 자동 변환된 hex slug 가 적용됩니다 (URL 변경 가능 — 영향 받는 카테고리는 폴더명을 ASCII 로 바꾸어 안정된 slug 를 확보하는 것이 좋습니다).
 
 ### 카테고리 색인 페이지
 
-**톱레벨 카테고리만 색인 페이지를 생성합니다.** 서브카테고리는 톱레벨 페이지에서 그룹으로 표시됩니다 (원본 사이트 동작 보존).
+**v0.4.5 부터 모든 카테고리 (대분류·소분류) 가 자기 인덱스 페이지를 생성합니다.**
 
-- `dist/blog/index.html` — Blog 카테고리 (모든 서브카테고리 그룹 포함)
-- 서브카테고리 (`/blog/3d-printing/`) 는 별도 인덱스 없음.
+- `dist/blog/index.html` — Blog 톱레벨 카테고리 (자식 서브카테고리들이 section 으로 임베드 + Blog 직속 글들 section).
+- `dist/blog/3d-printing/index.html` — Blog/3D Printing 서브카테고리 (자기 글들만 표시).
 
-글이 없는 카테고리도 페이지는 생성되지만 빌드 경고가 출력됩니다.
+톱레벨 페이지의 각 서브카테고리 section 우측 상단에는 `→` 화살표가 붙어, 클릭하면 해당 서브카테고리의 자기 페이지로 이동합니다.
+
+> **v0.4.4 까지의 동작 (참고):** 원본 lama.pe.kr quirk 보존을 위해 톱레벨만 인덱스 페이지가 있었고, 서브카테고리 URL 은 404 였습니다. v0.4.5 에서 이 quirk 를 해제했습니다. sitemap.xml 도 서브카테고리 URL 을 포함합니다.
+
+글이 없는 카테고리는 인덱스 페이지가 생성되지 않으며 빌드 경고가 출력됩니다.
+
+### 카테고리 폴더의 meta.yaml (v0.4.5 신설)
+
+각 카테고리 폴더 (대분류·소분류) 마다 `meta.yaml` 을 둘 수 있습니다. **글의 meta.yaml 과 형식이 다릅니다** (slug/title/date 없음).
+
+```
+Articles/
+├── Blog/
+│   ├── meta.yaml             ← Blog 톱레벨 카테고리 설정
+│   ├── Tutorials/
+│   │   ├── meta.yaml         ← Blog/Tutorials 서브카테고리 설정
+│   │   └── Hello World/
+│   │       ├── meta.yaml     ← 글 meta.yaml (slug/title/date 필수)
+│   │       └── content.md
+│   └── Some Article/
+│       ├── meta.yaml
+│       └── content.html
+```
+
+빌더는 `content.md` 나 `content.html` 의 존재 여부로 글 폴더와 카테고리 폴더를 구분합니다 — 둘 다 없으면 카테고리 폴더로 간주.
+
+지원 필드 (모두 선택사항):
+
+| 필드 | 기본값 | 설명 |
+|---|---|---|
+| `per_page` | site.yaml `category_per_page` (20) | 이 카테고리의 *자기 인덱스 페이지* 에서 한 페이지에 보여 줄 글 수. |
+| `preview_per_page` | site.yaml `category_preview_per_page` (5) | 이 카테고리가 *상위 카테고리의 인덱스 페이지* 에 section 으로 임베드될 때의 페이지당 글 수. |
+| `layout` | `list` | `list` 만 구현됨. `gallery` 등은 미래 확장용 자리표시. |
+| `styles` | 빈 매핑 | 이 카테고리 인덱스 페이지에만 적용할 추가 CSS (글의 `styles:` 와 동일 포맷). |
+| `lang` | site.yaml `lang` | 이 카테고리 인덱스 페이지의 `<html lang>` 오버라이드. |
+
+`per_page > preview_per_page` 가 자연스러운 사용법입니다 — 소분류의 자기 페이지는 글을 더 많이 보여주고, 상위에 임베드된 section 은 미리보기 수준으로 적게 보여주는 정책.
+
+**예시 (서브카테고리 meta.yaml):**
+
+```yaml
+per_page: 20         # /blog/tutorials/ 자기 페이지 — 페이지당 20개
+preview_per_page: 5  # /blog/ 의 Tutorials section 임베드 시 — 페이지당 5개
+layout: list
+```
 
 ---
 
@@ -1115,6 +1167,10 @@ default_author: 이시헌
 # SNS 공유 시 이미지가 없을 때 사용하는 기본 이미지 경로
 default_og_image: /assets/default-og.png
 
+# v0.4.5: 다국어 — 모든 페이지 <html lang> 디폴트.
+# 글 meta.yaml / 카테고리 meta.yaml 의 `lang:` 으로 페이지별 오버라이드.
+lang: ko
+
 # <title> 기본 서식
 default_title_prefix: ""
 default_title_suffix: ""
@@ -1132,6 +1188,12 @@ reserved_slugs:
 
 # 홈 페이지 글 목록에서 제외할 카테고리
 home_excludes_categories: [About]
+
+# v0.4.5: 페이지네이션 디폴트.
+# 카테고리 폴더의 meta.yaml 로 카테고리별 오버라이드 가능.
+home_per_page: 5                # 홈 Recent section 한 페이지 글 수
+category_per_page: 20           # 카테고리 자기 페이지 한 페이지 글 수
+category_preview_per_page: 5    # 상위에 임베드될 때의 페이지당 글 수
 
 # meta description 자동 추출 시 최대 글자 수
 description_truncate: 150
@@ -1661,7 +1723,8 @@ python build.py --clean
 
 | 버전 | 시스템 정체성 | 출력 UI/UX | 글 `<title>` | 마크다운 본문 구조 | 색인 정책 | sitemap.xml | 마크다운 파서 | meta.yaml 필드 | 검색 토크나이저 | 빌드 검증 | 레거시 dispatcher | PHP 함수 시뮬레이션 | 카테고리 한국어 폴더 | 빌드 모듈 구조 | 외부 의존성 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **v0.4.4 (현재)** | (동일) | (동일) | (동일) | (동일) | (동일) | **자동 생성 (글·톱레벨 카테고리·홈, noindex 제외, lastmod=updated\|date). robots.txt Sitemap 디렉티브 활성화** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/sitemap.py** | (동일) |
+| **v0.4.5 (현재)** | (동일) | + **JS DOM 페이지네이션 컨트롤 (홈·카테고리 인덱스·서브카테고리 section). `<html lang>` 동적화** | (동일) | (동일) | (동일) | + **서브카테고리 URL 포함** | (동일) | + **글 `lang:`** / + **카테고리 meta.yaml (per_page / preview_per_page / layout / styles / lang)** | (동일) | (동일) | (동일) | (동일) | + **워닝 메시지에 슬러그 변환 결과 표기 + ASCII rename 권장** | + **assets/pagination.js** | (동일) |
+| **v0.4.4** | (동일) | (동일) | (동일) | (동일) | (동일) | **자동 생성 (글·톱레벨 카테고리·홈, noindex 제외, lastmod=updated\|date). robots.txt Sitemap 디렉티브 활성화** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/sitemap.py** | (동일) |
 | **v0.4.3** | (동일) | (동일) | **`{seo.title_prefix}{title}{seo.title_suffix}` 로 정상화** | + **섹션 마커 `===제목===` / `======`** | (동일) | 없음 (robots.txt 에 주석으로만 자리표시) | (동일) | **seo_* 평면 필드 → `seo:` 블록 그룹화** | (동일) | (동일) | (동일) | (동일) | (동일) | + **models.SeoMeta** | (동일) |
 | **v0.4.2** | (동일) | (동일) | (동일) | (동일) | + **검색 결과 페이지에 noindex,follow** | 없음 | (동일) | (동일) | (동일) | + **slug ↔ 카테고리 slug 충돌 차단** | **site.yaml 의 base_url 사용** | **balanced parser — nested parens + quoted `)` 정상 처리** | (동일) | (동일) | (동일) |
 | **v0.4.1** | (동일 — 빌드 PHP 의존만 사라짐) | (동일) | (동일) | (동일) | (동일) | 없음 | **scripts/parsedown.py — Parsedown 1.7.4 Python 포팅 (단일)** | (동일) | (동일 — PHP 없으면 워닝 후 건너뜀) | (동일) | (동일) | (동일) — 단순 정규식 (`[^)]*`) | (동일) | + scripts/parsedown.py | **Python 3 만 (빌드). PHP runtime 은 검색·리다이렉트용으로 여전 필요.** |
@@ -1671,6 +1734,58 @@ python build.py --clean
 | **v0.3** | "SSG" | 원본 + 글마다 스타일 오버라이드 가능 | (동일) | (동일) | (동일) | 없음 | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | + **`styles:`** | — | (동일) | (동일) | (동일) | _meta.yaml 슬러그 오버라이드 | 단일 build.py | Python 3 + (parsedown 시) PHP CLI |
 | **v0.2** | "SSG" | 원본 `lama_website-main` 와 동일 | (동일) | (동일) | 전역 noindex (원본 보존) | 없음 | (동일) | (동일) | — | (동일) | (동일) | imgBox/imgSlideBox | — | 단일 build.py | (동일) |
 | **v0.1** | "SSG" | v0.1 자체 디자인 | 원본 quirk: 항상 site.name | 자동 단일 갭+섹션 wrap | 전역 noindex | 없음 | Python stdlib 자체 파서 | slug, title, date, seo_* | — | slug 정규식, 날짜 형식, slug 중복 | 도메인 하드코딩 | — | — | 단일 build.py | Python 3 |
+
+### v0.4.5 (2026-05-14) — 페이지네이션 + 다국어 + 서브카테고리 인덱스 + 카테고리 meta.yaml
+
+다섯 갈래 변경이 한 버전에 묶여 있습니다. 모두 인덱스 페이지의 형식이나 글의 메타데이터 표현을 바꾸는 작업으로, 공통 동기는 *콘텐츠가 늘었을 때 사이트가 자연스럽게 확장되도록* 하는 것입니다.
+
+| 개선 | 내용 |
+|---|---|
+| 페이지네이션 | 메인페이지 Recent / 카테고리 인덱스 (대분류·소분류) / 상위 카테고리에 임베드된 서브카테고리 section 마다 독립적인 페이지 컨트롤. JS DOM hide/show — 모든 항목은 서버에서 렌더되므로 SEO/접근성 영향 없음. UI 는 nav-search 와 톤을 맞춘 회색 좌/우 화살표 + 페이지 번호 ([assets/pagination.js](assets/pagination.js), [assets/common_template.css](assets/common_template.css) 의 `.pagination-nav`). |
+| 다국어 지원 | 템플릿의 `<html lang='ko'>` 하드코딩 제거. site.yaml 의 `lang:` 이 사이트 전역 디폴트 (기본 ko), 글 meta.yaml 의 `lang:` 으로 글마다, 카테고리 meta.yaml 의 `lang:` 으로 카테고리 인덱스마다 오버라이드. |
+| 서브카테고리 인덱스 페이지 | v0.4.4 까지는 원본 lama.pe.kr quirk 를 보존해 톱레벨 카테고리만 자기 인덱스 페이지를 가졌습니다. v0.4.5 부터 서브카테고리도 자기 인덱스 페이지 (`/{top-slug}/{sub-slug}/`) 를 갖습니다. 톱레벨 페이지는 그대로 유지 (서브카테고리들이 section 으로 임베드되는 점도 그대로). sitemap.xml 도 서브카테고리 URL 을 포함. |
+| 카테고리 meta.yaml | 각 카테고리 폴더 (대분류·소분류) 마다 `meta.yaml` 을 둘 수 있습니다 — 글의 meta.yaml 과 형식이 다릅니다 (slug/title/date 없음). 빌더는 폴더에 content.md / content.html 이 있으면 글, 없으면 카테고리로 구분. 지원 필드: `per_page` (이 카테고리의 자기 인덱스 페이지의 페이지당 글 수), `preview_per_page` (이 카테고리가 상위 카테고리의 인덱스 페이지에 section 으로 임베드될 때의 페이지당 글 수), `layout` (`list` 기본; gallery 등 미래 확장 예정), `styles` (이 카테고리 인덱스 페이지에만 적용할 CSS), `lang`. |
+| 비ASCII 폴더명 워닝 메시지 보강 | v0.4.0 부터 `Articles/` 의 한국어 폴더명은 자동으로 hex 코드포인트 slug 로 변환되었지만, 빌드 로그의 메시지가 다소 모호했습니다. v0.4.5 의 메시지는 *어떤 폴더가 어떤 slug 로 변환되었는지* 를 명시하고 ASCII rename 권장을 한 번 더 강조. `[WARN] URL slug 에 비ASCII 문자 포함: '블로그' → 'be94-b85c-adf8'` 와 같이 출력됩니다. |
+
+**예시: 카테고리 meta.yaml (소분류 Blog/Tutorials)**
+
+```yaml
+# Tutorials 자기 페이지 (/blog/tutorials/) — 페이지당 글 수
+per_page: 20
+
+# Blog 톱레벨 (/blog/) 의 Tutorials section — 페이지당 글 수
+preview_per_page: 5
+
+# 'list' (기본) / 'gallery' / 향후 확장 예정
+layout: list
+
+# 이 카테고리 인덱스 페이지에만 적용할 추가 CSS
+# styles:
+#   .listup_module_title a:
+#     font-weight: 600
+```
+
+`per_page > preview_per_page` 가 자연스러운 사용법입니다 — 소분류의 자기 페이지는 그 소분류 글을 더 많이 보여주고, 상위에 임베드된 section 은 미리보기 수준으로 적게 보여주는 정책.
+
+**호환성 노트:**
+
+- v0.4.5 의 dist/ 와 v0.4.4 의 dist/ 는 바이트 단위로 다릅니다 (회귀 아님, 의도된 변경). 차이는 다음과 같습니다:
+  - 모든 페이지의 `<html lang>` 이 동적값 (site.yaml 의 `lang:` 디폴트).
+  - 홈/카테고리 페이지에 `<section class="paginated" data-pagination-group=...>` 와 `<nav class="pagination-nav">` 마크업, `<script src="/assets/pagination.js">` 추가.
+  - 카테고리 페이지 head 에 `{{CATEGORY_STYLES}}` 자리 (현재는 비어 있는 경우 빈 줄).
+  - `dist/{top}/{sub}/index.html` 신규 (서브카테고리가 있는 경우).
+  - `dist/assets/pagination.js` 신규.
+  - sitemap.xml 에 서브카테고리 URL 추가.
+- **기존 글의 meta.yaml** — 변경 없이 그대로 빌드됩니다. 글에 `lang:` 을 추가하지 않으면 site.lang (기본 ko) 가 적용됩니다.
+- **기존 카테고리 폴더** — meta.yaml 이 없어도 정상 동작합니다 (모든 필드가 site.yaml 의 디폴트를 따름). 필요한 카테고리에만 meta.yaml 을 추가하면 됩니다.
+- **글 폴더와 카테고리 폴더 구분** — 빌더는 폴더 안에 `content.md` 또는 `content.html` 이 있으면 글 폴더, 없으면 카테고리 폴더로 구분합니다. 글 폴더에는 meta.yaml 이 반드시 있고 (slug/title/date 필수), 카테고리 폴더의 meta.yaml 은 선택사항이며 slug/title/date 가 없어야 합니다.
+
+#### v0.4.4 → v0.4.5 마이그레이션 시 주의
+
+- **카테고리 폴더에 `meta.yaml` 신설 시** — 글 폴더의 meta.yaml 과 헷갈리지 않도록 `slug:` / `title:` / `date:` 키는 절대 넣지 마세요. 빌더는 이 셋 중 하나라도 보이면 카테고리 meta.yaml 로 인정하지 않고 무시합니다 (안전 가드).
+- **`per_page` 와 `preview_per_page` 의미** — `per_page` 는 *그 카테고리의 자기 인덱스 페이지* 에 적용되고, `preview_per_page` 는 *그 카테고리가 상위 카테고리의 페이지에 section 으로 임베드될 때* 적용됩니다. 톱레벨 카테고리는 일반적으로 상위에 임베드되지 않으므로 `preview_per_page` 는 거의 사용되지 않습니다.
+- **다국어 SEO** — 검색엔진은 `<html lang>` 을 신뢰합니다. 영어 글에 `lang: en` 을 명시하면 그 페이지가 영어 SERP 에 더 적합하게 분류됩니다. 한국어/영어 혼재 사이트라면 글마다 `lang:` 을 명시하는 것을 권장합니다.
+- **pagination.js 비활성/실패 시** — JS 가 로드되지 않으면 모든 항목이 한 페이지에 펼쳐진 채로 표시됩니다 (graceful degradation). 페이지 컨트롤은 렌더되지만 클릭해도 반응 없음. 사용성은 떨어지지만 콘텐츠는 모두 접근 가능.
 
 ### v0.4.4 (2026-05-14) — sitemap.xml 자동 생성
 

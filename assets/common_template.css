@@ -398,6 +398,67 @@ mark {
     padding: 0 0.1em;
 }
 
+/* ════════════════════════════════════════════════════════════════
+   Pagination  (v0.4.5)
+   - 미니멀, 모던. nav-search 입력과 톤을 맞춤 (border 없음, 회색 텍스트,
+     hover 시 색만 진해짐). 페이지 컨트롤이 콘텐츠를 시각적으로 압도하지
+     않도록 의도.
+   ════════════════════════════════════════════════════════════════ */
+
+.pagination-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.8em;
+    padding: 0.3em 1em 0.6em;
+    margin: 0;
+    font-family: Arial, sans-serif;
+    font-size: 0.85em;
+    user-select: none;
+}
+.pagination-nav .pagi-btn {
+    background: none;
+    border: none;
+    color: #AFAFAF;
+    cursor: pointer;
+    padding: 0.1em 0.4em;
+    font-family: inherit;
+    font-size: 1.1em;
+    line-height: 1;
+    transition: color 0.2s ease;
+}
+.pagination-nav .pagi-btn:hover:not(:disabled) {
+    color: #333;
+}
+.pagination-nav .pagi-btn:focus {
+    outline: none;
+    color: #333;
+}
+.pagination-nav .pagi-btn:disabled {
+    color: #dadada;
+    cursor: default;
+}
+.pagination-nav .pagi-info {
+    color: #AFAFAF;
+    min-width: 2.2em;
+    text-align: center;
+}
+
+/* "더 보기" — section 헤더 우측의 가는 화살표 링크 */
+.gap .more-link {
+    color: #AFAFAF;
+    text-decoration: none;
+    font-size: 0.85em;
+    margin-left: 0.3em;
+    transition: color 0.2s ease;
+}
+.gap .more-link:hover {
+    color: #0172d5;
+}
+* a:link.more-link {
+    color: #AFAFAF;
+}
+
 /* nav-search 반응형 — 모든 폭에서 노출.
    좁은 화면에서는 시작 폭/확장 폭만 줄여 nav 다른 요소를 덮지 않게 한다. */
 @media (min-width: 993px) and (max-width: 1430px) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.4.4 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.4.5 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -7,6 +7,21 @@
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
+
+v0.4.5 변경 사항 (vs v0.4.4):
+  - 페이지네이션: 메인 / 카테고리 인덱스 (대분류·소분류) / 상위 인덱스의
+    서브카테고리 section 마다 독립적인 페이지 컨트롤. JS DOM hide/show
+    (모든 항목 SSR → SEO 영향 없음).
+  - 다국어: 템플릿의 <html lang> 가 더 이상 'ko' 하드코딩이 아님. site.lang
+    디폴트, 글/카테고리 meta.yaml 의 `lang:` 으로 페이지별 오버라이드.
+  - 서브카테고리 인덱스 페이지 신설 (`/{top}/{sub}/`). 톱레벨 페이지는 그대로
+    유지 — 서브카테고리들이 section 으로 임베드되는 점도 그대로.
+  - 카테고리 meta.yaml 신설 (CategoryMeta): per_page / preview_per_page /
+    layout / styles / lang. 한 카테고리의 자기 페이지와 상위 임베드 section
+    의 페이지당 글 수를 독립적으로 설정.
+  - 비ASCII 폴더명 워닝 메시지 보강 (어떤 폴더가 어떤 hex slug 로 변환되는지
+    빌드 로그에서 한눈에 확인).
+  - sitemap.xml 에 서브카테고리 URL 포함.
 
 v0.4.4 변경 사항 (vs v0.4.3):
   - sitemap.xml 자동 생성 (scripts/sitemap.py + builder pipeline step [12]).

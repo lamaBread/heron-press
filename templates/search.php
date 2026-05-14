@@ -158,7 +158,7 @@ if ($q === '') {
 }
 ?>
 <!DOCTYPE html>
-<html lang='ko'>
+<html lang='{{LANG}}'>
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>

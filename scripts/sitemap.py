@@ -1,11 +1,14 @@
-"""sitemap.xml 생성기 (v0.4.4 신설).
+"""sitemap.xml 생성기 (v0.4.4 신설; v0.4.5 에서 서브카테고리 URL 포함).
 
 sitemaps.org 0.9 스키마. 클라이언트 측 처리 없는 정적 XML 파일.
 
 포함되는 URL:
   - 홈 (`/`)
-  - 톱레벨 카테고리 인덱스 (`/{cat-slug}/`) — 서브카테고리는 별도 인덱스
-    페이지가 없으므로 (원본 quirk, README § 5) 제외.
+  - 톱레벨 카테고리 인덱스 (`/{cat-slug}/`)
+  - 서브카테고리 인덱스 (`/{top-slug}/{sub-slug}/`) — v0.4.5 부터 포함.
+    v0.4.4 까지는 서브카테고리에 인덱스 페이지가 없었기 때문에 sitemap 에서도
+    제외했지만, v0.4.5 에서 서브카테고리 인덱스 페이지를 신설하면서 sitemap
+    에도 추가한다.
   - 글 (`/{slug}/`) — meta.yaml 의 `noindex: true` 가 아닌 모든 글.
 
 제외되는 페이지:
@@ -16,7 +19,7 @@ sitemaps.org 0.9 스키마. 클라이언트 측 처리 없는 정적 XML 파일.
 
 lastmod 결정 규칙:
   - 글: `updated` 가 있으면 그 값, 없으면 `date`.
-  - 카테고리: 서브트리의 (non-noindex) 글 lastmod 중 최댓값.
+  - 카테고리 (톱레벨 또는 서브): 그 서브트리의 (non-noindex) 글 lastmod 중 최댓값.
   - 홈: 홈 페이지에 실제로 노출되는 글 (즉 home_excludes_categories 가 아닌
         non-noindex 글) 의 lastmod 중 최댓값.
 
@@ -60,16 +63,18 @@ def build_sitemap(articles, categories, site) -> str:
     )
     entries.append((f'{base_url}/', home_lastmod))
 
-    top_cats = sorted(
-        (c for c in categories.values() if len(c.path) == 1),
-        key=lambda c: c.slug,
+    # v0.4.5: 톱레벨 + 서브카테고리 모두 포함. 정렬은 slug_path 사전식.
+    all_cats = sorted(
+        categories.values(),
+        key=lambda c: (len(c.slug_path), c.slug_path),
     )
-    for cat in top_cats:
+    for cat in all_cats:
         subtree = _collect_indexable(cat)
         if not subtree:
             continue
         lastmod = max(_article_lastmod(a) for a in subtree)
-        entries.append((f'{base_url}/{cat.slug}/', lastmod))
+        cat_url = base_url + '/' + '/'.join(cat.slug_path) + '/'
+        entries.append((cat_url, lastmod))
 
     for article in sorted(indexable, key=lambda a: a.meta.slug):
         entries.append((

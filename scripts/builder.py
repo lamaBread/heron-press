@@ -4,19 +4,34 @@
   [1] _load_config           — site.yaml + legacy-map.yaml + 토크나이저 패리티 검증
   [2] _scan_articles         — Articles/ 트리 순회, _ 접두 제외
   [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움 (seo: 블록 포함)
-  [4] _validate              — slug 검증, 카테고리 트리 구축 (한글 폴더 워닝)
+  [4] _validate              — slug 검증, 카테고리 트리 구축 (한글 폴더 워닝),
+                                카테고리 meta.yaml 파싱 (v0.4.5)
   [5] _render_articles       — 본문 렌더 + 섹션 마커 처리 + nav/SEO/styles
                                 → dist/{slug}/
   [6] _sync_assets           — 본문 외 자원 → dist/src/{slug}/
-  [7] _build_categories      — 톱레벨 카테고리 인덱스 페이지
-  [8] _build_home            — 루트 페이지
+  [7] _build_categories      — 톱레벨 + 서브카테고리 인덱스 페이지 (v0.4.5)
+  [8] _build_home            — 루트 페이지 (Recent + 페이지네이션, v0.4.5)
   [9] _copy_site_assets      — assets/ → dist/assets/
   [10] _build_404            — 404 페이지
   [11] _build_robots         — robots.txt (main + legacy)
-  [12] _build_sitemap        — dist/sitemap.xml (v0.4.4 신설)
+  [12] _build_sitemap        — dist/sitemap.xml (v0.4.4 신설, v0.4.5 에서
+                                서브카테고리 URL 도 포함)
   [13] _build_dispatcher     — dist-legacy/redirect.php (301 매핑)
   [14] _build_search         — search-index.json + search.php (+ tokenize lib)
   [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리
+
+v0.4.5 변경:
+  - 카테고리 폴더의 meta.yaml 파싱 (CategoryMeta). per_page /
+    preview_per_page / layout / styles / lang.
+  - 서브카테고리도 자기 인덱스 페이지를 가짐 (`/{top}/{sub}/`). 톱레벨
+    페이지는 그대로 유지 (서브카테고리들의 section 들이 임베드).
+  - 메인페이지 Recent / 카테고리 인덱스 (대분류·소분류) / 상위 카테고리에
+    임베드된 서브카테고리 section 마다 독립적인 페이지 컨트롤.
+    JS DOM hide/show 로 구현 — 모든 항목은 SSR.
+  - 다국어: 템플릿의 `<html lang>` 가 더 이상 'ko' 하드코딩이 아님.
+    site.lang 디폴트, 글/카테고리 meta.yaml 의 `lang:` 으로 오버라이드.
+  - 한국어 폴더명 워닝의 메시지 보강 (어떤 폴더가 어떤 hex slug 로
+    변환되었는지 빌드 로그에서 한눈에).
 
 v0.4.4 변경:
   - sitemap.xml 자동 생성 (scripts/sitemap.py). 글·카테고리·홈 URL 을 포함.
@@ -47,7 +62,9 @@ from datetime import date as Date
 from pathlib import Path
 
 from .yaml_parser import yaml_load
-from .models import SiteConfig, ArticleMeta, SeoMeta, Article, Category
+from .models import (
+    SiteConfig, ArticleMeta, SeoMeta, CategoryMeta, Article, Category,
+)
 from .slugs import category_slug_from_name, is_underscore_path, has_non_ascii
 from .markdown import (
     escape_html,
@@ -58,6 +75,50 @@ from .markdown import (
     has_live_php,
     resolve_section_markers,
 )
+
+
+# ════════════════════════════════════════════════════════════════
+# 페이지네이션 helper (v0.4.5)
+#
+# 모든 페이지네이션은 JS DOM hide/show. 서버는 한 페이지에 모든 항목을
+# 렌더하고 (SEO 친화), data-per-page 와 함께 pagination_nav HTML 을 같이
+# 출력한다. pagination.js 가 `.paginated` 섹션과 그 직후의 `.pagination-nav`
+# 를 짝지어 클라이언트에서 hide/show.
+#
+# 한 페이지에 *여러* 페이지네이션 컨트롤이 있을 수 있으므로
+# (예: 톱레벨 카테고리 인덱스의 서브카테고리 섹션들), 각 짝을 명확히
+# 묶기 위해 data-pagination-group="<key>" 속성을 사용한다.
+# ════════════════════════════════════════════════════════════════
+
+
+def _pagination_section_attrs(group_key: str, per_page: int) -> str:
+    """`.paginated` section 의 data 속성 모음 (group_key, per_page)."""
+    safe = escape_html(group_key)
+    return f'class="paginated" data-pagination-group="{safe}" data-per-page="{per_page}"'
+
+
+def _pagination_nav_html(group_key: str, total_items: int, per_page: int) -> str:
+    """페이지 컨트롤 HTML.
+
+    items 가 per_page 이하면 빈 문자열 (컨트롤 자체 미출력).
+    """
+    if per_page <= 0:
+        per_page = 1
+    pages = (total_items + per_page - 1) // per_page
+    if pages <= 1:
+        return ''
+    safe = escape_html(group_key)
+    return (
+        f'<nav class="pagination-nav" data-pagination-group="{safe}" '
+        f'data-total-pages="{pages}" aria-label="pagination">'
+        f'<button type="button" class="pagi-btn pagi-prev" '
+        f'aria-label="Previous page" disabled>‹</button>'
+        f'<span class="pagi-info"><span class="pagi-current">1</span>'
+        f' / <span class="pagi-total">{pages}</span></span>'
+        f'<button type="button" class="pagi-btn pagi-next" '
+        f'aria-label="Next page">›</button>'
+        f'</nav>'
+    )
 from .seo import build_meta_tags
 from .search import (
     html_to_plain,
@@ -174,6 +235,11 @@ class Builder:
             description_truncate=int(get('description_truncate') or 150),
             robots_txt_main=get('robots_txt_main') or 'User-agent: *\nAllow: /\n',
             robots_txt_legacy=get('robots_txt_legacy') or 'User-agent: *\nAllow: /\n',
+            # v0.4.5: i18n + pagination 디폴트
+            lang=str(get('lang') or 'ko'),
+            home_per_page=int(get('home_per_page') or 5),
+            category_per_page=int(get('category_per_page') or 20),
+            category_preview_per_page=int(get('category_preview_per_page') or 5),
         )
 
         legacy_yaml = self.base / 'legacy-map.yaml'
@@ -202,12 +268,18 @@ class Builder:
             if 'meta.yaml' not in files:
                 continue
 
+            # v0.4.5: meta.yaml 이 있는 폴더가 '글' 인지 '카테고리' 인지 구분.
+            # 글 폴더: content.md / content.html 중 하나가 존재.
+            # 카테고리 폴더: 둘 다 없음 (이 경우 meta.yaml 은 카테고리 설정).
+            # 카테고리 폴더의 meta.yaml 은 _build_category_tree 에서 처리.
+            content_md = root_path / 'content.md'
+            content_html = root_path / 'content.html'
+            if not content_md.exists() and not content_html.exists():
+                continue
+
             rel = root_path.relative_to(self.articles_dir)
             category_path = list(rel.parts[:-1])
             article_folder = rel.parts[-1]
-
-            content_md = root_path / 'content.md'
-            content_html = root_path / 'content.html'
 
             if content_md.exists() and content_html.exists():
                 die(f'content.md and content.html both exist\n'
@@ -248,6 +320,9 @@ class Builder:
             updated = str(raw.get('updated')) if raw.get('updated') else None
             noindex_raw = raw.get('noindex')
             noindex = bool(noindex_raw) if noindex_raw is not None else False
+            # v0.4.5: 글 단위 lang override. 비우면 site.lang.
+            lang_val = raw.get('lang')
+            lang = str(lang_val) if lang_val else None
 
             seo_raw = raw.get('seo') or {}
             if not isinstance(seo_raw, dict):
@@ -278,6 +353,7 @@ class Builder:
                 date=date_str,
                 updated=updated,
                 noindex=noindex,
+                lang=lang,
                 seo=seo,
                 styles=normalize_styles(raw.get('styles')),
             )
@@ -356,10 +432,13 @@ class Builder:
                         pass
 
     def _build_category_tree(self):
-        """v0.4.0: _meta.yaml 오버라이드 코드 경로 제거.
+        """v0.4.5: 카테고리 폴더의 meta.yaml 도 파싱한다.
 
+        v0.4.0: _meta.yaml 오버라이드 코드 경로 제거.
         한국어 등 비ASCII 폴더명은 slugs.category_slug_from_name 이
         결정론적으로 ASCII 코드포인트 hex 로 변환한다. 경고는 한 번만 (폴더당).
+        v0.4.5 에서 워닝 메시지를 보강해, 어떤 폴더명이 어떤 hex slug 로
+        변환되었는지 빌드 로그에서 한눈에 보이도록 한다.
         """
         cat_paths = set()
         for article in self.articles:
@@ -370,17 +449,18 @@ class Builder:
         warned_folders = set()
 
         def to_slug(folder_name: str, full_path_for_warn) -> str:
-            if has_non_ascii(folder_name) and folder_name not in warned_folders:
-                warn(
-                    f"non-ASCII folder name '{folder_name}' "
-                    f"(Articles/{'/'.join(full_path_for_warn)}) — "
-                    f"가급적 ASCII 로 작성하세요. 자동으로 hex 코드포인트 slug 로 변환됩니다."
-                )
-                warned_folders.add(folder_name)
             s = category_slug_from_name(folder_name)
             if not s:
                 die(f'카테고리 slug 빈 문자열: {folder_name}\n'
                     f"       (Articles/{'/'.join(full_path_for_warn)})")
+            if has_non_ascii(folder_name) and folder_name not in warned_folders:
+                warn(
+                    f"URL slug 에 비ASCII 문자 포함: '{folder_name}' → '{s}'\n"
+                    f"       (Articles/{'/'.join(full_path_for_warn)})\n"
+                    f"       빌드는 정상 진행되었으나, URL 가독성/공유성을 위해 "
+                    f"폴더명을 ASCII (영문/숫자/하이픈) 로 바꾸는 것을 권장합니다."
+                )
+                warned_folders.add(folder_name)
             return s
 
         for path_tuple in sorted(cat_paths, key=lambda p: (len(p), p)):
@@ -397,6 +477,7 @@ class Builder:
                 slug=slug,
                 path=list(path_tuple),
                 slug_path=slug_path,
+                meta=self._parse_category_meta(path_tuple),
             )
             self.categories[path_tuple] = cat
 
@@ -415,6 +496,62 @@ class Builder:
                 if article not in cat.articles:
                     cat.articles.append(article)
 
+    def _parse_category_meta(self, path_tuple) -> CategoryMeta:
+        """`Articles/<카테고리경로>/meta.yaml` 파일 (있으면) 파싱.
+
+        없으면 모든 필드가 None 인 기본 CategoryMeta.
+        per_page / preview_per_page 가 None 이면 사이트 디폴트가 적용됨.
+        """
+        cat_dir = self.articles_dir.joinpath(*path_tuple)
+        meta_file = cat_dir / 'meta.yaml'
+        if not meta_file.exists():
+            return CategoryMeta()
+
+        # 글 폴더의 meta.yaml 과 헷갈리지 않도록 — slug/title/date 가 있으면
+        # 글 meta.yaml 로 간주하므로 카테고리 meta.yaml 로 파싱하지 않는다.
+        # (실제 글 폴더는 그 자체로 article entry 가 되며 _scan_articles 가
+        # 처리한다. 여기서는 글 폴더가 아닌 카테고리 폴더만 다룬다.)
+        try:
+            raw = yaml_load(meta_file.read_text(encoding='utf-8'))
+        except Exception as e:
+            die(f'카테고리 meta.yaml parse error: {e}\n'
+                f"       at {meta_file}")
+
+        if raw is None:
+            raw = {}
+        if 'slug' in raw or 'title' in raw or 'date' in raw:
+            # 글 폴더의 meta.yaml 이 우연히 카테고리처럼 잡힌 경우 — 카테고리
+            # meta.yaml 로 취급하지 않는다 (실제로는 _scan_articles 가 글로
+            # 분류했을 것이므로, path_tuple 이 카테고리이면 이 경우는 발생하지
+            # 않아야 정상).
+            return CategoryMeta()
+
+        per_page = raw.get('per_page')
+        preview = raw.get('preview_per_page')
+        layout = raw.get('layout') or 'list'
+        lang_val = raw.get('lang')
+        styles_raw = raw.get('styles')
+
+        return CategoryMeta(
+            per_page=int(per_page) if per_page is not None else None,
+            preview_per_page=int(preview) if preview is not None else None,
+            layout=str(layout),
+            lang=str(lang_val) if lang_val else None,
+            styles=normalize_styles(styles_raw),
+        )
+
+    def _category_per_page(self, cat: Category) -> int:
+        """카테고리 자기 인덱스 페이지의 페이지당 글 수."""
+        if cat.meta.per_page is not None:
+            return cat.meta.per_page
+        return self.site.category_per_page
+
+    def _category_preview_per_page(self, cat: Category) -> int:
+        """카테고리가 상위 인덱스 페이지의 section 으로 임베드될 때의 페이지당 글 수."""
+        if cat.meta.preview_per_page is not None:
+            return cat.meta.preview_per_page
+        return self.site.category_preview_per_page
+
     def _collect_articles(self, cat: Category) -> list:
         result = list(cat.articles)
         for child in cat.children:
@@ -427,7 +564,12 @@ class Builder:
         return str(datetime.date.today().year)
 
     def _top_level_entries(self) -> list:
-        """Articles/ 직속 항목을 [(folder_name, slug, is_article), ...] 로 반환."""
+        """Articles/ 직속 항목을 [(folder_name, slug, is_article), ...] 로 반환.
+
+        v0.4.5: 카테고리 폴더에도 meta.yaml 이 있을 수 있으므로, meta.yaml
+        존재만으로 '글' 인지 판단하지 않는다. _scan_articles 에서 이미
+        분류한 self.articles 리스트와 source_dir 매칭으로 결정.
+        """
         if not self.articles_dir.is_dir():
             return []
 
@@ -437,14 +579,12 @@ class Builder:
                 continue
             if child.name.startswith('_'):
                 continue
-            meta_file = child / 'meta.yaml'
-            if meta_file.exists():
-                article = next(
-                    (a for a in self.articles if a.source_dir == child),
-                    None,
-                )
-                slug = article.meta.slug if article else child.name.lower()
-                entries.append((child.name, slug, True))
+            article = next(
+                (a for a in self.articles if a.source_dir == child),
+                None,
+            )
+            if article is not None:
+                entries.append((child.name, article.meta.slug, True))
             else:
                 key = (child.name,)
                 cat = self.categories.get(key)
@@ -553,7 +693,11 @@ class Builder:
             # build_meta_tags 가 만든 `{prefix}{title}{suffix}` 문자열.
             page_title = full_title or self.site.name
 
+            # v0.4.5: 글 단위 lang override (없으면 site.lang).
+            page_lang = m.lang or self.site.lang
+
             vars_ = {
+                'LANG': escape_html(page_lang),
                 'META_TAGS': meta_tags,
                 'ARTICLE_STYLES': article_styles,
                 'PAGE_TITLE': escape_html(page_title),
@@ -631,65 +775,173 @@ class Builder:
                 f"{article.meta.date}</span>"
                 f"</div>")
 
-    def _build_categories(self):
+    def _render_section(self, label: str, articles: list, group_key: str,
+                        per_page: int, more_url: str = None) -> str:
+        """페이지네이션이 부착된 한 개의 section HTML 을 반환.
+
+        articles 는 이미 정렬되어 있어야 한다.
+        group_key 는 같은 페이지 내에서 unique 해야 한다 (페이지 컨트롤 짝짓기).
+        more_url 이 주어지면 section 우측 상단에 → 링크가 표시된다.
+        """
+        if not articles:
+            inner = "<p>No articles found</p>"
+            attrs = "class='paginated-empty'"
+            nav_html = ''
+        else:
+            attrs = _pagination_section_attrs(group_key, per_page)
+            inner = '\n'.join(self._listup_module_html(a) for a in articles)
+            nav_html = _pagination_nav_html(group_key, len(articles), per_page)
+
+        if more_url:
+            label_html = (
+                f"{escape_html(label)} "
+                f"<a class='more-link' href='{more_url}'>→</a>"
+            )
+        else:
+            label_html = escape_html(label)
+
+        return (
+            f"<div class='gap'><p>{label_html}</p></div>\n"
+            f"<section {attrs}>\n{inner}\n</section>\n"
+            f"{nav_html}"
+        )
+
+    def _category_styles_html(self, cat: Category) -> str:
+        """카테고리 meta.yaml 의 styles → <style> 블록.
+
+        section TAG 선택자로 글 styles 와 동일한 우선순위 정책 적용.
+        """
+        return render_article_styles(cat.meta.styles)
+
+    def _build_category_page(self, cat: Category):
+        """톱레벨/서브카테고리 공용 인덱스 페이지 빌더 (v0.4.5).
+
+        - 톱레벨 카테고리: 자식 서브카테고리마다 section 한 개씩.
+                          자식이 없으면 (이 카테고리의 직속 articles 만 있는 경우)
+                          자기 자신을 한 section 으로.
+        - 서브카테고리: 자기 자신을 한 section 으로. 만약 더 깊은 자식이
+                       있다면 (3+ depth) 자식별 section 도 추가로.
+        - 페이지네이션: section 마다 독립 (data-pagination-group 으로 짝지음).
+        - styles: 이 카테고리의 meta.yaml 의 styles 가 head 의 <style> 로.
+        - lang: 카테고리 meta.yaml 의 lang 우선, 없으면 site.lang.
+        """
         tpl = _load_template(self.templates_dir, 'category.html')
         nav_links = self._nav_links_html()
 
-        for path_tuple, cat in self.categories.items():
-            if len(cat.path) != 1:
-                continue
+        is_top = len(cat.path) == 1
 
-            sections = []
-            sorted_children = sorted(cat.children, key=lambda c: c.folder_name)
-            for child in sorted_children:
-                articles = self._collect_articles(child)
-                articles.sort(key=lambda a: a.meta.date, reverse=True)
+        # URL prefix — 톱레벨이면 "/{slug}/", 서브이면 "/{top}/{sub}/"
+        url_prefix = '/' + '/'.join(cat.slug_path) + '/'
 
-                if not articles:
-                    inner = "<p>No articles found in this subcategory</p>"
-                else:
-                    inner = '\n'.join(
-                        self._listup_module_html(a) for a in articles
-                    )
+        sections = []
+        sorted_children = sorted(cat.children, key=lambda c: c.folder_name)
 
-                sections.append(
-                    f"<div class='gap'><p>{escape_html(child.folder_name)}</p></div>\n"
-                    f"<section>\n{inner}\n</section>"
+        # 자식 서브카테고리가 있는 경우 — 자식별로 section 생성.
+        # 톱레벨이면 "더 보기" 링크가 자식의 자기 페이지 (`/top/sub/`) 로.
+        for child in sorted_children:
+            articles = self._collect_articles(child)
+            articles.sort(key=lambda a: a.meta.date, reverse=True)
+            child_url = '/' + '/'.join(child.slug_path) + '/'
+            group_key = f"cat-{'-'.join(child.slug_path)}"
+            sections.append(
+                self._render_section(
+                    label=child.folder_name,
+                    articles=articles,
+                    group_key=group_key,
+                    per_page=self._category_preview_per_page(child),
+                    more_url=child_url,
                 )
-
-            if cat.articles and not sorted_children:
-                articles = sorted(cat.articles, key=lambda a: a.meta.date, reverse=True)
-                inner = '\n'.join(self._listup_module_html(a) for a in articles)
-                sections.append(
-                    f"<div class='gap'><p>{escape_html(cat.folder_name)}</p></div>\n"
-                    f"<section>\n{inner}\n</section>"
-                )
-
-            subcategory_sections = '\n'.join(sections) if sections else (
-                f"<div class='gap'><p>{escape_html(cat.folder_name)}</p></div>\n"
-                f"<section><p>No articles found</p></section>"
             )
 
-            crumb_parts = [(cat.folder_name, f"/{cat.slug}/")]
-            nav_tracker = self._nav_tracker_for_path(crumb_parts)
+        # 이 카테고리 직속 글들이 있는 경우 또는 자식이 없는 경우 — 자신을 section 으로.
+        # (자식이 있어도 직속 글이 있을 수 있다 — 그러면 둘 다 표시.)
+        own_articles = sorted(cat.articles, key=lambda a: a.meta.date, reverse=True)
+        if own_articles or not sorted_children:
+            if not is_top and not sorted_children:
+                # 서브카테고리의 자기 페이지에서, 자식이 없는 경우 — 큰 per_page 사용.
+                section_per_page = self._category_per_page(cat)
+            elif is_top and not sorted_children:
+                # 톱레벨인데 자식이 없는 경우 — 자기 자신이 글 목록의 본진.
+                # (예: Blog 직속 글들만 있는 현 상태)
+                section_per_page = self._category_per_page(cat)
+            else:
+                # 자식이 있는데 직속 글도 있는 경우 — 톱레벨이면 preview,
+                # 서브이면 per_page.
+                section_per_page = (
+                    self._category_preview_per_page(cat) if is_top
+                    else self._category_per_page(cat)
+                )
 
-            page_title = self.site.name
+            group_key = f"cat-{'-'.join(cat.slug_path)}-own"
+            sections.append(
+                self._render_section(
+                    label=cat.folder_name,
+                    articles=own_articles,
+                    group_key=group_key,
+                    per_page=section_per_page,
+                )
+            )
 
-            vars_ = {
-                'PAGE_TITLE': escape_html(page_title),
-                'MAIN_TITLE': escape_html(self.site.main_title),
-                'NAV_TRACKER': nav_tracker,
-                'NAV_LINKS': nav_links,
-                'NAV_SEARCH_CAT': escape_html(cat.slug),
-                'SUBCATEGORY_SECTIONS': subcategory_sections,
-                'COPYRIGHT_YEAR': self._copyright_year(),
-                'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
-            }
-            page_html = _render_template(tpl, vars_)
+        subcategory_sections = '\n'.join(sections) if sections else (
+            f"<div class='gap'><p>{escape_html(cat.folder_name)}</p></div>\n"
+            f"<section><p>No articles found</p></section>"
+        )
 
-            out_dir = self.dist / cat.slug
-            out_dir.mkdir(parents=True, exist_ok=True)
-            (out_dir / 'index.html').write_text(page_html, encoding='utf-8')
+        # breadcrumb: 톱레벨이면 [(folder, url)], 서브면 [(top, top_url), (sub, None)]
+        if is_top:
+            crumb_parts = [(cat.folder_name, url_prefix)]
+        else:
+            top_cat = self.categories.get((cat.path[0],))
+            crumb_parts = []
+            if top_cat is not None:
+                crumb_parts.append((top_cat.folder_name, f"/{top_cat.slug}/"))
+            # 중간 폴더들 (3+ depth) → 가장 가까운 톱레벨로 링크 (원본 quirk 와 일치).
+            for mid_folder in cat.path[1:-1]:
+                crumb_parts.append(
+                    (mid_folder,
+                     f"/{top_cat.slug}/" if top_cat else None)
+                )
+            crumb_parts.append((cat.folder_name, None))
+        nav_tracker = self._nav_tracker_for_path(crumb_parts)
+
+        page_title = self.site.name
+        page_lang = cat.meta.lang or self.site.lang
+
+        # 검색 스코프: 톱레벨이면 자기 slug, 서브이면 톱레벨 slug 로 한정.
+        # (search-index 의 category_slug 가 톱레벨 slug 만 갖기 때문.)
+        search_cat = cat.slug_path[0]
+
+        vars_ = {
+            'LANG': escape_html(page_lang),
+            'PAGE_TITLE': escape_html(page_title),
+            'MAIN_TITLE': escape_html(self.site.main_title),
+            'NAV_TRACKER': nav_tracker,
+            'NAV_LINKS': nav_links,
+            'NAV_SEARCH_CAT': escape_html(search_cat),
+            'SUBCATEGORY_SECTIONS': subcategory_sections,
+            'CATEGORY_STYLES': self._category_styles_html(cat),
+            'COPYRIGHT_YEAR': self._copyright_year(),
+            'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
+        }
+        page_html = _render_template(tpl, vars_)
+
+        out_dir = self.dist.joinpath(*cat.slug_path)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / 'index.html').write_text(page_html, encoding='utf-8')
+
+    def _build_categories(self):
+        """v0.4.5: 톱레벨 + 모든 서브카테고리에 대해 인덱스 페이지 생성.
+
+        v0.4.4 까지는 톱레벨만 인덱스가 있었음 (원본 lama.pe.kr quirk 보존).
+        v0.4.5 에서 이 quirk 를 해제 — 서브카테고리도 자기 인덱스 페이지를 가짐.
+        """
+        # 빈 카테고리 (글이 한 편도 없는 카테고리 트리) 는 인덱스 페이지를
+        # 만들지 않는다. _validate 가 이미 워닝을 띄웠음.
+        for path_tuple, cat in self.categories.items():
+            subtree = self._collect_articles(cat)
+            if not subtree:
+                continue
+            self._build_category_page(cat)
 
     # ── [8] Home page ─────────────────────────────────────────
 
@@ -716,12 +968,19 @@ class Builder:
         )
 
         page_title = self.site.name
+        per_page = self.site.home_per_page
+        pagination_nav = _pagination_nav_html(
+            'home-recent', len(home_articles), per_page,
+        )
 
         vars_ = {
+            'LANG': escape_html(self.site.lang),
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
+            'HOME_PER_PAGE': str(per_page),
             'ARTICLE_LIST': article_items,
+            'PAGINATION_NAV': pagination_nav,
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
         }
@@ -747,6 +1006,7 @@ class Builder:
         tpl = _load_template(self.templates_dir, '404.html')
         page_title = 'Error 404'
         vars_ = {
+            'LANG': escape_html(self.site.lang),
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
@@ -848,6 +1108,7 @@ class Builder:
             return
         tpl = tpl_path.read_text(encoding='utf-8')
         vars_ = {
+            'LANG': escape_html(self.site.lang),
             'PAGE_TITLE': escape_html(self.site.name),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
@@ -876,6 +1137,33 @@ class Builder:
                                      if sp)
                         if not is_cat:
                             shutil.rmtree(d)
+
+        # v0.4.5: 서브카테고리 인덱스 페이지가 신설되면서, 서브카테고리 폴더의
+        # 잔재도 정리할 필요가 생김. 톱레벨 카테고리 dir 안쪽을 재귀적으로
+        # 확인해 현재 self.categories 에 없는 slug_path 의 서브카테고리 인덱스
+        # 폴더를 삭제한다.
+        for sp in list(current_cat_slug_paths):
+            if len(sp) < 1:
+                continue
+            top_dir = self.dist / sp[0]
+            if not top_dir.is_dir():
+                continue
+            # top_dir 의 직속 자식 폴더 중, 인덱스가 있고 sub_slug_path 에 없으면 삭제.
+            for sub in top_dir.iterdir():
+                if not sub.is_dir():
+                    continue
+                expected = (sp[0], sub.name)
+                if any(tuple(c.slug_path) == expected
+                       for c in self.categories.values()):
+                    continue
+                # 폴더 안에 index.html 하나만 남아 있는 경우에만 stale 로 간주.
+                # (다른 콘텐츠가 있으면 함부로 삭제하지 않음.)
+                try:
+                    items = list(sub.iterdir())
+                except OSError:
+                    continue
+                if len(items) == 1 and items[0].name == 'index.html':
+                    shutil.rmtree(sub)
 
         src_dir = self.dist / 'src'
         if src_dir.is_dir():
