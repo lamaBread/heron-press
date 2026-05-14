@@ -1950,14 +1950,24 @@ python build.py --clean
 
 9. **단일 진실원의 토크나이저 (v0.4.0)** — Python/PHP 양쪽 토크나이저의 동등성을 빌드마다 fixture 패리티 테스트로 자동 검증.
 
-### 현재 버전(v0.5.4) 의 한계
+10. **본문 ↔ 메타데이터 분리 원칙 (v0.5.5)** — SEO description, OpenGraph 카피, 피드 summary, og:image 같이 외부에 노출되는 메타데이터는 본문이 아니라 author 가 `meta.yaml` 의 `seo:` 블록에 직접 작성한 값에서만 가져온다. 본문은 독자용 narrative, 메타데이터는 SERP / 소셜 카드 / aggregator 용 카피이며, 둘은 다른 글이어야 한다. SSG 는 어느 쪽으로도 추측하지 않는다.
 
-> 아래 표는 v0.5.4 시점에 여전히 유효한 한계만 모았습니다. v0.5.4 에서 해소된 세 항목 (글 외 페이지의 `<title>` 폴백 체인 부재 / description_truncate 단어 경계 무시 / 톱레벨 nav 의 About 정렬 고정) 은 표에서 제거되었습니다. 한계가 아니라 정책·전제이거나 본문에 녹은 항목은 v0.5.3 정리 참조 (§ 18 의 v0.5.3 항목).
+    **필드의 세 상태:**
+    - **키 부재 또는 값 부재** (`description:` 또는 키 없음) — opt-out. 해당 메타 태그를 출력하지 않는다.
+    - **빈 문자열** (`description: ""`) — author 의 실수로 간주. 산출물에는 태그를 출력하지 않고, 빌드 종료 후 미완성 글 리포트에 기록한다.
+    - **값 있음** — 그대로 출력. `og_description` / `twitter_description` 같은 파생 필드가 부재하면 `description` 을 폴백으로 쓴다 (author 가 직접 쓴 값이므로 본문 추출이 아니다 — author-authored fallback).
+
+    **필수 필드: `seo.description`.** 빠지거나 빈 문자열이면 빌드 종료 후 미완성 글 리포트에 기록되지만 **빌드를 중단시키지는 않는다**. 빌드는 어떤 콘텐츠 결함에도 끝까지 완성되며, 종료 시 터미널에 "보완해야 할 글 목록" 을 몰아서 표시한다. 기존 빌드 과정의 모든 경고/실패 신호는 이 일원화 리포트 ([scripts/report.py](scripts/report.py)) 로 통합되었다 — 빌드 도중에 abort 하는 경로는 시스템 결함 (템플릿 누락, `Articles/` 없음, Pillow 미설치 등) 이외에는 두지 않는다.
+
+    **`og_image` 의 본문 추출 폴백을 두지 않는 이유:** SNS / 메신저 미리보기는 `og:image` 가 없을 때 본문 첫 이미지나 favicon 을 임의로 긁어가 카드를 조합한다. 이는 author 의 의도와 무관한 부작용이며, 같은 행동을 SSG 가 빌드 시점에 자동화하는 것은 동일하게 무례한 일이다. `meta.yaml` 에 `og_image` 가 없으면 `site.default_og_image` 를 무조건 사용한다 — author 가 명시적으로 선택한 사이트 기본값이라는 점에서 본문 추출과 본질이 다르다.
+
+### 현재 버전(v0.5.5) 의 한계
+
+> 아래 표는 v0.5.5 시점에 여전히 유효한 한계만 모았습니다. v0.5.5 에서 해소된 항목 (description 폴백이 본문 첫 `<p>` 잡는 문제 / 빌드 도중 abort) 은 표에서 제거되었습니다 — 본문 ↔ 메타데이터 분리 원칙 (§ 17 의 설계 원칙 10) 도입과 함께 *폴백 자체를 제거* 하는 방향으로 해소.
 
 | 한계 | 내용 |
 |---|---|
 | `tags` 의 구체적 활용처 없음 (v0.5.3) | meta.yaml 의 `tags` 필드는 v0.5.3 부터 파싱되지만 빌드 산출물에서 직접 사용되는 곳은 RSS/Atom 의 `<category>` 뿐. 태그별 색인 페이지, 검색 가중치, 관련 글 등은 미래 의제. |
-| description 폴백이 본문 전체에서 첫 `<p>` 검색 | `_FIRST_P_RE` 가 본문 첫 `<p>` 를 찾는데, 빌더가 본문을 `<div class='gap'><p>제목</p></div>` + `<section>…</section>` 로 감싸므로 결과적으로 갭 박스 안의 글 제목이 description 으로 빨릴 수 있습니다. `seo.description` 을 명시하면 덮어쓰이지만 폴백 시 SEO 신뢰도 손해 — 차기 의제. |
 | 홈·카테고리 페이지의 SEO 메타 태그 일부만 (v0.5.4) | v0.5.4 부터 `<title>` 폴백 체인은 글과 동일하게 작동하지만, 홈/카테고리 템플릿에는 `<meta name="description">` / `<meta property="og:*">` / `<meta name="twitter:*">` placeholder 가 없어 `seo:` 블록의 description / og_* / twitter_* 필드는 파싱만 되고 출력되지 않음. 글 페이지는 이미 전부 출력 ([scripts/seo.py](scripts/seo.py) 의 `build_meta_tags`). 차기 의제 — 같은 함수를 홈/카테고리에도 적용. |
 | styles 의 @-rule 미지원 | `@media`, `@keyframes`, `@font-face`, `@supports`, `@import` 등 모든 at-rule 은 inject 안 됨 — [scripts/markdown.py](scripts/markdown.py) 의 `render_article_styles` 가 평면 `selector { decls }` 규칙만 직렬화. content.html 의 인라인 `<style>` 로 회피. |
 | 이미지 최적화는 정적 단일 프레임만 (v0.5.1) | animated GIF 는 첫 프레임만 WebP 로 인코딩되어 애니메이션이 사라집니다. 애니메이션을 보존하려면 그 글의 첨부를 webp 로 직접 만들거나, `<img>` 의 src 를 외부 URL 로 두면 후처리에서 src 가 변경되지 않습니다. 한 글 / 한 이미지에 대해서만 최적화를 끄는 옵션은 아직 없음 (사이트 전역 토글만). |
@@ -1969,11 +1979,12 @@ python build.py --clean
 
 ## 18. 업데이트 로그
 
-열다섯 버전의 차이를 한눈에:
+열여섯 버전의 차이를 한눈에:
 
 | 버전 | 시스템 정체성 | 검색 랭킹 | 출력 UI/UX | 글 `<title>` | 마크다운 본문 구조 | 색인 정책 | sitemap.xml / 피드 | 마크다운 파서 | meta.yaml 필드 | 검색 토크나이저 | 빌드 검증 | 레거시 dispatcher | PHP 함수 시뮬레이션 | 카테고리 한국어 폴더 | 빌드 모듈 구조 | 외부 의존성 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **v0.5.4 (현재)** | (동일) | (동일) | (동일) | **`<title>` 폴백 체인이 홈·카테고리·404·search 에도 적용**. 글은 그대로 (이미 v0.4.3 부터 적용). nav 정렬은 더 이상 'About 최상단 하드코딩' 없음 — `nav_priority` 필드로 명시. | (동일) | (동일) | (동일) | (동일) | + **CategoryMeta 에 `title` / `seo` (SeoMeta) / `nav_priority` 추가** / + **ArticleMeta 에 `nav_priority` 추가** / + **SiteConfig 에 `error_404_title` / `search_title`** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) |
+| **v0.5.5 (현재)** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **피드 `<summary>` / `<description>` 이 author 가 쓴 `seo.description` 만 사용 — 본문 첫 단락 폴백 없음. description 부재 시 태그 자체 누락** | (동일) | + **`seo.description` 이 사실상 필수 필드 (없거나 빈 문자열이면 미완성 글 리포트). SeoMeta 의 Optional[str] 필드가 None/'' /값 세 상태로 의미 분리** | (동일) | + **빌드 종료 시 일원화 리포트 (BuildReport) — meta.yaml 필드 누락/형식 오류는 빌드 중단 없이 종료 후 몰아서 표시** | (동일) | (동일) | (동일) | + **scripts/report.py 신설. RenderResult 슬림화 (first_paragraph/first_image 제거). markdown.py 의 _FIRST_P_RE/_FIRST_IMG_RE 제거** | (동일) |
+| **v0.5.4** | (동일) | (동일) | (동일) | **`<title>` 폴백 체인이 홈·카테고리·404·search 에도 적용**. 글은 그대로 (이미 v0.4.3 부터 적용). nav 정렬은 더 이상 'About 최상단 하드코딩' 없음 — `nav_priority` 필드로 명시. | (동일) | (동일) | (동일) | (동일) | + **CategoryMeta 에 `title` / `seo` (SeoMeta) / `nav_priority` 추가** / + **ArticleMeta 에 `nav_priority` 추가** / + **SiteConfig 에 `error_404_title` / `search_title`** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) |
 | **v0.5.3** | (동일) | (동일) | + **카테고리/홈 `layout: gallery` (이미지 타일 그리드 — modern minimal, 4:3 강제 크롭, hover 효과, 반응형 2/N 칸). list 와 gallery 가 페이지네이션·임베드 동작 동일** | (동일) | (동일) | (동일) | + **`dist/feed.atom` (Atom 1.0) + `dist/feed.rss` (RSS 2.0) 자동 생성 (최신 20 글, noindex/excludes_categories 존중). 홈/카테고리/글 `<head>` 에 `<link rel='alternate'>` 자동 발견 태그** | (동일) | + **`tags:` 필드 (리스트, 선택). 작성자가 직접 적는 주제어. 현재는 feed `<category>` 에만 사용. 검색·관련 글 등은 미래 의제** | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/feed.py — Atom 1.0 기반 추상 모델 + 두 직렬화** | (동일) |
 | **v0.5.2** | (동일) | (동일) | + **글 자산 URL `/src/{slug}/...` → `/{slug}/...` (자산 경로 일원화 — 글 자산이 글 index.html 과 같은 폴더로). 페이지 HTML 구조·렌더링·CSS·JS·페이지네이션 모두 (동일)** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **`reserved_slugs` 에서 `src` 제거 (assets/search 만 남음). builder.py 의 asset 출력 경로 + markdown.py 의 rewrite_asset_path / imgBox / imgSlideBox URL 스킴 일괄 변경.** | (동일) |
 | **v0.5.1** | (동일) | (동일) | + **모든 `<img>` 에 WebP src + srcset (다중 해상도) + sizes + `loading="lazy"` 자동 부착. raster 원본 (.jpg .png .gif) 은 dist 에서 제거되고 `{stem}-{w}.webp` 변종만 남음** | (동일) | (동일) | (동일) | (동일) | (동일) | + **`images:` 블록 (site.yaml — enabled/widths/max_width/quality/lazy_loading/default_sizes)** | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/images.py** | + **Pillow (이미지 최적화 — `images.enabled=false` 로 끄면 stdlib 만으로 빌드 가능)** |
@@ -1991,6 +2002,33 @@ python build.py --clean
 | **v0.3** | "SSG" | — | 원본 + 글마다 스타일 오버라이드 가능 | (동일) | (동일) | (동일) | 없음 | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | + **`styles:`** | — | (동일) | (동일) | (동일) | _meta.yaml 슬러그 오버라이드 | 단일 build.py | Python 3 + (parsedown 시) PHP CLI |
 | **v0.2** | "SSG" | — | 원본 `lama_website-main` 와 동일 | (동일) | (동일) | 전역 noindex (원본 보존) | 없음 | (동일) | (동일) | — | (동일) | (동일) | imgBox/imgSlideBox | — | 단일 build.py | (동일) |
 | **v0.1** | "SSG" | — | v0.1 자체 디자인 | 원본 quirk: 항상 site.name | 자동 단일 갭+섹션 wrap | 전역 noindex | 없음 | Python stdlib 자체 파서 | slug, title, date, seo_* | — | slug 정규식, 날짜 형식, slug 중복 | 도메인 하드코딩 | — | — | 단일 build.py | Python 3 |
+
+### v0.5.5 (2026-05-15) — 본문 ↔ 메타데이터 분리 원칙 + 빌드 리포트 일원화
+
+v0.4.2 로드맵 B-5 (description 폴백 범위) 의 미해소 의제를 *폴백 자체를 제거* 하는 방향으로 해소. 사용자 결정 4건의 종합 — (1) `seo.description` 필수화, (2) `og_description` / `twitter_description` 은 description 폴백만 유지 (본문 폴백 없음), (3) `og_image` 의 본문 폴백 제거 + `site.default_og_image` 강제, (4) 피드 summary 는 description 재사용 — 을 일괄 반영. 추가로 빌드 abort 경로를 시스템 결함으로 한정하고 콘텐츠 측 결함은 모두 빌드 종료 후 일원화 리포트로 통합.
+
+설계 원칙으로 명문화: **§ 17 의 설계 원칙 10 — "본문 ↔ 메타데이터 분리 원칙"** 참조.
+
+| 변경 | 내용 |
+|---|---|
+| 본문 폴백 제거 | [scripts/seo.py](scripts/seo.py) 의 `build_meta_tags` 가 더 이상 `rr.first_paragraph` / `rr.first_image` 를 참조하지 않음. description / og_description / twitter_description / og_image 모두 `meta.yaml` 의 `seo:` 블록 값만 사용. [scripts/markdown.py](scripts/markdown.py) 의 `_FIRST_P_RE` / `_FIRST_IMG_RE` 정규식과 `finalize_md_html` / `process_html` 의 추출 로직 일괄 제거. [scripts/models.py](scripts/models.py) 의 `RenderResult` 도 `html` 한 필드로 슬림화. [builder.py](scripts/builder.py) 의 `_render_articles` 에서 `article_render_meta` (gallery + feed 가 참조) 도 동일하게 author-authored 값만 사용. |
+| `seo.description` 사실상 필수화 | author 가 `seo.description` 을 누락하거나 빈 문자열로 두면 빌드 종료 후 미완성 글 리포트에 기록. `<meta name="description">`, `og:description`, `twitter:description`, 피드 `<summary>` / `<description>`, 갤러리 description 이 모두 누락된 채 산출물이 만들어진다 (작성자가 보완해야 함). 빌드를 abort 하지 않고 *완성 후 리포트* 정책 — 한 번의 빌드로 모든 미완성 글을 파악. |
+| SeoMeta 의 3-상태 의미 | `Optional[str]` 필드 (description, og_image, og_description 등) 가 세 상태를 갖는다: **`None`** (키 부재 또는 값 부재 = opt-out, 메타 태그 누락 + 리포트 없음), **`''`** (빈 문자열 = author 실수, 메타 태그 누락 + 리포트 기록), **`'text'`** (정상값 = 메타 태그 출력). builder 의 `_parse_frontmatter` / `_parse_category_meta_file` 에서 옛 `_seo_str` 의 `v if v else None` 강제 변환을 폐기, yaml_load 가 돌려준 값을 그대로 보존. |
+| `og_image` 의 본문 폴백 제거 | `meta.seo.og_image` > `site.default_og_image` > 태그 누락. 본문 첫 이미지를 폴백으로 쓰던 동작 폐기. SNS / 메신저 미리보기가 og:image 없을 때 본문에서 이미지를 임의로 긁어가는 행동을 SSG 가 빌드 시점에 자동화하지 않는다는 원칙 (§ 17 의 설계 원칙 10 참조). 갤러리 썸네일도 동일 규칙. |
+| 빌드 리포트 일원화 | [scripts/report.py](scripts/report.py) 신설 — `BuildReport` dataclass + 시스템 결함용 `abort()` 함수. 기존 `warn()` 은 BuildReport 의 'warning' 으로, 기존 `die()` 는 두 경로로 분리 — (a) 시스템 결함 (템플릿 누락, `Articles/` 없음, Pillow 미설치, site.yaml 형식 오류 등) 은 즉시 `abort()`, (b) meta.yaml 의 파싱 실패 / 필수 필드 누락 / 형식 오류는 모두 BuildReport 의 'issue' 로 기록하고 글/카테고리 단위로 빌드에서 제외하거나 폴백값으로 진행. 빌드는 어떤 콘텐츠 결함에도 중단되지 않으며, 종료 시 정렬된 리포트가 stderr 에 표시된다 (글/카테고리별 묶음 + 요약 카운트). |
+| `_parse_frontmatter` / `_validate` 의 fail-soft | meta.yaml 파싱 실패 / `slug`·`title`·`date` 누락 / slug 중복 / slug 정규식 불일치 / slug 예약어 / date 형식 오류 → 해당 글을 `self.articles` 에서 제외 + 리포트. 부수 필드 형식 오류 (`tags` 가 리스트 아님, `nav_priority` 가 정수 아님, `seo` 가 매핑 아님) → 폴백값으로 진행 + 리포트. 카테고리 meta.yaml 도 동일 정책 (`priority`, `excludes_categories`, `seo`, `nav_priority` 형식 오류 모두 폴백 + 리포트). |
+
+**검증 (현재 트리, About + Hello World + Pagination Demo One/Two/Three + Section Markers Demo):**
+- 빌드 6 글 / 2 카테고리 / 0 abort. 두 번째 빌드도 동일 (결정성 유지).
+- 리포트: `seo.description` 미작성 글들이 "보완이 필요한 항목" 으로 묶여 표시. About / Hello World 는 이미 description 보유 → 리포트에 등장하지 않음.
+- 산출물의 `<meta name="description">` / `og:description` / `twitter:description` 모두 author 가 쓴 값만 출력. description 부재 글에서는 세 태그 모두 누락.
+- 피드 (`dist/feed.atom` / `dist/feed.rss`): description 있는 글만 `<summary>` / `<description>` 출력. description 부재 글은 entry 가 title + link + categories 만 보유.
+- BM25 단위 테스트 25개 그대로 통과 (회귀 0).
+
+**미수용 (차기 의제):**
+- 홈/카테고리 페이지의 SEO 메타 태그 출력 (§ 17 한계 표의 잔존 항목).
+- 태그별 색인 페이지 / 태그 검색 가중치 / 관련 글 / 갤러리 타일의 추가 표시 옵션 (v0.5.3 미수용 그대로 이월).
+- 빌드 모듈 단위 테스트 디렉터리 확장 (v0.4.2 로드맵 B-1).
 
 ### v0.5.4 (2026-05-14) — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + `nav_priority`
 

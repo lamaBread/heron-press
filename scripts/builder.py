@@ -1,5 +1,31 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.5.5 변경 — 본문 ↔ 메타데이터 분리 원칙 + 빌드 리포트 일원화:
+  - 본문 폴백 폐지: SEO description / og_image / 갤러리 썸네일 / 피드 summary
+    가 더 이상 본문 첫 `<p>` / 첫 `<img>` 를 폴백 소스로 쓰지 않는다.
+    `_render_articles` 의 article_render_meta 캐시는 author 가 meta.yaml 에
+    직접 적은 `seo.description` / `seo.og_image` (또는 site.default_og_image)
+    만 참조. v0.5.3 부터 있던 `rr.first_paragraph` / `rr.first_image` 참조
+    제거. RenderResult 도 `html` 한 필드로 슬림화 (scripts/markdown.py 참조).
+  - SeoMeta 의 3-상태 의미 도입: `None` = opt-out (메타 태그 누락),
+    `''` = 작성자 실수 (메타 태그 누락 + BuildReport 기록), 비어있지 않은
+    str = 정상 출력. `_parse_frontmatter` 의 `_seo_str` helper 가 빈 문자열을
+    None 으로 강제 변환하던 동작을 폐기 — yaml_load 가 돌려준 값을 그대로
+    보존해 builder 가 None vs '' 를 구분할 수 있다.
+  - 필수 필드: `seo.description` 누락/빈 문자열을 리포트에 기록. 글 자체의
+    빌드는 진행되며 description / og:description / twitter:description /
+    피드 summary 가 누락된다 (작성자가 보완해야 할 미완성 상태).
+  - og_image 의 본문 폴백 제거: `seo.og_image` > `site.default_og_image`.
+    둘 다 부재하면 og:image 태그 자체를 출력하지 않는다. SNS 가 본문 첫
+    이미지를 임의로 긁어가는 행동을 SSG 가 빌드 시점에 자동화하지 않는다는
+    원칙 (README § 5-1 참조).
+  - 빌드 리포트 일원화 (scripts/report.py): 기존의 `warn()` / `die()` 가
+    모듈 전역 BuildReport 인스턴스로 라우팅. meta.yaml 의 필드 부족 / 빈
+    문자열 / 형식 오류는 *글 단위로 산출물 일부를 누락* 한 채 빌드를
+    완성하고, 빌드 종료 시 터미널에 미완성 글 목록을 몰아서 표시. 시스템
+    결함 (템플릿 누락, Articles/ 없음, Pillow 미설치 등) 만 `abort()` 로
+    즉시 중단. 콘텐츠 작성자의 실수와 시스템 측 결함이 명확히 분리된다.
+
 v0.5.4 변경 — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + nav_priority:
   - v0.4.3 부터 글에만 적용되던 `<title>` 폴백 체인이 홈/카테고리/404/search
     에도 적용됨. 새 helper `_wrap_page_title(body, seo_override=None)` 가
@@ -254,28 +280,54 @@ from .search import (
 )
 from .sitemap import build_sitemap
 from .feed import build_feed_document, render_atom, render_rss
+from .report import BuildReport, abort
 
 
 # ════════════════════════════════════════════════════════════════
 # Build / Error helpers
+#
+# v0.5.5: 모든 경고/검증 실패는 모듈 전역 BuildReport 로 라우팅된다.
+# 빌드 종료 시 self.report.render() 가 정렬된 리포트를 stderr 에 표시.
+#
+#   - warn(msg)               → 사이트 전역 'warning' (산출물 정상, 조언).
+#   - issue(scope, target, …) → 글/카테고리 단위 'issue' (산출물 일부 누락).
+#                                호출자가 적절히 진행 (글 skip 등) 해야 함.
+#   - abort(msg)              → 시스템 결함. 즉시 sys.exit(1).
+#
+# die() 는 더 이상 모듈 전역에 존재하지 않는다. abort() 로 의도가 명확한
+# 호출만 시스템 결함 경로로 가고, 나머지는 issue() 로 분류된다.
 # ════════════════════════════════════════════════════════════════
 
-_warnings = []
+_report = BuildReport()
 
 
 def warn(msg: str):
-    print(f'[WARN] {msg}', file=sys.stderr)
-    _warnings.append(msg)
+    """v0.5.5: 사이트 전역 조언으로 BuildReport 에 기록 (산출물 정상)."""
+    _report.warning('site', '', msg)
 
 
-def die(msg: str):
-    print(f'[FAIL] {msg}', file=sys.stderr)
-    print('빌드 중단.', file=sys.stderr)
-    sys.exit(1)
+def issue(scope: str, target: str, msg: str, location=None):
+    """v0.5.5: 글/카테고리 단위 보완 항목으로 BuildReport 에 기록.
+
+    호출자는 issue() 후 산출물에서 해당 글/카테고리를 적절히 처리해야 한다
+    (글 단위 skip, 폴백 값 사용 등). issue() 자체는 빌드 흐름을 끊지 않는다.
+    """
+    _report.issue(scope, target, msg, location)
+
+
+def report() -> BuildReport:
+    """현재 빌드 세션의 BuildReport 인스턴스 접근자."""
+    return _report
 
 
 def warning_count() -> int:
-    return len(_warnings)
+    return _report.warning_count()
+
+
+def reset_report():
+    """단위 테스트 등에서 빌드를 여러 번 돌릴 때 리포트를 초기화."""
+    global _report
+    _report = BuildReport()
 
 
 def _copy_if_newer(src: Path, dst: Path):
@@ -299,7 +351,7 @@ def _remove_empty_dirs(root: Path):
 def _load_template(templates_dir: Path, name: str) -> str:
     path = templates_dir / name
     if not path.exists():
-        die(f'Template not found: {path}')
+        abort(f'Template not found: {path}')
     return path.read_text(encoding='utf-8')
 
 
@@ -348,7 +400,7 @@ class Builder:
     def _load_config(self):
         site_yaml = self.base / 'site.yaml'
         if not site_yaml.exists():
-            die(f'site.yaml not found at {site_yaml}')
+            abort(f'site.yaml not found at {site_yaml}')
         raw = yaml_load(site_yaml.read_text(encoding='utf-8'))
 
         def get(key, default=None):
@@ -400,8 +452,10 @@ class Builder:
             self.legacy_map = yaml_load(legacy_yaml.read_text(encoding='utf-8'))
 
         # 토크나이저 패리티 검증 (PHP 없으면 워닝만)
+        # v0.5.5: 패리티 검증 실패는 시스템 결함 (Py/PHP 토크나이저 동등성
+        # 위배 — 검색 인덱스 신뢰도에 직결) 이라 abort 경로로 보낸다.
         run_parity_test(self.templates_dir, php_bin='php',
-                        warn_fn=warn, die_fn=die)
+                        warn_fn=warn, die_fn=abort)
 
         # v0.5.1: 이미지 최적화가 켜져 있는데 Pillow 가 없으면 워닝 (die 가 아닌
         # 워닝 — 이미지가 한 장도 없는 사이트는 빌드가 통과해야 하므로 _sync_assets
@@ -434,13 +488,13 @@ class Builder:
             try:
                 widths = sorted({int(w) for w in widths_raw if int(w) > 0})
             except (TypeError, ValueError):
-                die(f"site.yaml: images.widths 는 양의 정수 리스트여야 합니다 "
-                    f"(받은 값: {widths_raw!r})")
+                abort(f"site.yaml: images.widths 는 양의 정수 리스트여야 합니다 "
+                      f"(받은 값: {widths_raw!r})")
             if not widths:
-                die("site.yaml: images.widths 가 비어 있습니다")
+                abort("site.yaml: images.widths 가 비어 있습니다")
         else:
-            die(f"site.yaml: images.widths 는 리스트여야 합니다 "
-                f"(받은 값: {widths_raw!r})")
+            abort(f"site.yaml: images.widths 는 리스트여야 합니다 "
+                  f"(받은 값: {widths_raw!r})")
 
         max_width_raw = raw.get('max_width')
         if max_width_raw is None:
@@ -449,8 +503,8 @@ class Builder:
             try:
                 max_width = int(max_width_raw)
             except (TypeError, ValueError):
-                die(f"site.yaml: images.max_width 는 정수여야 합니다 "
-                    f"(받은 값: {max_width_raw!r})")
+                abort(f"site.yaml: images.max_width 는 정수여야 합니다 "
+                      f"(받은 값: {max_width_raw!r})")
 
         quality_raw = raw.get('quality')
         if quality_raw is None:
@@ -459,11 +513,11 @@ class Builder:
             try:
                 quality = int(quality_raw)
             except (TypeError, ValueError):
-                die(f"site.yaml: images.quality 는 정수여야 합니다 "
-                    f"(받은 값: {quality_raw!r})")
+                abort(f"site.yaml: images.quality 는 정수여야 합니다 "
+                      f"(받은 값: {quality_raw!r})")
             if not (0 <= quality <= 100):
-                die(f"site.yaml: images.quality 는 0~100 범위여야 합니다 "
-                    f"(받은 값: {quality})")
+                abort(f"site.yaml: images.quality 는 0~100 범위여야 합니다 "
+                      f"(받은 값: {quality})")
 
         sizes = raw.get('default_sizes')
         if sizes is None:
@@ -482,7 +536,7 @@ class Builder:
 
     def _scan_articles(self):
         if not self.articles_dir.is_dir():
-            die(f'Articles/ directory not found at {self.articles_dir}')
+            abort(f'Articles/ directory not found at {self.articles_dir}')
 
         for root, dirs, files in os.walk(self.articles_dir):
             root_path = Path(root)
@@ -510,8 +564,14 @@ class Builder:
             article_folder = rel.parts[-1]
 
             if content_md.exists() and content_html.exists():
-                die(f'content.md and content.html both exist\n'
-                    f'       at {root_path}')
+                # 어느 쪽을 우선할지 결정 불가 → 글을 건너뛰고 리포트 기록.
+                issue(
+                    'article', '/'.join(category_path + [article_folder]),
+                    'content.md 와 content.html 이 둘 다 존재합니다 '
+                    '(한 글에 하나만 두세요).',
+                    root_path,
+                )
+                continue
 
             content_file = content_md if content_md.exists() else content_html
 
@@ -526,23 +586,52 @@ class Builder:
     # ── [3] Frontmatter parse ────────────────────────────────
 
     def _parse_frontmatter(self):
+        """meta.yaml 파싱 → ArticleMeta.
+
+        v0.5.5: 콘텐츠 측 결함은 모두 BuildReport 의 issue 로 라우팅.
+          - parse 실패 / 필수 필드 (slug, title, date) 누락 → 글 전체를
+            self.articles 에서 제외하고 리포트 기록.
+          - 부수 필드 형식 오류 (seo 매핑 아님, tags 리스트 아님 등) →
+            폴백값 사용 후 진행, 리포트 기록.
+          - seo.description 등 Optional[str] 필드의 빈 문자열은 *보존* —
+            None 과 구분된 채 SeoMeta 로 넘어가 build_meta_tags 가 적절히
+            처리하고 _render_articles 가 별도로 리포트한다.
+        """
+        kept = []
         for article in self.articles:
             meta_file = article.source_dir / 'meta.yaml'
+            article_target = '/'.join(article.category_path)
             try:
                 raw = yaml_load(meta_file.read_text(encoding='utf-8'))
             except Exception as e:
-                die(f'meta.yaml parse error: {e}\n       at {meta_file}')
+                issue(
+                    'article', article_target,
+                    f'meta.yaml 파싱 오류 — 글이 빌드에서 제외됨: {e}',
+                    meta_file,
+                )
+                continue
+            if raw is None:
+                raw = {}
 
             slug = raw.get('slug')
             title = raw.get('title')
             date_str = raw.get('date')
 
+            missing = []
             if not slug:
-                die(f'slug is empty\n       at {meta_file}')
+                missing.append('slug')
             if not title:
-                die(f'title is empty\n       at {meta_file}')
+                missing.append('title')
             if not date_str:
-                die(f'date is missing\n       at {meta_file}')
+                missing.append('date')
+            if missing:
+                issue(
+                    'article', article_target,
+                    f"meta.yaml 의 필수 필드가 비어있습니다 "
+                    f"— 글이 빌드에서 제외됨: {', '.join(missing)}",
+                    meta_file,
+                )
+                continue
 
             date_str = str(date_str)
             updated = str(raw.get('updated')) if raw.get('updated') else None
@@ -554,35 +643,34 @@ class Builder:
 
             seo_raw = raw.get('seo') or {}
             if not isinstance(seo_raw, dict):
-                die(f"meta.yaml: 'seo' 는 매핑이어야 합니다\n       at {meta_file}")
+                issue(
+                    'article', slug,
+                    f"meta.yaml: 'seo' 는 매핑이어야 합니다 "
+                    f"(받은 값: {seo_raw!r}) — 빈 seo 로 폴백.",
+                    meta_file,
+                )
+                seo_raw = {}
 
-            def _seo_str(key):
-                v = seo_raw.get(key)
-                return v if v else None
-
+            # v0.5.5: 빈 문자열을 None 으로 강제 변환하지 않는다.
+            # SeoMeta 가 None/''/'text' 세 상태를 보존해 build_meta_tags 가
+            # 적절히 처리한다 (None/'' → 메타 태그 누락, '' → 추가로 리포트).
             seo = SeoMeta(
                 title_prefix=seo_raw.get('title_prefix'),
                 title_suffix=seo_raw.get('title_suffix'),
-                description=_seo_str('description'),
-                author=_seo_str('author'),
-                canonical=_seo_str('canonical'),
-                og_title=_seo_str('og_title'),
-                og_description=_seo_str('og_description'),
-                og_image=_seo_str('og_image'),
-                og_image_alt=_seo_str('og_image_alt'),
+                description=seo_raw.get('description'),
+                author=seo_raw.get('author'),
+                canonical=seo_raw.get('canonical'),
+                og_title=seo_raw.get('og_title'),
+                og_description=seo_raw.get('og_description'),
+                og_image=seo_raw.get('og_image'),
+                og_image_alt=seo_raw.get('og_image_alt'),
                 og_type=seo_raw.get('og_type') or 'article',
                 twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
-                twitter_image=_seo_str('twitter_image'),
+                twitter_image=seo_raw.get('twitter_image'),
             )
 
             # v0.5.3: tags — 작성자가 직접 적는 주제어 목록.
             # YAML 파서는 inline list (`[a, b]`) 와 block list (`- a` ...) 둘 다 list 로 반환.
-            # 받아들이는 형태:
-            #   tags: [foo, bar]          → ['foo', 'bar']
-            #   tags:                     → []
-            #   tags:                     → ['foo', 'bar']
-            #     - foo
-            #     - bar
             # 정규화: 양끝 공백 trim, 빈 문자열 제거, 중복 제거 (입력 순서 보존),
             #          내부 공백은 그대로 둠 (한국어 다어절 태그 허용).
             tags_raw = raw.get('tags')
@@ -600,11 +688,15 @@ class Builder:
                     seen.add(s)
                     tags.append(s)
             else:
-                die(f"meta.yaml: 'tags' 는 리스트여야 합니다 (받은 값: "
-                    f"{tags_raw!r})\n       at {meta_file}")
+                issue(
+                    'article', slug,
+                    f"meta.yaml: 'tags' 는 리스트여야 합니다 "
+                    f"(받은 값: {tags_raw!r}) — 빈 리스트로 폴백.",
+                    meta_file,
+                )
+                tags = []
 
             # v0.5.4: nav_priority — 글이 톱레벨일 때만 의미 (예: About).
-            # CategoryMeta.nav_priority 와 같은 파싱 규칙.
             nav_priority_raw = raw.get('nav_priority')
             if nav_priority_raw is None:
                 nav_priority = 0
@@ -612,8 +704,13 @@ class Builder:
                 try:
                     nav_priority = int(nav_priority_raw)
                 except (TypeError, ValueError):
-                    die(f"meta.yaml: 'nav_priority' 는 정수여야 합니다 "
-                        f"(받은 값: {nav_priority_raw!r})\n       at {meta_file}")
+                    issue(
+                        'article', slug,
+                        f"meta.yaml: 'nav_priority' 는 정수여야 합니다 "
+                        f"(받은 값: {nav_priority_raw!r}) — 0 으로 폴백.",
+                        meta_file,
+                    )
+                    nav_priority = 0
 
             article.meta = ArticleMeta(
                 slug=slug,
@@ -627,42 +724,93 @@ class Builder:
                 tags=tags,
                 nav_priority=nav_priority,
             )
+            kept.append(article)
+
+        # 빌드에서 제외된 글은 articles 에서 제거 — 후속 단계가 invalid meta 를
+        # 만나지 않도록.
+        self.articles = kept
 
     # ── [4] Validation + category tree ───────────────────────
 
     def _validate(self):
+        """v0.5.5: slug/date 검증 실패는 글 단위 issue 로 기록하고 빌드에서
+        제외 (산출물 누락). 빌드는 계속 진행.
+        """
         seen_slugs = {}
+        kept = []
 
         for article in self.articles:
             m = article.meta
             meta_path = article.source_dir / 'meta.yaml'
+            keep_this = True
 
             if not self.SLUG_RE.match(m.slug):
-                die(f'slug 정규식 불일치: {repr(m.slug)}\n       at {meta_path}')
+                issue(
+                    'article', m.slug,
+                    f'slug 정규식 불일치: {m.slug!r} — 글이 빌드에서 제외됨.',
+                    meta_path,
+                )
+                keep_this = False
 
             if m.slug in self.site.reserved_slugs:
-                die(f'slug 예약어: {repr(m.slug)}\n       at {meta_path}')
+                issue(
+                    'article', m.slug,
+                    f'slug 예약어: {m.slug!r} — 글이 빌드에서 제외됨.',
+                    meta_path,
+                )
+                keep_this = False
 
             if m.slug in seen_slugs:
                 other = seen_slugs[m.slug]
-                die(f"slug 충돌: '{m.slug}'\n"
-                    f"       at {meta_path}\n"
-                    f"          {other / 'meta.yaml'}")
-            seen_slugs[m.slug] = article.source_dir
+                issue(
+                    'article', m.slug,
+                    f"slug 중복: {m.slug!r} — 뒤늦게 발견된 쪽의 글이 "
+                    f"빌드에서 제외됨 (먼저 발견된 글: {other}).",
+                    meta_path,
+                )
+                keep_this = False
+            else:
+                seen_slugs[m.slug] = article.source_dir
 
             if not self.DATE_RE.match(m.date):
-                die(f'date 형식 오류: {repr(m.date)}\n       at {meta_path}')
+                issue(
+                    'article', m.slug,
+                    f'date 형식 오류: {m.date!r} (YYYY-MM-DD 형식 필요) '
+                    f'— 글이 빌드에서 제외됨.',
+                    meta_path,
+                )
+                keep_this = False
 
             if m.updated:
                 if not self.DATE_RE.match(m.updated):
-                    die(f'updated 형식 오류: {repr(m.updated)}\n       at {meta_path}')
-                if m.updated < m.date:
-                    die(f'updated < date\n       at {meta_path}')
+                    issue(
+                        'article', m.slug,
+                        f'updated 형식 오류: {m.updated!r} — updated 를 '
+                        f'무시하고 진행.',
+                        meta_path,
+                    )
+                    m.updated = None
+                elif m.updated < m.date:
+                    issue(
+                        'article', m.slug,
+                        f'updated ({m.updated}) 가 date ({m.date}) 보다 '
+                        f'앞섭니다 — 그대로 진행하지만 의도 확인 권장.',
+                        meta_path,
+                    )
+
+            if keep_this:
+                kept.append(article)
+
+        self.articles = kept
 
         for url_path, slug in self.legacy_map.items():
             if slug is not None and slug not in seen_slugs:
-                die(f"legacy-map.yaml: slug '{slug}' 미존재\n"
-                    f"       ('{url_path}' 항목)")
+                issue(
+                    'legacy-map', url_path,
+                    f"legacy-map.yaml: slug {slug!r} 미존재 — "
+                    f"'{url_path}' 항목을 건너뜁니다.",
+                    self.base / 'legacy-map.yaml',
+                )
 
         self.slug_to_article = {a.meta.slug: a for a in self.articles}
 
@@ -672,24 +820,37 @@ class Builder:
         self._build_category_tree()
 
         # 글 slug ↔ 톱레벨 카테고리 slug 충돌 검증 (v0.4.2).
-        # 둘 다 dist/{slug}/index.html 자리에 떨어지므로, _prune_orphans 의
-        # 사후 정리에 맡기지 말고 검증 단계에서 차단한다.
+        # 둘 다 dist/{slug}/index.html 자리에 떨어지므로 — 충돌하는 글을
+        # 빌드에서 제외 (카테고리가 우선) + 리포트.
         cat_slugs = {
             cat.slug: cat
             for cat in self.categories.values()
             if len(cat.path) == 1
         }
+        filtered = []
         for article in self.articles:
             if article.meta.slug in cat_slugs:
                 cat = cat_slugs[article.meta.slug]
-                die(f"slug 충돌 (글 ↔ 카테고리): {repr(article.meta.slug)}\n"
-                    f"       at {article.source_dir / 'meta.yaml'}\n"
-                    f"          (카테고리 폴더: Articles/{'/'.join(cat.path)})")
+                issue(
+                    'article', article.meta.slug,
+                    f"slug 충돌 (글 ↔ 카테고리): {article.meta.slug!r} — "
+                    f"카테고리 폴더 Articles/{'/'.join(cat.path)} 와 같은 "
+                    f"slug 라 글이 빌드에서 제외됨.",
+                    article.source_dir / 'meta.yaml',
+                )
+                continue
+            filtered.append(article)
+        self.articles = filtered
+        self.slug_to_article = {a.meta.slug: a for a in self.articles}
 
         for cat in self.categories.values():
             all_articles = self._collect_articles(cat)
             if not all_articles:
-                warn(f'empty category: {"/".join(cat.path)}')
+                _report.warning(
+                    'category', '/'.join(cat.path),
+                    '이 카테고리에 글이 하나도 없습니다 (빈 카테고리).',
+                    self.articles_dir.joinpath(*cat.path),
+                )
 
         if self.site.warn_on_stale_updated:
             for article in self.articles:
@@ -699,8 +860,13 @@ class Builder:
                             article.content_file.stat().st_mtime
                         ).isoformat()
                         if mtime > article.meta.updated:
-                            warn(f'{article.meta.slug}: meta updated may be stale '
-                                 f'(file mtime {mtime} > updated {article.meta.updated})')
+                            _report.warning(
+                                'article', article.meta.slug,
+                                f'meta.yaml 의 updated ({article.meta.updated}) '
+                                f'가 content 파일의 수정 시각 ({mtime}) 보다 '
+                                f'오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.',
+                                article.content_file,
+                            )
                     except Exception:
                         pass
 
@@ -724,14 +890,21 @@ class Builder:
         def to_slug(folder_name: str, full_path_for_warn) -> str:
             s = category_slug_from_name(folder_name)
             if not s:
-                die(f'카테고리 slug 빈 문자열: {folder_name}\n'
-                    f"       (Articles/{'/'.join(full_path_for_warn)})")
+                # 빈 카테고리 slug — 빌드는 계속 (해당 카테고리는 산출물에서
+                # 자연스럽게 누락). 작성자가 폴더명을 보완해야 함.
+                issue(
+                    'category', '/'.join(full_path_for_warn),
+                    f'카테고리 폴더명이 빈 slug 로 변환됩니다: {folder_name!r} '
+                    f'— 카테고리가 빌드되지 않을 수 있습니다.',
+                    self.articles_dir.joinpath(*full_path_for_warn),
+                )
             if has_non_ascii(folder_name) and folder_name not in warned_folders:
-                warn(
-                    f"URL slug 에 비ASCII 문자 포함: '{folder_name}' → '{s}'\n"
-                    f"       (Articles/{'/'.join(full_path_for_warn)})\n"
-                    f"       빌드는 정상 진행되었으나, URL 가독성/공유성을 위해 "
-                    f"폴더명을 ASCII (영문/숫자/하이픈) 로 바꾸는 것을 권장합니다."
+                _report.warning(
+                    'category', '/'.join(full_path_for_warn),
+                    f"URL slug 에 비ASCII 문자 포함: '{folder_name}' → '{s}'. "
+                    f"빌드는 정상 진행되었으나, URL 가독성/공유성을 위해 "
+                    f"폴더명을 ASCII (영문/숫자/하이픈) 로 바꾸는 것을 권장합니다.",
+                    self.articles_dir.joinpath(*full_path_for_warn),
                 )
                 warned_folders.add(folder_name)
             return s
@@ -797,8 +970,12 @@ class Builder:
         try:
             raw = yaml_load(meta_file.read_text(encoding='utf-8'))
         except Exception as e:
-            die(f'카테고리 meta.yaml parse error: {e}\n'
-                f"       at {meta_file}")
+            issue(
+                'category', str(meta_file.parent.name),
+                f'meta.yaml 파싱 오류 — 기본 CategoryMeta 로 폴백: {e}',
+                meta_file,
+            )
+            return CategoryMeta()
 
         if raw is None:
             raw = {}
@@ -810,6 +987,10 @@ class Builder:
         # 유효한 키로 통과시킨다.
         if 'slug' in raw and 'date' in raw:
             return CategoryMeta()
+
+        # v0.5.5: 카테고리 meta.yaml 의 형식 오류는 모두 폴백값으로 진행하고
+        # 리포트만 기록 (빌드 중단 없음).
+        cat_target = str(meta_file.parent.name)
 
         per_page = raw.get('per_page')
         preview = raw.get('preview_per_page')
@@ -824,8 +1005,13 @@ class Builder:
             try:
                 priority = int(priority_raw)
             except (TypeError, ValueError):
-                die(f"meta.yaml: 'priority' 는 정수여야 합니다 (받은 값: "
-                    f"{priority_raw!r})\n       at {meta_file}")
+                issue(
+                    'category', cat_target,
+                    f"meta.yaml: 'priority' 는 정수여야 합니다 "
+                    f"(받은 값: {priority_raw!r}) — 0 으로 폴백.",
+                    meta_file,
+                )
+                priority = 0
 
         # v0.4.6: excludes_categories. 홈 (Articles/meta.yaml) 에서만 의미를
         # 가진다 — 카테고리 meta.yaml 에 들어있어도 파싱만 되고 사용되지 않음.
@@ -835,37 +1021,43 @@ class Builder:
         elif isinstance(excludes_raw, list):
             excludes = [str(x) for x in excludes_raw]
         else:
-            die(f"meta.yaml: 'excludes_categories' 는 리스트여야 합니다 (받은 값: "
-                f"{excludes_raw!r})\n       at {meta_file}")
+            issue(
+                'category', cat_target,
+                f"meta.yaml: 'excludes_categories' 는 리스트여야 합니다 "
+                f"(받은 값: {excludes_raw!r}) — 빈 리스트로 폴백.",
+                meta_file,
+            )
+            excludes = []
 
         # v0.5.4: title (페이지 <title> 본문 override).
         title_val = raw.get('title')
         title = str(title_val) if title_val else None
 
-        # v0.5.4: seo (글의 SeoMeta 와 동일 스키마). 현재 실제로 사용되는 건
-        # title_prefix / title_suffix 뿐 — 나머지 필드는 forward compat 차원
-        # 에서 파싱만 한다.
+        # v0.5.4: seo (글의 SeoMeta 와 동일 스키마).
         seo_raw = raw.get('seo') or {}
         if not isinstance(seo_raw, dict):
-            die(f"meta.yaml: 'seo' 는 매핑이어야 합니다\n       at {meta_file}")
+            issue(
+                'category', cat_target,
+                f"meta.yaml: 'seo' 는 매핑이어야 합니다 "
+                f"(받은 값: {seo_raw!r}) — 빈 seo 로 폴백.",
+                meta_file,
+            )
+            seo_raw = {}
 
-        def _seo_str(key):
-            v = seo_raw.get(key)
-            return v if v else None
-
+        # v0.5.5: 빈 문자열 보존 (글 SeoMeta 와 동일 정책).
         seo = SeoMeta(
             title_prefix=seo_raw.get('title_prefix'),
             title_suffix=seo_raw.get('title_suffix'),
-            description=_seo_str('description'),
-            author=_seo_str('author'),
-            canonical=_seo_str('canonical'),
-            og_title=_seo_str('og_title'),
-            og_description=_seo_str('og_description'),
-            og_image=_seo_str('og_image'),
-            og_image_alt=_seo_str('og_image_alt'),
+            description=seo_raw.get('description'),
+            author=seo_raw.get('author'),
+            canonical=seo_raw.get('canonical'),
+            og_title=seo_raw.get('og_title'),
+            og_description=seo_raw.get('og_description'),
+            og_image=seo_raw.get('og_image'),
+            og_image_alt=seo_raw.get('og_image_alt'),
             og_type=seo_raw.get('og_type') or 'website',
             twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
-            twitter_image=_seo_str('twitter_image'),
+            twitter_image=seo_raw.get('twitter_image'),
         )
 
         # v0.5.4: nav_priority — 톱레벨 nav 정렬 키 (priority 와 별개 축).
@@ -876,8 +1068,13 @@ class Builder:
             try:
                 nav_priority = int(nav_priority_raw)
             except (TypeError, ValueError):
-                die(f"meta.yaml: 'nav_priority' 는 정수여야 합니다 (받은 값: "
-                    f"{nav_priority_raw!r})\n       at {meta_file}")
+                issue(
+                    'category', cat_target,
+                    f"meta.yaml: 'nav_priority' 는 정수여야 합니다 "
+                    f"(받은 값: {nav_priority_raw!r}) — 0 으로 폴백.",
+                    meta_file,
+                )
+                nav_priority = 0
 
         return CategoryMeta(
             per_page=int(per_page) if per_page is not None else None,
@@ -1049,7 +1246,11 @@ class Builder:
             content_path = article.content_file
 
             if not content_path or not content_path.exists():
-                warn(f'{m.slug}: content file not found, skipping')
+                issue(
+                    'article', m.slug,
+                    'content 파일을 찾을 수 없어 글을 빌드하지 않습니다.',
+                    article.source_dir,
+                )
                 continue
 
             content_text = content_path.read_text(encoding='utf-8')
@@ -1066,15 +1267,46 @@ class Builder:
 
             self.rendered_bodies[m.slug] = html_to_plain(rr.html)
 
-            # v0.5.3: gallery / feed 가 쓸 thumbnail + summary 캐시.
-            # thumbnail 폴백: seo.og_image > 본문 첫 이미지 > None.
-            # summary: seo.description > rr.first_paragraph > '' (description_truncate 적용).
-            # v0.5.4: truncate_description 으로 영문 단어 경계 존중.
-            thumb = m.seo.og_image or rr.first_image
-            summary_raw = m.seo.description or rr.first_paragraph or ''
-            summary = truncate_description(
-                summary_raw, self.site.description_truncate,
-            ) if summary_raw else ''
+            # v0.5.5: description 필수 정책 + 본문 ↔ 메타데이터 분리.
+            #   - seo.description 이 None (키 부재/값 부재) → 작성자가 의도적
+            #     으로 누락한 게 아니라 필수 필드를 빠뜨린 것으로 간주, issue.
+            #   - seo.description 이 '' (빈 문자열) → 작성자 실수, issue.
+            #   - 둘 다의 경우 summary 가 누락된다 (피드 <summary> /
+            #     <description> 태그 자체가 출력되지 않음, gallery 도 description
+            #     없이 그라데이션 플레이스홀더만).
+            #   - 본문 폴백 없음. rr.first_paragraph / rr.first_image 참조 제거.
+            desc_val = m.seo.description
+            if desc_val is None:
+                issue(
+                    'article', m.slug,
+                    "meta.yaml: 'seo.description' 필드가 없습니다 "
+                    "— 외부 노출용 한 줄 설명을 작성해주세요. "
+                    "(description / og:description / twitter:description / "
+                    "피드 summary 가 모두 누락됩니다.)",
+                    article.source_dir / 'meta.yaml',
+                )
+                summary = ''
+            elif desc_val == '':
+                issue(
+                    'article', m.slug,
+                    "meta.yaml: 'seo.description' 이 빈 문자열입니다 "
+                    "— 외부 노출용 한 줄 설명을 작성해주세요. "
+                    "(description 메타 태그 / 피드 summary 가 누락됩니다.)",
+                    article.source_dir / 'meta.yaml',
+                )
+                summary = ''
+            else:
+                summary = truncate_description(
+                    desc_val, self.site.description_truncate,
+                )
+
+            # 갤러리 썸네일 — v0.5.5 부터 본문 폴백 없음.
+            # seo.og_image > site.default_og_image > None.
+            # build_meta_tags 와 같은 우선순위지만, 갤러리 타일은 URL 만 필요해
+            # base_url 접두를 붙이지 않은 그대로 보관 (templates 측에서 사용).
+            thumb = m.seo.og_image if (m.seo.og_image not in (None, '')) else None
+            if thumb is None and self.site.default_og_image:
+                thumb = self.site.default_og_image
             self.article_render_meta[m.slug] = {
                 'thumb': thumb,
                 'summary': summary,
@@ -1098,7 +1330,11 @@ class Builder:
                     for url_match in re.finditer(pattern, rr.html):
                         ref = url_match.group(1)
                         if '/_' in ref or ref.startswith('_'):
-                            warn(f'{m.slug}: referenced excluded asset {ref}')
+                            _report.warning(
+                                'article', m.slug,
+                                f'본문이 빌드에서 제외된 자산을 참조: {ref}',
+                                article.source_dir,
+                            )
 
             meta_tags, full_title = build_meta_tags(article, rr, self.site)
 
@@ -1222,10 +1458,10 @@ class Builder:
         v0.5.2: 옛 `/src/{slug}/...` → `/{slug}/...` 로 변경.
         """
         if not _HAS_PIL:
-            die(f"이미지 최적화가 켜져 있는데 Pillow 가 없습니다. "
-                f"raster 이미지를 만났습니다: {src_file}\n"
-                f"       pip install Pillow 로 설치하거나 "
-                f"site.yaml 의 images.enabled 를 false 로 두세요.")
+            abort(f"이미지 최적화가 켜져 있는데 Pillow 가 없습니다. "
+                  f"raster 이미지를 만났습니다: {src_file}\n"
+                  f"       pip install Pillow 로 설치하거나 "
+                  f"site.yaml 의 images.enabled 를 false 로 두세요.")
 
         variants = optimize_image(
             src=src_file,
@@ -1290,9 +1526,10 @@ class Builder:
     def _gallery_tile_html(self, article: 'Article', hidden: bool = False) -> str:
         """v0.5.3: 갤러리 레이아웃의 한 타일 HTML.
 
-        썸네일 우선순위: seo.og_image > 본문 첫 이미지 > 빈 플레이스홀더.
-        가로세로 4:3 으로 강제 크롭 (CSS object-fit: cover). 썸네일이 없는
-        타일은 옅은 그라데이션 배경만 보여 일관된 그리드를 유지한다.
+        v0.5.5: 썸네일 우선순위 = seo.og_image > site.default_og_image > 빈
+        플레이스홀더 (그라데이션). 본문 폴백 (옛 `rr.first_image`) 제거 —
+        본문 ↔ 메타데이터 분리 원칙 (README § 17 참조). 썸네일이 없는 타일은
+        옅은 그라데이션 배경만 보여 일관된 그리드를 유지한다 (4:3 강제 크롭).
         """
         m = article.meta
         link_text = m.title
@@ -1809,7 +2046,7 @@ class Builder:
         for lib_name in ('search_tokenize.php', 'search_bm25.php'):
             lib_src = self.templates_dir / lib_name
             if not lib_src.exists():
-                die(f'templates/{lib_name} not found')
+                abort(f'templates/{lib_name} not found')
             (self.dist / lib_name).write_text(
                 lib_src.read_text(encoding='utf-8'),
                 encoding='utf-8',
@@ -1914,8 +2151,16 @@ class Builder:
         self._build_search()                   # [14]
         self._prune_orphans()                  # [15]
 
-        warn_count = warning_count()
         art_count = len(self.articles)
         cat_count = len(self.categories)
-        print(f'\n빌드 완료: {art_count} 글, {cat_count} 카테고리, {warn_count} 경고.')
+        issue_count = _report.issue_count()
+        warn_count = _report.warning_count()
+        print(
+            f'\n빌드 완료: {art_count} 글, {cat_count} 카테고리, '
+            f'{issue_count} 보완 필요, {warn_count} 살펴볼 사항.',
+        )
         print(f'산출물: dist/ (siheonlee.com), dist-legacy/ (lama.pe.kr).')
+
+        # v0.5.5: 빌드 종료 시 일원화 리포트 출력. meta.yaml 의 필드 부족 /
+        # 빈 문자열 / 형식 오류 등 모든 콘텐츠 결함이 여기 모아진다.
+        _report.render()

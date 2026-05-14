@@ -11,6 +11,16 @@
     두 파일을 같은 글 목록으로 생성. 두 파일은 시점·내용이 동일하고
     *직렬화 포맷만* 다르다.
 
+v0.5.5 변경 — 본문 ↔ 메타데이터 분리 원칙:
+  - `FeedEntry.summary` 의 폴백 소스를 본문 첫 단락에서 떼냄. 이제 entry 의
+    summary 는 builder 가 `article_render_meta[slug]['summary']` 로 넘긴 값을
+    그대로 쓰며, 그 값은 author 가 `meta.yaml` 의 `seo.description` 에 직접
+    적은 값에서만 유래한다. description 이 부재한 글은 summary 도 자연스럽게
+    누락 (`<summary>` / `<description>` 태그 자체가 출력되지 않음).
+    Atom 은 `<content>` 가 없어도 summary 를 강제하지 않으며 (RFC 4287 §
+    4.1.3.3 의 예외 조항), RSS 2.0 도 `<description>` 을 필수로 요구하지
+    않는다 (item 은 title 또는 description 중 하나만 있어도 된다).
+
 포함 정책:
   - non-noindex 글만. `meta.yaml` 의 `noindex: true` 는 sitemap 과 동일하게 제외.
   - `Articles/meta.yaml` 의 `excludes_categories` (= 홈에서 빠지는 카테고리)
@@ -52,7 +62,10 @@ class FeedEntry:
     entry_id    — 안정적이고 영구적인 식별자. 보통 link 와 동일.
     published   — 최초 작성일 (YYYY-MM-DD).
     updated     — 마지막 수정일 (YYYY-MM-DD). 없으면 published 와 동일.
-    summary     — 짧은 요약 (plain text). 비우면 description 폴백.
+    summary     — 짧은 요약 (plain text). v0.5.5 부터 author 가
+                  `meta.yaml` 의 `seo.description` 에 직접 적은 값에서만 유래
+                  한다 (본문 폴백 없음). 비어 있으면 `<summary>` / `<description>`
+                  태그 자체를 출력하지 않는다.
     author      — 글 단위 저자. 없으면 피드의 default_author.
     categories  — 글의 카테고리 + tags (Atom <category term=...>, RSS <category>).
     """

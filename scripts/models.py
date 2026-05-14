@@ -2,6 +2,18 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
+v0.5.5 변경:
+  - RenderResult 에서 `first_paragraph` / `first_image` 필드 제거. v0.5.4
+    까지 SEO description / og_image / 갤러리 썸네일 / 피드 summary 의 폴백
+    소스로 본문에서 휴리스틱 추출된 값이었으나, "본문 ↔ 메타데이터 분리
+    원칙" (README § 5-1 참조) 도입과 함께 폐기. 모든 외부 노출 메타데이터는
+    `meta.yaml` 의 명시적 author-authored 값만 사용한다.
+  - SeoMeta.description 등 Optional[str] 필드의 의미가 *세 상태* 로 확장:
+    `None` = 키 부재 또는 값 부재 (opt-out, 메타 태그 누락), `''` = 작성자
+    실수 (메타 태그 누락 + BuildReport 에 기록), 비어있지 않은 str = 정상값
+    (메타 태그 출력). 빈 문자열을 None 으로 강제하지 않는다 — Builder 의
+    frontmatter 파서가 둘을 보존해서 넘긴다.
+
 v0.5.4 변경:
   - CategoryMeta 에 `title` (Optional[str]) 과 `seo` (SeoMeta) 추가. 홈/카테고리
     페이지의 `<title>` 폴백 체인을 글과 동일하게 작동시키기 위함 (v0.4.3 에서
@@ -97,8 +109,22 @@ class SiteConfig:
 class SeoMeta:
     """meta.yaml 의 `seo:` 하위 블록.
 
-    모든 필드는 None 이 기본값 — 비어 있으면 site.yaml 의 default_* 또는
-    seo.py 의 폴백 체인 (first_paragraph, first_image 등) 으로 채워진다.
+    v0.5.5: 모든 Optional[str] 필드가 세 상태를 가진다.
+      - None      = 키 부재 또는 값 부재. opt-out → 메타 태그 누락.
+      - ''        = 빈 문자열. 작성자 실수로 간주 → 메타 태그 누락 +
+                    BuildReport 에 기록.
+      - 'text'    = 정상값. 메타 태그 출력.
+
+    Builder 의 frontmatter 파서 (`_parse_frontmatter` / `_parse_category_meta_file`)
+    가 yaml_load 의 결과를 그대로 보존해야 한다 — 빈 문자열을 None 으로
+    강제 변환하면 위 구분이 무너진다.
+
+    v0.5.4 까지 있었던 본문 폴백 (first_paragraph → description, first_image
+    → og_image) 은 v0.5.5 에서 폐기. 모든 외부 노출 메타데이터는 author 가
+    명시한 값만 사용. og_description / twitter_description 의 description
+    폴백, og_title 의 full_title 폴백 같은 *author-authored fallback* 은
+    유지 (다른 필드도 author 가 직접 쓴 값을 재사용하는 것이라 본문 추출이
+    아니다).
     """
     title_prefix: Optional[str] = None
     title_suffix: Optional[str] = None
@@ -208,9 +234,14 @@ class CategoryMeta:
 
 @dataclass
 class RenderResult:
+    """본문 렌더 결과.
+
+    v0.5.5 에서 슬림화 — 이전의 `first_paragraph` / `first_image` 필드가
+    제거되었다. 두 필드는 SEO description / og_image / 갤러리 썸네일 / 피드
+    summary 의 폴백 소스였으나, "본문 ↔ 메타데이터 분리 원칙" 도입과 함께
+    폐기. 외부 노출 메타데이터는 author 가 meta.yaml 에 직접 쓴 값만 사용.
+    """
     html: str
-    first_paragraph: str
-    first_image: Optional[str]
 
 
 @dataclass

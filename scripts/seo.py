@@ -1,23 +1,40 @@
 """SEO meta 태그 빌더 (§ 5).
 
-v0.5.4 변경:
+본문 ↔ 메타데이터 분리 원칙 (v0.5.5):
+  description / og_description / twitter_description / og_image 같이 외부에
+  노출되는 메타데이터는 본문이 아니라 author 가 `meta.yaml` 의 `seo:` 블록에
+  명시적으로 작성한 값에서만 가져온다. v0.5.4 까지 있었던 "본문 첫 `<p>` 를
+  description 으로 / 본문 첫 `<img src>` 를 og_image 로" 류의 폴백은 모두 제거.
+
+필드 상태 처리 (모든 Optional[str] 필드 공통):
+  - None      = 키 부재 또는 값 부재 → 해당 메타 태그를 출력하지 않는다.
+  - ''        = 빈 문자열 → 메타 태그 미출력 + Builder 가 BuildReport 에 기록.
+                (seo.py 자체는 빈 문자열을 None 과 동등하게 처리 — 산출물엔
+                노이즈를 보내지 않는다. 리포트는 builder 단에서 채운다.)
+  - 'text'    = 정상값 → 메타 태그 출력.
+
+폴백 정책:
+  - description: author 가 직접 쓴 값만. 본문 폴백 없음.
+  - og_description / twitter_description: 부재 시 description 폴백 (author 가
+    직접 쓴 값을 재사용하므로 본문 추출이 아니다 — author-authored fallback).
+  - og_image: meta.seo.og_image > site.default_og_image. 본문 폴백 없음.
+              SNS / 메신저 미리보기가 og:image 없을 때 본문 첫 이미지를
+              임의로 긁어가는 행동을 SSG 가 빌드 시점에 자동화하는 건 동일
+              하게 무례한 일이라는 판단.
+  - twitter_image: meta.seo.twitter_image > og_image (동일 규칙).
+  - og_title: meta.seo.og_title > full_title.
+  - og_image_alt: meta.seo.og_image_alt > meta.title.
+  - author: meta.seo.author > site.default_author.
+
+빈 태그 정책:
+  속성 값이 비어 있으면 (`<meta name="description" content="">` 같이) 태그
+  자체를 출력하지 않는다. SERP / 카드에 무의미한 노이즈를 보내지 않기 위함.
+
+v0.5.4 잔존 기능:
   - `truncate_description` (구 `_truncate`) 가 영문 단어 경계를 존중. 절단
-    지점이 ASCII alphanumeric/하이픈/언더스코어 시퀀스 한가운데 (= 양쪽 모두
-    Latin 단어 글자) 이면 직전 공백까지 backup. 한국어/한자/일본어 등 CJK
-    는 글자 단위가 의미 단위라 영향 없음 (`isascii()` 통과 못함). 빌더의
-    article_render_meta 캐시 (gallery / feed 가 참조) 도 같은 함수를 import 해서
-    중복 로직 제거.
-
-v0.4.3 변경:
-  - meta.yaml 의 평면 seo_* 필드 → SeoMeta dataclass (`m.seo.*`).
-  - <title> 에 들어가는 full_title 을 builder 가 정상 사용 (이전엔
-    site.name 으로 덮어쓰던 quirk 제거).
-
-v0.4.0 변경:
-  - seo_keywords 필드 제거. <meta name="keywords"> 는 검색엔진 가중치에
-    실효가 없어 1990년대 흔적이라 판단.
-  - 글마다 noindex 를 meta.yaml 에서 켤 수 있음 (article 템플릿이
-    ROBOTS_META placeholder 를 표시).
+    지점이 ASCII alphanumeric/하이픈/언더스코어 시퀀스 한가운데이면 직전
+    공백까지 backup. 한국어/한자/일본어 등 CJK 글자는 글자 단위가 의미 단위
+    이므로 영향 없음 (Latin 단어 검사를 통과 못한다).
 """
 import re
 
@@ -53,12 +70,23 @@ def truncate_description(s: str, max_len: int) -> str:
     return cut.rstrip() + '…'
 
 
-# v0.5.4 이전과 호환되는 내부 이름. seo.py 내부 호출용.
-_truncate = truncate_description
+def _present(val) -> bool:
+    """필드가 '실제 노출할 값을 가진다' 인지. None / 빈 문자열은 False."""
+    return val is not None and val != ''
 
 
 def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:
-    """Returns (meta_tags_html, full_title_str)."""
+    """글의 `<head>` 에 들어갈 메타 태그 HTML 과 full_title 을 반환.
+
+    Returns (meta_tags_html, full_title_str).
+
+    v0.5.5: 본문 폴백 모두 제거. author-authored 값만 사용.
+      - description: m.seo.description (없거나 빈 문자열이면 태그 누락).
+      - og_description / twitter_description: 자기 필드 > description.
+      - og_image: m.seo.og_image > site.default_og_image (둘 다 비면 태그 누락).
+      - og_title: m.seo.og_title > full_title.
+      - twitter_image: m.seo.twitter_image > og_image.
+    """
     m = article.meta
     s = m.seo
 
@@ -66,42 +94,45 @@ def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:
     suffix = s.title_suffix if s.title_suffix is not None else site.default_title_suffix
     full_title = f'{prefix}{m.title}{suffix}'
 
-    desc = s.description
-    if not desc and rr.first_paragraph:
-        desc = _truncate(rr.first_paragraph, site.description_truncate)
+    # description — 본문 폴백 없음. None/빈 문자열이면 태그 누락.
+    desc = s.description if _present(s.description) else None
 
-    canonical = s.canonical or f'{site.base_url}/{m.slug}/'
+    canonical = s.canonical if _present(s.canonical) else f'{site.base_url}/{m.slug}/'
 
-    og_image_raw = s.og_image
-    if not og_image_raw and rr.first_image:
-        og_image_raw = rr.first_image
-    og_image = og_image_raw or site.default_og_image
+    # og_image — 본문 폴백 없음. seo.og_image > site.default_og_image.
+    og_image = s.og_image if _present(s.og_image) else None
+    if og_image is None and _present(site.default_og_image):
+        og_image = site.default_og_image
     if og_image and not og_image.startswith('http'):
         og_image = site.base_url + og_image
 
-    og_title = s.og_title or full_title
-    og_desc = s.og_description or desc or ''
-    og_image_alt = s.og_image_alt or m.title
-    tw_image = s.twitter_image or og_image
+    og_title = s.og_title if _present(s.og_title) else full_title
+
+    # og_desc — seo.og_description > seo.description. 둘 다 부재면 태그 누락.
+    og_desc = s.og_description if _present(s.og_description) else desc
+
+    og_image_alt = s.og_image_alt if _present(s.og_image_alt) else m.title
+
+    tw_image = s.twitter_image if _present(s.twitter_image) else og_image
 
     def e(val):
         return (val or '').replace('&', '&amp;').replace('"', '&quot;')
 
     tags = []
 
-    if desc:
+    if _present(desc):
         tags.append(f'<meta name="description" content="{e(desc)}">')
 
-    author = s.author or site.default_author
-    if author:
+    author = s.author if _present(s.author) else site.default_author
+    if _present(author):
         tags.append(f'<meta name="author" content="{e(author)}">')
 
     tags.append(f'<link rel="canonical" href="{e(canonical)}">')
 
     tags.append(f'<meta property="og:title" content="{e(og_title)}">')
-    if og_desc:
+    if _present(og_desc):
         tags.append(f'<meta property="og:description" content="{e(og_desc)}">')
-    if og_image:
+    if _present(og_image):
         tags.append(f'<meta property="og:image" content="{e(og_image)}">')
         tags.append(f'<meta property="og:image:alt" content="{e(og_image_alt)}">')
     og_type = s.og_type or 'article'
@@ -115,9 +146,9 @@ def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:
     tw_card = s.twitter_card or 'summary_large_image'
     tags.append(f'<meta name="twitter:card" content="{e(tw_card)}">')
     tags.append(f'<meta name="twitter:title" content="{e(og_title)}">')
-    if og_desc:
+    if _present(og_desc):
         tags.append(f'<meta name="twitter:description" content="{e(og_desc)}">')
-    if tw_image:
+    if _present(tw_image):
         tags.append(f'<meta name="twitter:image" content="{e(tw_image)}">')
 
     return '\n    '.join(tags), full_title

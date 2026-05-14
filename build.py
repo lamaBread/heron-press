@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.5.4 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.5.5 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -9,10 +9,34 @@ Usage:
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
     python -m unittest discover -s tests   # BM25 단위 테스트 (v0.5.0)
 
-빌드 의존성 (v0.5.4):
+빌드 의존성 (v0.5.5):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.5.5 변경 사항 (vs v0.5.4):
+  - **본문 ↔ 메타데이터 분리 원칙 도입** (README § 5-1). SEO description /
+    og_image / 갤러리 썸네일 / 피드 summary 가 더 이상 본문 첫 `<p>` / 첫
+    `<img>` 를 폴백 소스로 쓰지 않는다. 모든 외부 노출 메타데이터는 author
+    가 `meta.yaml` 의 `seo:` 블록에 명시한 값만 사용. v0.4.2 로드맵 B-5
+    (description 폴백 범위) 가 *폴백 자체를 제거* 하는 방향으로 해소.
+  - `seo.description` 이 필수 필드로 격상. 부재 / 빈 문자열 시 빌드는
+    완성되지만 미완성 글 리포트에 기록되어 작성자가 보완 — description /
+    og:description / twitter:description / 피드 summary / 갤러리 description
+    이 누락된 채 산출물이 만들어진다.
+  - `og_image` 의 본문 폴백 제거. `meta.seo.og_image` > `site.default_og_image`
+    > 태그 누락. SNS / 메신저 미리보기가 og:image 없을 때 본문 첫 이미지를
+    임의로 긁어가는 행동을 SSG 가 빌드 시점에 자동화하지 않는다.
+  - **빌드 리포트 일원화** (scripts/report.py 신설). 기존의 abort 경로
+    (meta.yaml 파싱 실패 / 필드 누락 / 형식 오류 등) 가 빌드 종료 후 정렬된
+    리포트로 통합. 빌드는 어떤 콘텐츠 결함에도 중단되지 않고 끝까지 완성된다.
+    시스템 결함 (템플릿 누락, Articles/ 없음, Pillow 미설치 등) 만 `abort()`
+    로 즉시 중단.
+  - SeoMeta 의 Optional[str] 필드 의미 확장: `None` (opt-out, 태그 누락),
+    `''` (실수, 태그 누락 + 리포트), 비어있지 않은 str (정상 출력). 빈 문자
+    열을 None 으로 강제 변환하던 동작 폐기.
+  - RenderResult 슬림화: `first_paragraph` / `first_image` 필드 제거. markdown
+    .py 의 `_FIRST_P_RE` / `_FIRST_IMG_RE` 정규식과 추출 로직 일괄 제거.
 
 v0.5.4 변경 사항 (vs v0.5.3):
   - `<head>`의 `<title>` 폴백 체인 (`{prefix}{title}{suffix}`) 이 글에만 적용

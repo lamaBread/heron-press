@@ -4,11 +4,16 @@
   1. preprocess_md_custom_syntax(text) — 사용자 정의 문법(imgBox, 섹션 마커)
                                           → raw HTML / sentinel 주석
   2. Parsedown().text(text) → str — 순수 MD → HTML (parsedown.py)
-  3. finalize_md_html(html, slug, dir) — asset path 재작성, PHP 함수 시뮬레이션,
-                                         first paragraph / image 추출
+  3. finalize_md_html(html, slug, dir) — asset path 재작성, PHP 함수 시뮬레이션
   4. resolve_section_markers(html, title) — sentinel 주석 → 실제 gap/section
                                             마커, 본문을 자동 첫 갭+섹션으로
                                             감싸기. (builder 가 호출)
+
+v0.5.5 변경:
+  - 본문 첫 단락 / 첫 이미지 추출 폐지 (`_FIRST_P_RE`, `_FIRST_IMG_RE` 제거).
+    이전 버전까지는 SEO description / og_image / 갤러리 썸네일 / 피드 summary
+    의 폴백 소스로 사용되었으나, "본문 ↔ 메타데이터 분리 원칙" 도입과 함께
+    폐기. RenderResult 도 `html` 한 필드로 슬림화.
 
 v0.4.3 변경:
   - 섹션 마커 문법 추가 (마크다운 본문 안에서 사용):
@@ -379,28 +384,17 @@ def has_live_php(html: str) -> bool:
 # ════════════════════════════════════════════════════════════════
 # Finalize stage  (parser-agnostic)
 # ════════════════════════════════════════════════════════════════
-
-_FIRST_P_RE = re.compile(r'<p[^>]*>(.*?)</p>', re.DOTALL)
-_FIRST_IMG_RE = re.compile(r'<img\s[^>]*src="([^"]+)"')
+#
+# v0.5.5: 본문 첫 단락 / 첫 이미지 추출 로직 제거. SEO description /
+# og_image / 갤러리 썸네일 / 피드 summary 가 더 이상 본문에서 휴리스틱
+# 추출된 값을 사용하지 않는다 — 모두 author 가 meta.yaml 에 명시한 값만
+# 사용. RenderResult 도 `html` 한 필드로 슬림화.
 
 
 def finalize_md_html(html: str, slug: str, article_dir: Path) -> RenderResult:
     final = rewrite_asset_paths_in_html(html, slug)
     final = simulate_php_in_html(final, slug, article_dir)
-
-    p_match = _FIRST_P_RE.search(final)
-    first_paragraph = ''
-    if p_match:
-        first_paragraph = re.sub(r'<[^>]+>', '', p_match.group(1)).strip()
-
-    img_match = _FIRST_IMG_RE.search(final)
-    first_image = img_match.group(1) if img_match else None
-
-    return RenderResult(
-        html=final,
-        first_paragraph=first_paragraph,
-        first_image=first_image,
-    )
+    return RenderResult(html=final)
 
 
 def render_article_md(text: str, slug: str, article_dir: Path) -> RenderResult:
@@ -413,20 +407,7 @@ def process_html(text: str, slug: str, article_dir: Path) -> RenderResult:
     """content.html 처리: PHP 함수 시뮬레이션 + asset 경로 재작성."""
     text = simulate_php_in_html(text, slug, article_dir)
     text = rewrite_asset_paths_in_html(text, slug)
-
-    p_match = _FIRST_P_RE.search(text)
-    first_paragraph = ''
-    if p_match:
-        first_paragraph = re.sub(r'<[^>]+>', '', p_match.group(1)).strip()
-
-    img_match = _FIRST_IMG_RE.search(text)
-    first_image = img_match.group(1) if img_match else None
-
-    return RenderResult(
-        html=text,
-        first_paragraph=first_paragraph,
-        first_image=first_image,
-    )
+    return RenderResult(html=text)
 
 
 # ════════════════════════════════════════════════════════════════
