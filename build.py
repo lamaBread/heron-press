@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.5.2 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.5.3 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -9,10 +9,27 @@ Usage:
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
     python -m unittest discover -s tests   # BM25 단위 테스트 (v0.5.0)
 
-빌드 의존성 (v0.5.2):
+빌드 의존성 (v0.5.3):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.5.3 변경 사항 (vs v0.5.2):
+  - meta.yaml `tags` 필드 (글 단위 주제어 리스트). 작성자가 직접 적음. inline /
+    block 두 형태 모두 허용. 빈 문자열/중복 자동 제거. 현재는 feed `<category>`
+    에만 사용 — 검색 가중치 / 태그별 색인 페이지 / 관련 글은 미래 의제.
+    카테고리 meta.yaml 에는 의도적으로 두지 않음 (카테고리가 그 자체로 분류 축).
+  - 카테고리/홈 `layout: gallery` (이미지 타일 그리드). CSS Grid 반응형
+    (auto-fill, minmax 220px), 4:3 강제 크롭, modern minimal 톤. 썸네일은
+    seo.og_image > 본문 첫 이미지 > 그라데이션 플레이스홀더. 빌드 시 이미지
+    자동 최적화 (v0.5.1) 와 자동 연동.
+  - RSS / Atom 피드 자동 생성. scripts/feed.py 신설 — Atom 1.0 기반 추상
+    모델 (FeedDocument / FeedEntry) + 두 직렬화 (render_atom / render_rss).
+    dist/feed.atom + dist/feed.rss 두 파일이 같은 entry 목록으로. 홈/카테고리/
+    글 `<head>` 에 `<link rel='alternate'>` 자동 발견 태그.
+  - README §17 한계 표에서 "JS 비활성화 시 페이지 2+ 미표시" 제거 (JS 비활성
+    환경 지원 계획 없음). "`layout: list` 만" 항목은 list/gallery 둘 다 구현된
+    상태로 갱신. 새 항목으로 "`tags` 의 구체적 활용처 없음".
 
 v0.5.2 변경 사항 (vs v0.5.1):
   - 자산 경로 일원화 (글 자산은 글 폴더 안으로). 옛 `dist/src/{slug}/...`

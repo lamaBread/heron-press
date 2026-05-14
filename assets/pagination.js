@@ -1,12 +1,12 @@
-/* siheonlee.com — DOM-based pagination (v0.4.5)
+/* siheonlee.com — DOM-based pagination (v0.4.5, gallery support v0.5.3)
  *
  * 모든 항목은 서버에서 렌더된다 (SEO 친화). 이 스크립트는 클라이언트에서
  * DOM 을 hide/show 만 한다.
  *
  * 마크업 규약:
- *   <section class="paginated" data-pagination-group="<key>" data-per-page="N">
- *       <div class="listup_module_div">...</div>
- *       <div class="listup_module_div">...</div>
+ *   <section class="paginated [listup-gallery]" data-pagination-group="<key>" data-per-page="N">
+ *       <div class="listup_module_div">...</div>     <!-- list layout -->
+ *       <a class="gallery-tile">...</a>              <!-- gallery layout (v0.5.3) -->
  *       ...
  *   </section>
  *   <nav class="pagination-nav" data-pagination-group="<key>" data-total-pages="P">
@@ -18,7 +18,7 @@
  *   </nav>
  *
  * - 같은 페이지 안에 여러 페이지네이션이 공존할 수 있으므로 group key 로 짝짓는다.
- * - 직접 자식인 .listup_module_div 만 페이지 단위로 다룬다 (중첩 안전).
+ * - 직접 자식 중 페이지네이션 대상은 .listup_module_div 또는 .gallery-tile.
  */
 (function () {
     'use strict';
@@ -30,13 +30,20 @@
         item.style.display = 'none';
     }
 
+    function isPaginatedChild(el) {
+        return el.classList && (
+            el.classList.contains('listup_module_div') ||
+            el.classList.contains('gallery-tile')
+        );
+    }
+
     function setupGroup(section, nav) {
         var perPage = parseInt(section.getAttribute('data-per-page') || '0', 10);
         if (!perPage || perPage < 1) return;
 
         var items = Array.prototype.filter.call(
             section.children,
-            function (el) { return el.classList.contains('listup_module_div'); }
+            isPaginatedChild
         );
         if (items.length === 0) return;
 

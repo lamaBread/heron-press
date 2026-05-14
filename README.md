@@ -1,11 +1,11 @@
-# siheonlee.com v0.5.2 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.5.3 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.5.2 한 줄 요약:** **자산 경로 일원화** — 글 자산이 옛 `dist/src/{slug}/` 트리 대신 글의 index.html 과 **같은 폴더** (`dist/{slug}/`) 에 떨어지도록 변경. URL 도 `/src/{slug}/foo.jpg` → `/{slug}/foo.jpg`. "글 폴더 안에서 자료를 둔다" 라는 글 소스 측 원칙과 dist 출력 구조가 일관됩니다. `assets/` 의 역할이 **사이트 어디서든 로드 가능한 전역 자산 보관 장소** 로 명시화 (글 단위 자산은 글 폴더 안, 사이트 공통 자산은 `assets/`). 비-이미지 산출물 (검색 / sitemap / robots / redirect) 은 v0.5.1 과 동등. 자세한 내역과 이전 버전 (v0.5.1 ~ v0.1) 의 변경 사항은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
+> **v0.5.3 한 줄 요약:** 네 갈래. (1) `meta.yaml` 의 `tags` 필드 — 작성자가 직접 적는 주제어 목록 (현재는 파싱만, 검색·관련 글 등 미래 기능을 위한 토대). (2) 카테고리/홈 `layout: gallery` — 이미지 타일 갤러리 레이아웃. modern minimal 톤으로 정교하게 다듬은 CSS. (3) **RSS/Atom 피드 자동 생성** — `dist/feed.atom` (Atom 1.0) + `dist/feed.rss` (RSS 2.0) 두 파일을 같은 entry 목록으로. (4) **§ 17 한계 표의 일괄 정리** — JS 비활성 환경 미지원 / WebP `<picture>` 폴백 / slug ASCII 제약 / layout 의 list·gallery 한정 / 카테고리 meta.yaml 의 위치별 적용 차이 / Apache·PHP 운영 전제 / Parsedown 업데이트 비용 / YAML 파서 자체 구현 — 한계가 아니라 정책·전제이거나 본문에 녹일 항목 8건을 표에서 제거하고 본문 적절한 위치로 옮김 (§ 5 / § 11-3 / § 12 / § 12b / § 15 / § 17 도입부). 자세한 내역과 이전 버전 (v0.5.2 ~ v0.1) 의 변경 사항은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
 
 | 핵심 가치 | 어떻게 보장하는가 |
 |---|---|
@@ -34,7 +34,9 @@
 10. [SEO 설정 레퍼런스](#10-seo-설정-레퍼런스)
 11. [사이트 전역 설정 — site.yaml](#11-사이트-전역-설정--siteyaml)
 12. [마크다운 파서 — Parsedown Python 포팅](#12-마크다운-파서--parsedown-174-python-포팅)
+12b. [YAML 파서 — 의도된 부분집합](#12b-yaml-파서--의도된-부분집합-scriptsyaml_parserpy)
 13. [검색 기능 — search.php](#13-검색-기능--searchphp)
+13b. [RSS / Atom 피드](#13b-rss--atom-피드-v053)
 14. [기존 글 마이그레이션 — scripts/migrate.py](#14-기존-글-마이그레이션--scriptsmigratepy)
 15. [배포 — 서버 업로드와 Apache 설정](#15-배포--서버-업로드와-apache-설정)
 16. [트러블슈팅](#16-트러블슈팅)
@@ -53,7 +55,7 @@
 
 ### 빌드
 
-이 폴더(`siheonlee.com_v0.5.2/`) 에서 터미널을 열고:
+이 폴더(`siheonlee.com_v0.5.3/`) 에서 터미널을 열고:
 
 ```bash
 python build.py
@@ -154,7 +156,7 @@ python -m http.server 8000
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.5.2/
+siheonlee.com_v0.5.3/
 │
 ├── build.py              ← 빌드 진입점 (이것을 실행합니다)
 ├── site.yaml             ← 사이트 전역 설정
@@ -278,6 +280,13 @@ seo:
   twitter_card: summary_large_image
   twitter_image:
 
+# v0.5.3: 글의 주제어 태그. 작성자가 직접 적습니다 (리스트).
+# inline 형태 [a, b, c] 또는 block 형태 (`- a` 단위) 모두 허용.
+# 현재 빌드 산출물에서 직접 쓰이는 곳은 feed.atom / feed.rss 의
+# <category> 뿐이며, 검색·관련 글 등 미래 기능을 위한 토대로 파싱만
+# 됩니다 (값 자체는 자유 — 한국어 다어절 태그도 허용).
+tags: [intro, sample]
+
 # 본문 태그의 CSS 속성을 이 글에서만 override (자세한 내용은 § 4-6)
 styles:
   p:
@@ -327,6 +336,7 @@ slug: search             ← 예약어 (site.yaml 의 reserved_slugs 참조)
 | `updated` | — | 마지막 수정일 (YYYY-MM-DD). `date` 이후여야 함 | `2025-08-30` |
 | `noindex` (v0.4.0) | — | `true` 면 이 글 한 페이지만 `<meta robots noindex>` 부착 → 검색엔진 제외 | `true` |
 | `seo:` (v0.4.3) | — | SEO 관련 필드의 그룹. 모든 하위 키 선택 사항. 아래 표 참조 | (아래 참조) |
+| `tags` (v0.5.3) | — | 글의 주제어 태그 (문자열 리스트). 작성자가 직접 적음. 현재 feed.atom / feed.rss 의 `<category>` 에 포함. 빈 문자열·중복 자동 제거 | `[intro, sample]` |
 | `styles` | — | 본문 태그의 CSS 속성을 이 글에서만 override (§ 4-6) | (아래 참조) |
 
 **`seo:` 하위 키 (v0.4.3 — 모두 선택 사항):**
@@ -774,7 +784,7 @@ Articles/
 |---|---|---|
 | `per_page` | site.yaml `category_per_page` (20) | 이 카테고리의 *자기 인덱스 페이지* 에서 한 페이지에 보여 줄 글 수. |
 | `preview_per_page` | site.yaml `category_preview_per_page` (5) | 이 카테고리가 *상위 카테고리의 인덱스 페이지* 에 section 으로 임베드될 때의 페이지당 글 수. |
-| `layout` | `list` | `list` 만 구현됨. `gallery` 등은 미래 확장용 자리표시. |
+| `layout` | `list` | `list` (텍스트 한 줄) / `gallery` (이미지 타일, v0.5.3) 두 종을 기본 제공. 그 외 값은 빌드 통과 + `list` 로 폴백 — *추가 layout 이 필요하면 빌더 코드 (`_listup_items_html` / `_render_section` / CSS) 에 직접 등록*. |
 | `styles` | 빈 매핑 | 이 카테고리 인덱스 페이지에만 적용할 추가 CSS (글의 `styles:` 와 동일 포맷). |
 | `lang` | site.yaml `lang` | 이 카테고리 인덱스 페이지의 `<html lang>` 오버라이드. |
 
@@ -787,6 +797,33 @@ per_page: 20         # /blog/tutorials/ 자기 페이지 — 페이지당 20개
 preview_per_page: 5  # /blog/ 의 Tutorials section 임베드 시 — 페이지당 5개
 layout: list
 ```
+
+#### `layout: gallery` — 이미지 타일 갤러리 (v0.5.3)
+
+`layout: gallery` 로 두면 그 카테고리의 글 목록이 텍스트 한 줄이 아니라 **이미지 타일** 로 렌더됩니다. 각 타일은 `<a>` 한 개에 썸네일 + 제목 + 날짜를 담고, CSS Grid (`repeat(auto-fill, minmax(220px, 1fr))`) 로 컨테이너 폭에 따라 자동으로 칸 수가 조정됩니다.
+
+```yaml
+# Articles/Blog/Tutorials/meta.yaml
+per_page: 6
+preview_per_page: 4
+layout: gallery
+```
+
+**썸네일 결정 규칙:**
+
+1. 글의 `seo.og_image` 가 있으면 그 값.
+2. 없으면 글 본문의 **첫 이미지** (`<img src=...>`).
+3. 둘 다 없으면 **빈 플레이스홀더** (옅은 그라데이션 배경).
+
+빌드 시 이미지 자동 최적화 (v0.5.1) 와 자연스럽게 연동됩니다 — raster 썸네일이라면 webp 변종 + srcset + `sizes` + `loading="lazy"` 가 자동으로 부착됩니다. 별도 작업 없이 그대로 동작.
+
+**디자인 메모:** modern minimal 톤. 흰 카드 (border-radius 6px) + 4:3 강제 크롭 (`aspect-ratio: 4/3; object-fit: cover`) + subtle hover (`translateY(-2px)` + 0.04 scale + soft shadow). 모바일 (`max-width: 600px`) 에서는 자동으로 2열 그리드로 좁아집니다. 이 톤은 nav-search / pagination 과 일치하도록 의도적으로 맞췄습니다 — 갤러리가 콘텐츠를 압도하지 않게.
+
+**페이지네이션·서브카테고리 임베드 동작:** `list` 와 동일. `per_page` / `preview_per_page` 가 그대로 적용되며, 상위 카테고리에 section 으로 임베드될 때도 그 자식 카테고리의 `layout` 을 따릅니다 (Tutorials 가 gallery 면 Blog 페이지의 Tutorials section 도 gallery).
+
+#### layout 을 더 늘리고 싶다면 (직접 등록)
+
+기본 제공 `list` / `gallery` 두 종으로 일반 사용은 충분하다는 판단입니다. 표 형식·카드형 텍스트·매거진 그리드 등 다른 layout 이 필요하면 빌더 코드에 직접 등록하세요 — 핵심 진입점은 [scripts/builder.py](scripts/builder.py) 의 `_listup_items_html(..., layout=)` / `_render_section(..., layout=)` 분기와 새 타일 렌더 함수 (`_gallery_tile_html` 와 같은 형태) 추가, 그리고 [assets/common_template.css](assets/common_template.css) 의 `section.listup-{layout}` 와 짝이 되는 CSS 입니다. pagination.js 의 selector (`.listup-list > *, .gallery-tile`) 에도 새 타일 selector 를 추가하면 페이지네이션이 자동 동작합니다.
 
 ---
 
@@ -914,24 +951,25 @@ dist/
 ├── 404.html                         ← 404 에러 페이지 (Apache 가 라우팅)
 ├── robots.txt                       ← 검색엔진 크롤 정책 (Sitemap 디렉티브 포함, v0.4.4)
 ├── sitemap.xml                      ← 사이트맵 (v0.4.4)
+├── feed.atom                        ← Atom 1.0 피드 (v0.5.3)
+├── feed.rss                         ← RSS 2.0 피드 (v0.5.3)
 │
-├── assets/
+├── assets/                          ← 사이트 공용 자원 (전역)
 │   ├── common_template.css          ← 공용 스타일시트
 │   ├── imgslidebox.js               ← 슬라이드 이미지 스크립트
+│   ├── pagination.js                ← 페이지네이션 스크립트 (v0.4.5)
 │   └── default-og.png               ← 기본 OG 이미지 (직접 추가 필요)
 │
-├── src/                             ← 글별 첨부 파일
-│   └── {slug}/                      ← 글의 slug 이름으로 된 폴더
-│       └── imgs/ ...                ← 글 폴더의 파일이 그대로 복사됨
-│
-├── {slug}/                          ← 글 페이지
-│   └── index.html  (또는 index.php) ← PHP 토큰이 있으면 .php
+├── {slug}/                          ← 글 페이지 + 글의 자산 (v0.5.2 부터 같은 폴더)
+│   ├── index.html  (또는 index.php) ← PHP 토큰이 있으면 .php
+│   └── imgs/ ...                    ← 글 폴더의 자산이 글 페이지 옆에 동거
 │
 ├── blog/                            ← 카테고리 색인 페이지
-│   └── index.html
+│   ├── index.html
+│   └── tutorials/                   ← 서브카테고리 색인 (v0.4.5)
+│       └── index.html
 │
-└── project/
-    └── index.html
+└── search.php / search-index.json   ← 검색 (v0.3.1)
 ```
 
 ### dist-legacy/ 구조 (lama.pe.kr 에 배포)
@@ -1270,7 +1308,9 @@ images:
 
 ### 11-3. Articles/meta.yaml — 메인페이지 (= 홈) 전용 설정 (v0.4.6)
 
-메인페이지 (사이트 루트) 의 카테고리-격 설정 파일입니다. 카테고리 폴더의 meta.yaml 과 동일 스키마 — 빌더는 이 둘을 같은 코드 경로 (`_parse_category_meta_file`) 로 파싱합니다. 단 일부 필드는 루트라는 위치 때문에 적용 대상이 없습니다.
+메인페이지 (사이트 루트) 의 카테고리-격 설정 파일입니다. 카테고리 폴더의 meta.yaml 과 동일 스키마 — 빌더는 이 둘을 같은 코드 경로 (`_parse_category_meta_file`) 로 파싱합니다. 단 같은 스키마를 두 위치가 공유하다 보니 *위치 때문에 의미가 없어지는 필드* 가 있습니다 — `preview_per_page` 는 홈이 어디에도 임베드되지 않으므로 적용 대상이 없고, `priority` 도 홈이 톱레벨 카테고리들과 같은 페이지에 함께 표시되지 않아 무시됩니다. 이 비대칭은 의도된 설계 (한 스키마를 공유) 이며 잘못된 값을 적어도 빌드는 통과합니다.
+
+같은 비대칭이 카테고리 meta.yaml 에도 한 갈래 더 있습니다 — `preview_per_page` 는 *톱레벨 카테고리* 에는 사실상 의미가 없습니다 (상위가 없어 어디에도 임베드되지 않으므로). 서브카테고리에서만 실제 효과가 나타납니다.
 
 ```yaml
 # 메인페이지 Recent posts 의 페이지당 글 수.
@@ -1283,7 +1323,8 @@ per_page: 5
 # home_excludes_categories.)
 excludes_categories: [About]
 
-# 'list' (기본) / 'gallery' / 향후 확장. 현재 메인페이지는 'list' 만 지원.
+# 'list' (기본) / 'gallery'. v0.5.3 부터 메인페이지도 gallery 지원
+# (썸네일 규칙·반응형 동작 모두 카테고리와 동일 — § 5 의 layout: gallery 절 참조).
 layout: list
 
 # 메인페이지의 <html lang> 오버라이드 (비우면 site.yaml 의 lang).
@@ -1356,9 +1397,21 @@ PHP 와 Python 의 정규표현식 의미 차이로 인해, 같은 패턴을 그
 | `++` / `*+` possessive | PCRE 지원 | `+`/`*` 로 대체 (실제 입력에서 catastrophic backtracking 미발생) |
 | `htmlspecialchars` single quote | `&#039;` | `_escape()` 가 동일하게 `&#039;` 출력 |
 
-### Parsedown 업데이트
+### 운영 정책 — Parsedown 1.7.4 의 포크
 
-원본 Parsedown 이 새 버전을 내면 [scripts/parsedown.py](scripts/parsedown.py) 의 메서드를 직접 갱신해야 합니다. v0.4.0 의 "Parsedown.php 만 교체" 방식보다 비용이 높은 대신, 빌드 PHP 의존이 사라진 이득을 얻습니다. 포팅의 충실성을 유지하기 위해 메서드명·dispatch 구조·dict 키를 원본과 동일하게 두는 규칙을 지키세요.
+[scripts/parsedown.py](scripts/parsedown.py) 는 **Parsedown 1.7.4 의 포크 (Python 포팅)** 로서 운영합니다. 앞으로의 모든 수정·기능 추가는 이 포팅 위에서 직접 진행하며 원본 Parsedown 의 신버전 업데이트를 따라가지 않습니다. 메서드명·dispatch 구조·dict 키를 원본 1.7.4 와 동일하게 둔 것은 출시 시점의 패리티 검증 (위 절) 을 가능하게 하기 위함이지, 미래의 동기화를 전제로 하지 않습니다. 따라서 "원본 업데이트가 나오면 무엇을 해야 하나" 라는 질문 자체가 이 시스템에서는 해당되지 않습니다 — 필요한 마크다운 처리는 이 포팅에 직접 추가합니다.
+
+---
+
+## 12b. YAML 파서 — 의도된 부분집합 ([scripts/yaml_parser.py](scripts/yaml_parser.py))
+
+site.yaml / 각종 meta.yaml 을 읽는 파서는 자체 구현입니다. *이 프로젝트에서 실제 사용하는 YAML 문법의 부분집합* 만 지원하며, 그 외는 의도적으로 구현하지 않습니다.
+
+**지원:** 평면 key-value, nested mapping (들여쓰기 기반), block-style list (`- a`), inline list (`[a, b]`), 따옴표 문자열 (`'...'` / `"..."`), 정수·진릿값·null, `#` 주석 (라인 단위 — 즉 라인 첫 비공백이 `#` 일 때만).
+
+**미지원 (의도):** anchor / alias (`&` / `*`), folded scalar (`>`), block scalar (`|`) 의 chomping 변형, flow-style mapping (`{...}`), 인라인 주석 (`key: val # comment` 의 `#` 이 value 의 일부로 빨려 들어감), multi-document (`---` 구분).
+
+**PyYAML 도입 계획 없음.** v0.4.1 단계의 "검토 보류" 가 v0.5.x 들어서 정책으로 굳어졌습니다 — 도입하지 않습니다. 이 시스템의 YAML 사용 면적은 시스템 자체와 함께 진화하므로, 부분집합으로 충분하고 외부 의존성 부담을 만들 가치가 없다는 판단입니다. 새 문법이 필요해지면 이 파서에 직접 추가합니다.
 
 ---
 
@@ -1582,6 +1635,44 @@ dist/
 
 ---
 
+## 13b. RSS / Atom 피드 (v0.5.3)
+
+빌드 시 `dist/feed.atom` (Atom 1.0) 과 `dist/feed.rss` (RSS 2.0) 두 파일이 같은 entry 목록으로 생성됩니다. 추상 모델은 [scripts/feed.py](scripts/feed.py) 의 `FeedDocument` / `FeedEntry` dataclass — Atom 1.0 이 RSS 2.0 의 사실상 슈퍼셋이라 한 모델에서 두 직렬화 (`render_atom` / `render_rss`) 를 동시에 만듭니다.
+
+### 포함 정책
+
+- non-noindex 글만. 글 meta.yaml 의 `noindex: true` 는 sitemap 과 동일하게 제외.
+- `Articles/meta.yaml` 의 `excludes_categories` (= 홈 Recent posts 에서 빠지는 카테고리) 도 피드에서 제외. About 처럼 정적 페이지가 RSS 구독자에게 노출되는 사고를 막습니다.
+- 최신 N 개 (기본 20, `scripts/feed.py` 의 `DEFAULT_MAX_ENTRIES`).
+- 정렬은 `updated` (없으면 `date`) 내림차순, 동순위는 slug 알파벳.
+
+### entry 내용
+
+| Atom | RSS | 출처 |
+|---|---|---|
+| `<title>` | `<title>` | 글 meta.yaml 의 `title` |
+| `<link rel="alternate" href=>` | `<link>` | `https://siheonlee.com/{slug}/` |
+| `<id>` | `<guid isPermaLink="true">` | 글의 절대 URL (= 영구 식별자) |
+| `<published>` | `<pubDate>` | meta.yaml 의 `date` |
+| `<updated>` | (없음) | meta.yaml 의 `updated` (없으면 `date`) |
+| `<summary>` | `<description>` | seo.description > 본문 첫 단락. site.yaml 의 `description_truncate` 적용. |
+| `<author>` | (생략) | seo.author > site.default_author. RSS 의 `<author>` 는 email 형식 강제라 dc:creator 없이는 표현 한계 — 생략. |
+| `<category term=>` | `<category>` | 톱레벨 카테고리 폴더명 + 글의 `tags` (v0.5.3). 중복 제거. |
+
+### 자동 발견 (`<link rel="alternate">`)
+
+홈/카테고리/글 페이지 `<head>` 에 두 피드의 `<link rel='alternate' type='application/atom+xml'>` / `<link rel='alternate' type='application/rss+xml'>` 가 삽입됩니다. 모던 브라우저와 RSS 리더 (Feedly, Inoreader 등) 가 페이지 URL 만으로 자동 발견합니다.
+
+### 날짜 정책
+
+meta.yaml 의 `date` / `updated` 는 YYYY-MM-DD 만 — 시각 정보가 없습니다. 직렬화 시 모두 `00:00:00 UTC` 로 통일합니다 (Atom 은 ISO 8601 `T00:00:00Z`, RSS 는 RFC 822 `Wed, 14 May 2026 00:00:00 +0000`). 같은 입력 → 같은 출력 = 결정성 보장. 피드 자체의 `updated` / `lastBuildDate` 도 빌드 시각이 아니라 entry 중 가장 최신 lastmod 를 사용하므로, 콘텐츠 변경 없이는 매 빌드마다 같은 바이트가 출력됩니다.
+
+### 비활성화
+
+[scripts/builder.py](scripts/builder.py) 의 `build()` 메서드에서 `self._build_feeds()` 한 줄을 주석 처리하면 됩니다. 두 파일이 이미 dist 에 있으면 다음 `--clean` 빌드에서 사라집니다 (또는 수동 삭제). 별도 site.yaml 토글은 없음 — 추가 의제.
+
+---
+
 ## 14. 기존 글 마이그레이션 — scripts/migrate.py
 
 기존 `lama_website-main` 의 PHP 기반 글을 이 시스템으로 옮기는 **일회성 작업** 을 돕는 스크립트입니다. v0.4.0 부터 `scripts/migrate.py` 로 이동했습니다.
@@ -1637,7 +1728,7 @@ python scripts/migrate.py --dry-run
 
 빌드 후 생성된 폴더를 서버에 올리고, Apache VirtualHost 를 한 번 등록하면 끝입니다. 이후 글을 추가/삭제해도 서버 설정은 건드릴 필요가 없습니다.
 
-이 시스템은 `.htaccess` 파일을 사용하지 않습니다. 모든 서버 규칙은 Apache 메인 설정(VirtualHost 또는 httpd.conf) 에 등록합니다.
+이 시스템은 `.htaccess` 파일을 사용하지 않습니다. 모든 서버 규칙은 Apache 메인 설정(VirtualHost 또는 httpd.conf) 에 등록합니다 — 이것이 설계 의도이므로 공유 호스팅에서 메인 설정 접근이 안 되면 호스팅 사업자에게 등록을 요청해야 합니다.
 
 ### 15-1. siheonlee.com (신규 도메인)
 
@@ -1733,7 +1824,7 @@ rsync -avz dist-legacy/ user@lama.pe.kr:/var/www/lama.pe.kr/
 
 > **(v0.4.1)** 빌드 머신에는 PHP 가 필요하지 않습니다. 마크다운 파서가 순수 Python 으로 포팅되었기 때문입니다. PHP CLI 가 있으면 빌드 시 토크나이저 패리티 검증이 자동 실행되고, 없으면 워닝과 함께 검증을 건너뜁니다.
 >
-> **배포 서버** 는 v0.4.0 과 동일하게 PHP 모듈이 필요합니다 — 검색 엔드포인트 (`search.php`) 와 구 도메인 리다이렉트 (`dist-legacy/redirect.php`) 가 런타임 PHP 를 사용하기 때문입니다. 또한 글에 처리되지 않은 `<?php` 가 남아 `.php` 로 출력되는 경우도 배포 서버 PHP 가 필요합니다.
+> **배포 서버** 는 v0.4.0 과 동일하게 **PHP 7.4+ 와 mbstring 확장** 이 필요합니다 — 검색 엔드포인트 (`search.php`) 와 구 도메인 리다이렉트 (`dist-legacy/redirect.php`) 가 런타임 PHP 를 사용하기 때문입니다. 또한 글에 처리되지 않은 `<?php` 가 남아 `.php` 로 출력되는 경우도 배포 서버 PHP 가 필요합니다. PHP 와 Apache 메인 설정 접근은 이 시스템의 **기본 동작 환경** 입니다 (한계가 아니라 전제).
 
 ### 15-4. 배포 검증 체크리스트
 
@@ -1775,7 +1866,7 @@ python -m http.server 8000
 [WARN] PHP not available — skipping tokenizer parity test.
 ```
 
-배포 서버에는 여전히 PHP 가 필요합니다 (search.php, redirect.php 가 런타임 PHP). 자세한 내용은 § 14-3 참조.
+배포 서버에는 여전히 PHP 가 필요합니다 (search.php, redirect.php 가 런타임 PHP). 자세한 내용은 § 15-3 참조.
 
 ### Q: meta.yaml 에 styles 를 썼는데 적용이 안 됩니다.
 
@@ -1846,29 +1937,19 @@ python build.py --clean
 
 9. **단일 진실원의 토크나이저 (v0.4.0)** — Python/PHP 양쪽 토크나이저의 동등성을 빌드마다 fixture 패리티 테스트로 자동 검증.
 
-### 현재 버전(v0.5.2) 의 한계
+### 현재 버전(v0.5.3) 의 한계
 
-> v0.5.2 에서 자산 경로가 일원화되어 (글 자산이 글 폴더 안으로) v0.1 이래의 `/src/...` 자산 트리가 사라졌습니다. v0.5.1 의 이미지 자동 최적화 + lazy loading 도 그대로 유효합니다. 아래 표는 v0.5.2 시점에 여전히 유효한 한계만 모았습니다.
+> 아래 표는 v0.5.3 시점에 여전히 유효한 한계만 모았습니다. 다음 항목들은 한계가 아니므로 표에서 제거되고 본문의 적절한 위치로 옮겨졌습니다 — **JS 비활성 환경 미지원** (시스템 정책 — 지원 계획 없음, v0.5.3), **WebP 폴백 `<picture>` 미제공** (최신 브라우저 99%+ 가 WebP 지원 — 정책적 선택, 도입 계획 없음), **글/카테고리 slug 의 ASCII 제약** (DNS 자체가 ASCII 만 지원 — 한계가 아니라 외려 hex 변환으로 한국어 폴더명까지 *워닝 + 빌드 통과* 로 허용하는 적극적 수용, § 5 참조), **`layout` 의 추가 옵션 부재** (`list` / `gallery` 면 일반 사용에 충분 — 더 필요하면 빌더에 직접 등록, § 5 의 메모), **카테고리 meta.yaml 의 위치별 적용 차이** (같은 스키마를 두 위치가 공유하기 위한 의도된 비대칭 — § 5 / § 11-3 본문 참조), **Apache 메인 설정 접근 / 배포 서버 PHP 전제** (시스템의 기본 동작 환경 — § 15 참조), **Parsedown 업데이트 비용 / YAML 파서 자체 구현** (정책적 포크 + 의도된 부분집합 — § 12 / § 12b 참조).
 
 | 한계 | 내용 |
 |---|---|
-| 태그 없음 | meta.yaml 에 tags 필드가 없습니다. 분류 축은 카테고리 하나뿐. |
-| RSS 없음 | RSS/Atom 피드가 없습니다. (sitemap.xml 은 v0.4.4 부터 자동 생성 — § 18 의 v0.4.4 참조.) |
-| layout 은 `list` 만 구현 (v0.4.5) | 카테고리/홈 meta.yaml 의 `layout:` 필드는 `list` 외의 값 (`gallery` 등) 이 와도 빌드는 통과하되 'list' 로 폴백합니다. 갤러리·카드 등 다른 레이아웃은 미래 의제. |
-| JS 비활성화 시 페이지 2+ 미표시 (v0.4.6) | 페이지네이션이 부착된 section 의 비활성 페이지 항목은 SSR 시점에 inline `style='display:none'` 으로 부착됩니다 (FOUC 제거 목적). 그래서 JS 가 비활성화된 환경에서는 첫 페이지만 보이고 페이지 2 이후 항목은 표시되지 않습니다. 콘텐츠 자체는 글 URL 직접 접근으로 접근 가능. `<noscript>` fallback 은 별도 의제. |
+| `tags` 의 구체적 활용처 없음 (v0.5.3) | meta.yaml 의 `tags` 필드는 v0.5.3 부터 파싱되지만 빌드 산출물에서 직접 사용되는 곳은 RSS/Atom 의 `<category>` 뿐. 태그별 색인 페이지, 검색 가중치, 관련 글 등은 미래 의제. |
 | `<head>` 의 `<title>` 폴백 체인이 글에만 적용 (v0.4.3) | 글 페이지는 `{seo.title_prefix}{title}{seo.title_suffix}` 로 정상 출력되지만, 홈·카테고리·404·search 페이지는 모두 `site.name` 한 값 — 페이지마다 다른 `<title>` 이 필요하면 템플릿에 변수를 추가해야 함. |
 | description 폴백이 본문 전체에서 첫 `<p>` 검색 | `_FIRST_P_RE` 가 본문 첫 `<p>` 를 찾는데, 빌더가 본문을 `<div class='gap'><p>제목</p></div>` + `<section>…</section>` 로 감싸므로 결과적으로 갭 박스 안의 글 제목이 description 으로 빨릴 수 있습니다. `seo.description` 을 명시하면 덮어쓰이지만 폴백 시 SEO 신뢰도 손해 — 차기 의제. |
 | description_truncate 가 단어 경계 무시 | 150자 절단이 영어 단어 중간을 자를 수 있음. 한국어/영어 혼용이라 영향은 작지만 SEO 디테일 — 차기 의제. |
 | styles 의 @-rule 미지원 | `@media`, `@keyframes`, `@font-face`, `@supports`, `@import` 등 모든 at-rule 은 inject 안 됨 — [scripts/markdown.py](scripts/markdown.py) 의 `render_article_styles` 가 평면 `selector { decls }` 규칙만 직렬화. content.html 의 인라인 `<style>` 로 회피. |
 | 이미지 최적화는 정적 단일 프레임만 (v0.5.1) | animated GIF 는 첫 프레임만 WebP 로 인코딩되어 애니메이션이 사라집니다. 애니메이션을 보존하려면 그 글의 첨부를 webp 로 직접 만들거나, `<img>` 의 src 를 외부 URL 로 두면 후처리에서 src 가 변경되지 않습니다. 한 글 / 한 이미지에 대해서만 최적화를 끄는 옵션은 아직 없음 (사이트 전역 토글만). |
-| WebP 폴백 (`<picture>`) 미제공 (v0.5.1) | 출력이 `<img src="*.webp">` 단일 — IE11 및 구버전 Safari (< 14) 는 깨진 이미지로 표시. siheonlee.com 의 실제 트래픽 대상은 최신 브라우저 99%+ 라 단순 정책 선택. 폴백이 필요하면 차기에서 `<picture>` 옵션 도입 의제. |
-| 글/카테고리 slug ASCII 만 허용 | 글 slug 정규식은 `^[a-z0-9][a-z0-9-]*[a-z0-9]$` (영소문자·숫자·하이픈). 카테고리 폴더가 한국어 등 비ASCII 면 hex 코드포인트로 자동 변환 + 워닝 (`블로그` → `/be94-b85c-adf8/`). 가독성 위해 ASCII 폴더명 권장. |
-| 카테고리 meta.yaml 의 일부 필드는 위치별로 적용 대상 다름 (v0.4.5/v0.4.6) | `preview_per_page` 는 톱레벨 카테고리에는 사실상 의미 없음 (상위가 없으므로). `priority` / `preview_per_page` 는 `Articles/meta.yaml` (홈) 에선 적용 대상 없음. 같은 스키마를 두 위치가 공유하기 위한 의도된 비대칭이며 잘못된 값을 넣어도 빌드는 통과. |
 | 톱레벨 nav 의 `About` 정렬 고정 (v0.4.6) | 톱레벨 nav 링크는 `About` 이 최상단 고정이고, 나머지는 (priority 내림차순, folder_name 오름차순) 입니다. About 의 위치를 priority 로 조절할 수 없음 — 원본 lama 의 nav 동선 보존이 의도. |
-| Apache 메인 설정 접근 필요 | `.htaccess` 가 없는 게 설계 의도이므로 공유 호스팅에서 메인 설정 접근이 안 되면 호스팅 사업자에게 요청해야 함. |
-| 배포 서버 PHP 전제 | 검색·리다이렉트가 PHP — 배포 서버에 PHP 7.4+ 와 mbstring 확장 필요 (§ 15-3). v0.4.1 부터 *빌드 머신* 의 PHP 의존은 사라져 PHP 부재 시 토크나이저 패리티 검증만 자동으로 건너뜀. |
-| Parsedown 업데이트 비용 | 원본 Parsedown 신버전이 나오면 [scripts/parsedown.py](scripts/parsedown.py) 의 해당 메서드를 수동 동기화해야 함 — v0.3.x ~ v0.4.0 의 "Parsedown.php 만 교체" 보다 비용 증가. |
-| YAML 파서 자체 구현 | [scripts/yaml_parser.py](scripts/yaml_parser.py) 는 이 프로젝트에서 실제 쓰는 문법 부분집합만 지원 — anchor/alias (`&`/`*`), folded scalar (`>`), flow-style mapping (`{...}`), 인라인 주석 (`key: val # comment` 의 주석이 value 로 빨려 들어감) 등은 미지원. PyYAML 도입 검토는 v0.4.1 단계에서 보류 — v0.5.0 재검토 의제. |
 | 빌드 증분 캐싱 없음 | 매 빌드마다 전체 글 재렌더 + 검색 인덱스 재구축. 글 자원만 mtime 기준 skip ([builder.py](scripts/builder.py) 의 `_copy_if_newer`) 이며 그 외 캐시 없음. 글 ≤ 수십 건 규모에선 무시 가능. |
 | 테스트 부분적 (v0.5.0) | `tests/test_bm25.py` 에 BM25 알고리즘 (IDF / TF 포화 / 길이 정규화 / 필드 가중치 / phrase 부스트 / 인덱스 빌더 통계 / v0.4.x 회귀 가드) 단위 테스트 25개. 빌더·마크다운 파서·SEO·sitemap 등 그 외 모듈은 여전히 단위 테스트 없음. Parsedown 포팅의 PHP↔Python 동등성도 재현 가능 트리에 동봉되지 않음 (§ 12 참조). 추가 의제. |
 | 정적 검색 인덱스 본문 포함 | search-index.json 에 모든 글의 평문 본문 전체가 들어 매 검색 요청마다 PHP 가 통째 로드 (스니펫 추출용). v0.5.0 의 BM25 통계 (df / dl / avgdl) 가 추가되어 v0.4.x 대비 ~15% 정도 크기가 증가. 글이 매우 많아지면 인덱스 본문 분리·카테고리별 분할·SQLite 이주 검토. |
@@ -1877,11 +1958,12 @@ python build.py --clean
 
 ## 18. 업데이트 로그
 
-열세 버전의 차이를 한눈에:
+열네 버전의 차이를 한눈에:
 
-| 버전 | 시스템 정체성 | 검색 랭킹 | 출력 UI/UX | 글 `<title>` | 마크다운 본문 구조 | 색인 정책 | sitemap.xml | 마크다운 파서 | meta.yaml 필드 | 검색 토크나이저 | 빌드 검증 | 레거시 dispatcher | PHP 함수 시뮬레이션 | 카테고리 한국어 폴더 | 빌드 모듈 구조 | 외부 의존성 |
+| 버전 | 시스템 정체성 | 검색 랭킹 | 출력 UI/UX | 글 `<title>` | 마크다운 본문 구조 | 색인 정책 | sitemap.xml / 피드 | 마크다운 파서 | meta.yaml 필드 | 검색 토크나이저 | 빌드 검증 | 레거시 dispatcher | PHP 함수 시뮬레이션 | 카테고리 한국어 폴더 | 빌드 모듈 구조 | 외부 의존성 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **v0.5.2 (현재)** | (동일) | (동일) | + **글 자산 URL `/src/{slug}/...` → `/{slug}/...` (자산 경로 일원화 — 글 자산이 글 index.html 과 같은 폴더로). 페이지 HTML 구조·렌더링·CSS·JS·페이지네이션 모두 (동일)** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **`reserved_slugs` 에서 `src` 제거 (assets/search 만 남음). builder.py 의 asset 출력 경로 + markdown.py 의 rewrite_asset_path / imgBox / imgSlideBox URL 스킴 일괄 변경.** | (동일) |
+| **v0.5.3 (현재)** | (동일) | (동일) | + **카테고리/홈 `layout: gallery` (이미지 타일 그리드 — modern minimal, 4:3 강제 크롭, hover 효과, 반응형 2/N 칸). list 와 gallery 가 페이지네이션·임베드 동작 동일** | (동일) | (동일) | (동일) | + **`dist/feed.atom` (Atom 1.0) + `dist/feed.rss` (RSS 2.0) 자동 생성 (최신 20 글, noindex/excludes_categories 존중). 홈/카테고리/글 `<head>` 에 `<link rel='alternate'>` 자동 발견 태그** | (동일) | + **`tags:` 필드 (리스트, 선택). 작성자가 직접 적는 주제어. 현재는 feed `<category>` 에만 사용. 검색·관련 글 등은 미래 의제** | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/feed.py — Atom 1.0 기반 추상 모델 + 두 직렬화** | (동일) |
+| **v0.5.2** | (동일) | (동일) | + **글 자산 URL `/src/{slug}/...` → `/{slug}/...` (자산 경로 일원화 — 글 자산이 글 index.html 과 같은 폴더로). 페이지 HTML 구조·렌더링·CSS·JS·페이지네이션 모두 (동일)** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **`reserved_slugs` 에서 `src` 제거 (assets/search 만 남음). builder.py 의 asset 출력 경로 + markdown.py 의 rewrite_asset_path / imgBox / imgSlideBox URL 스킴 일괄 변경.** | (동일) |
 | **v0.5.1** | (동일) | (동일) | + **모든 `<img>` 에 WebP src + srcset (다중 해상도) + sizes + `loading="lazy"` 자동 부착. raster 원본 (.jpg .png .gif) 은 dist 에서 제거되고 `{stem}-{w}.webp` 변종만 남음** | (동일) | (동일) | (동일) | (동일) | (동일) | + **`images:` 블록 (site.yaml — enabled/widths/max_width/quality/lazy_loading/default_sizes)** | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/images.py** | + **Pillow (이미지 최적화 — `images.enabled=false` 로 끄면 stdlib 만으로 빌드 가능)** |
 | **v0.5.0** | (동일) | **Okapi BM25 + 필드 가중치 (body/title 독립 k1·b, w_title=3.0) + phrase 부스트 (×1.5/×2.0) + 매치 밀도 스니펫. 인덱스 v3 (df/dl/avgdl). tests/test_bm25.py 신설.** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **tests/ 단위 테스트** | (동일) | (동일) | (동일) | + **templates/search_bm25.php / tests/test_bm25.py** | (동일) |
 | **v0.4.7** | (동일) | 단순 TF 합산 + 매직 ×5 제목 부스트. 인덱스 v2 | (동일 — dist 바이트 동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) |
@@ -1897,6 +1979,45 @@ python build.py --clean
 | **v0.3** | "SSG" | — | 원본 + 글마다 스타일 오버라이드 가능 | (동일) | (동일) | (동일) | 없음 | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | + **`styles:`** | — | (동일) | (동일) | (동일) | _meta.yaml 슬러그 오버라이드 | 단일 build.py | Python 3 + (parsedown 시) PHP CLI |
 | **v0.2** | "SSG" | — | 원본 `lama_website-main` 와 동일 | (동일) | (동일) | 전역 noindex (원본 보존) | 없음 | (동일) | (동일) | — | (동일) | (동일) | imgBox/imgSlideBox | — | 단일 build.py | (동일) |
 | **v0.1** | "SSG" | — | v0.1 자체 디자인 | 원본 quirk: 항상 site.name | 자동 단일 갭+섹션 wrap | 전역 noindex | 없음 | Python stdlib 자체 파서 | slug, title, date, seo_* | — | slug 정규식, 날짜 형식, slug 중복 | 도메인 하드코딩 | — | — | 단일 build.py | Python 3 |
+
+### v0.5.3 (2026-05-14) — `tags` 필드 + `layout: gallery` + RSS/Atom 피드
+
+네 갈래 변경. 한 줄 요약은 README 서두 인용구 참조. 모든 변경이 *글 측 작업 의무 없음* — 옛 글의 meta.yaml 을 변경하지 않아도 v0.5.3 빌드가 정상 통과합니다.
+
+| 변경 | 내용 |
+|---|---|
+| meta.yaml `tags:` 필드 | 글 단위 주제어 목록 (리스트). 작성자가 직접 적습니다. inline `[a, b, c]` / block `- a` 둘 다 허용. 빈 문자열·중복은 자동 제거 (순서 보존). 카테고리 meta.yaml 에는 의도적으로 두지 않음 — 카테고리가 그 자체로 분류 축이라 tags 와 개념 중복. 현재 빌드 산출물에서 직접 쓰이는 곳은 feed.atom / feed.rss 의 `<category>` 뿐이며, 검색 가중치 / 태그별 색인 페이지 / 관련 글 등은 미래 의제. 모델 변경은 [scripts/models.py](scripts/models.py) 의 `ArticleMeta.tags`, 파싱은 [scripts/builder.py](scripts/builder.py) 의 `_parse_frontmatter`. |
+| 카테고리/홈 `layout: gallery` | meta.yaml 의 `layout: gallery` 로 그 카테고리 색인 페이지의 글 목록을 텍스트 한 줄이 아니라 이미지 타일 그리드로 렌더. CSS Grid (`repeat(auto-fill, minmax(220px, 1fr))`) 로 컨테이너 폭에 따라 자동 칸 수 조정. 모바일 (`max-width: 600px`) 에선 자동으로 2열 폴백. 톤은 nav-search / pagination 과 일치하는 modern minimal — 흰 카드 (border-radius 6px) + 4:3 강제 크롭 (`aspect-ratio` + `object-fit: cover`) + subtle hover (`translateY(-2px)` + 0.04 scale + soft shadow). 썸네일 결정 규칙: `seo.og_image` > 본문 첫 이미지 > 옅은 그라데이션 플레이스홀더. 빌드 시 이미지 자동 최적화 (v0.5.1) 와 자동 연동 — raster 썸네일은 webp 변종 + srcset + sizes + `loading="lazy"` 가 자동 부착. 상위 카테고리에 임베드된 section 도 자식의 `layout` 을 따름. CSS 추가는 [assets/common_template.css](assets/common_template.css), 빌더 변경은 `_gallery_tile_html` / `_listup_items_html(..., layout=)` / `_render_section(..., layout=)`. pagination.js 는 `.gallery-tile` 도 페이지네이션 대상으로 인식하도록 확장. |
+| RSS / Atom 피드 자동 생성 | `dist/feed.atom` (Atom 1.0) 과 `dist/feed.rss` (RSS 2.0) 두 파일이 같은 entry 목록으로 생성. 추상 모델은 [scripts/feed.py](scripts/feed.py) 의 `FeedDocument` / `FeedEntry` dataclass — Atom 이 RSS 의 사실상 슈퍼셋이라 한 모델에서 두 직렬화 (`render_atom` / `render_rss`) 를 동시에 만든다. 포함 정책: non-noindex + 홈 `excludes_categories` 제외 + 최신 20 글 (`DEFAULT_MAX_ENTRIES`). 정렬은 `updated` (없으면 `date`) 내림차순. 날짜는 시각 정보가 없으니 모두 `00:00:00 UTC` (Atom: ISO 8601, RSS: RFC 822). 피드 자체의 `updated` 도 entry 중 가장 최신 lastmod 라 빌드 시각이 산출물에 새지 않음 = 결정성 보장. entry 의 `<category>` 는 톱레벨 카테고리 폴더명 + 글 `tags` 합집합 (중복 제거). 홈/카테고리/글 `<head>` 에 `<link rel='alternate' type='application/atom+xml'>` / `<link rel='alternate' type='application/rss+xml'>` 자동 발견 태그 삽입. 자세한 사양은 § 13b. |
+| README 한계 표 정리 | 한계가 아닌 항목들을 표에서 일괄 제거하고 본문의 적절한 위치로 이동. ❶ **JS 비활성 환경 미지원** — 시스템 정책 (지원 계획 없음), v0.4.6 호환성 노트의 `<noscript>` fallback 언급도 같은 톤. ❷ **WebP 폴백 `<picture>` 미제공** — 최신 브라우저 99%+ WebP 지원, 도입 계획 없음. ❸ **글/카테고리 slug 의 ASCII 제약** — DNS 자체가 ASCII 만 지원하므로 한계가 아니라 *전제*. 외려 hex 변환으로 한국어 폴더명도 워닝 + 빌드 통과로 *허용*. ❹ **`layout` 의 list/gallery 한정** — 두 종으로 일반 사용 충분, 추가 필요 시 빌더에 직접 등록 (§ 5 의 새 메모 "layout 을 더 늘리고 싶다면"). ❺ **카테고리 meta.yaml 의 위치별 적용 차이** — 같은 스키마를 두 위치가 공유하기 위한 의도된 비대칭, § 5 / § 11-3 본문에서 어떤 필드가 어디서 무시되는지 명시. ❻ **Apache 메인 설정 접근·배포 서버 PHP 전제** — 시스템의 기본 동작 환경이지 한계가 아님, § 15 도입부 + § 15-3 에 일원화. ❼ **Parsedown 업데이트 비용** — [scripts/parsedown.py](scripts/parsedown.py) 는 Parsedown 1.7.4 의 *포크* 로 운영, 원본 업데이트 추종 안 함을 § 12 "운영 정책" 절에 명시. ❽ **YAML 파서 자체 구현** — 이 프로젝트가 실제 사용하는 부분집합만 의도적으로 지원, PyYAML 도입 계획 없음을 § 12b 신설 절에 명시. 새 항목으로 "`tags` 의 구체적 활용처 없음 (v0.5.3)" 만 추가. |
+
+**검증 (현재 트리):**
+
+- 빌드 6 글, 2 카테고리, 0 경고.
+- BM25 단위 테스트 25개 그대로 통과 (회귀 0 — feed/gallery/tags 모두 검색·인덱스 모듈과 독립).
+- `dist/feed.atom` / `dist/feed.rss` 가 Python ET.parse 로 well-formed XML 검증 통과.
+- Tutorials 카테고리의 `layout: gallery` 가 `/blog/tutorials/index.html` 과 부모 `/blog/index.html` 양쪽의 Tutorials section 에서 `<section class='paginated listup-gallery'>` 로 출력. 페이지네이션 (per_page=2, items=3 → 2 페이지) 정상 동작 — 2 번째 페이지 항목에 `style='display:none'` 인라인 부착.
+- Tutorials 의 첫 글 (Pagination Demo One) 에 thumb.png 첨부 → 갤러리 타일에 webp 변종이 srcset 으로 출력 (`/pagination-demo-one/thumb-{400,778}.webp`). 다른 두 글은 이미지 없음 → `gallery-tile-thumb-empty` 그라데이션 플레이스홀더.
+- 글 / 홈 / 카테고리 페이지 `<head>` 에 두 피드 `<link rel='alternate'>` 정상 삽입.
+- 검색·sitemap·robots·redirect 산출물은 v0.5.2 와 동등 (피드 추가, 자동 발견 태그 외 변화 없음).
+
+**적용 메모:**
+
+- **글 측**: 기존 글의 meta.yaml 변경 의무 없음. 옛 글의 `tags` 가 없어도 정상 빌드 (빈 리스트로 처리). 갤러리를 활용하려면 그 카테고리 meta.yaml 의 `layout: gallery` + 글의 `seo.og_image` (또는 본문 첫 이미지) 가 있으면 됩니다.
+- **카테고리 측**: 카테고리 meta.yaml 에는 `tags` 를 두지 않음 — 적어도 빌드는 통과 (조용히 무시) 하지만 빌드 산출물에 반영되지 않습니다.
+- **점진 빌드**: v0.5.2 dist 위에 그대로 빌드 가능. 옛 산출물은 그대로 보존되고 `feed.atom` / `feed.rss` 두 파일이 추가됩니다. 페이지 HTML 의 `<head>` 에는 두 `<link rel='alternate'>` 가 새로 들어가 v0.5.2 와 한 줄 다른 출력. 갤러리를 켠 카테고리는 그 카테고리의 HTML 만 새 마크업으로 바뀝니다.
+- **외부 의존성**: v0.5.2 와 동일 (Pillow). 피드 모듈은 stdlib 만 사용.
+
+**미수용 (차기 의제):**
+
+- 태그별 색인 페이지 (`/tag/foo/` URL).
+- 태그를 검색 가중치에 반영 (BM25 의 3번째 필드 등).
+- 피드 비활성화의 site.yaml 토글 (`feeds.enabled: false`).
+- 피드 entry 에 본문 전체 (`<content>` 포함) — 현재는 summary 만.
+- 갤러리 타일의 추가 표시 옵션 (excerpt, 작성자, 태그).
+- v0.4.2 로드맵의 B-5 (description 폴백 범위) / B-6 (description_truncate 단어 경계) 그대로 이월.
+
+---
 
 ### v0.5.2 (2026-05-14) — 자산 경로 일원화 (글 자산은 글 폴더 안으로)
 
@@ -2076,7 +2197,7 @@ layout: list
   - `.pagination-nav` 의 CSS 속성 (padding/margin) 변경 — 마크업은 동일.
 - **기존 글의 meta.yaml** — 변경 없이 그대로 빌드됩니다.
 - **기존 카테고리 meta.yaml** — `priority` 를 명시하지 않으면 모두 기본값 0 으로 처리. v0.4.5 의 폴더명 알파벳 순 정렬과 동일한 결과.
-- **graceful degradation** — JS 가 완전히 비활성화된 환경에서는 페이지 2 이후의 항목이 표시되지 않습니다 (이전 버전: 모두 표시됨, 페이지 컨트롤만 비기능). 현실적인 사용 환경에서 JS 비활성화는 매우 드물고 (`<noscript>` fallback 추가는 별도 의제), FOUC 제거의 이득이 더 크다는 판단.
+- **JS 비활성 환경** — JS 가 완전히 비활성화된 환경에서는 페이지 2 이후의 항목이 표시되지 않습니다 (이전 v0.4.5 까지는 모두 표시되고 페이지 컨트롤만 비기능). 이 시스템은 JS 비활성 환경을 지원하지 않으므로 의도된 동작.
 
 #### v0.4.5 → v0.4.6 마이그레이션 시 주의
 

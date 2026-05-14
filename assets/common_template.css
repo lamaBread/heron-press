@@ -477,3 +477,128 @@ mark {
     .nav-search input[type='search']:focus { width: 8em; }
 }
 
+
+/* ════════════════════════════════════════════════════════════════
+   Gallery layout  (v0.5.3)
+   카테고리/홈 meta.yaml 의 `layout: gallery` 일 때.
+   modern minimal — 콘텐츠를 압도하지 않으면서 글마다 미리보기 이미지를
+   타일로 보여준다. 톤은 nav-search / pagination 과 동일 (회색 액센트,
+   subtle hover, 절제된 그림자).
+   ════════════════════════════════════════════════════════════════ */
+
+section.listup-gallery {
+    /* 기본 section 의 흰 배경/넉넉한 padding 을 해제. 각 타일이 흰 카드라
+       이중 배경이 되지 않도록. */
+    background-color: transparent;
+    border-radius: 0;
+    padding: 0.2em 0.4em 0.4em 0.4em;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+}
+section.listup-gallery > p {
+    /* 빈 갤러리의 "No articles found" 메시지 — grid 한 칸 차지. */
+    grid-column: 1 / -1;
+}
+
+.gallery-tile {
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    border-radius: 6px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.gallery-tile:hover,
+.gallery-tile:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    outline: none;
+}
+
+.gallery-tile-thumb {
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: linear-gradient(135deg, #f7f7f7 0%, #ececec 100%);
+    position: relative;
+}
+.gallery-tile-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.35s ease;
+}
+.gallery-tile:hover .gallery-tile-thumb img {
+    transform: scale(1.04);
+}
+.gallery-tile-thumb-empty::after {
+    /* 옅은 모노그램 — 시각적 placeholder. 콘텐츠 자체에는 영향 없음. */
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 28%;
+    height: 28%;
+    transform: translate(-50%, -50%);
+    background:
+        radial-gradient(circle at 35% 35%, rgba(255,255,255,0.6), transparent 60%),
+        linear-gradient(135deg, #e7e7e7 0%, #d4d4d4 100%);
+    border-radius: 50%;
+    opacity: 0.7;
+}
+
+.gallery-tile-meta {
+    padding: 0.7em 0.95em 0.85em 0.95em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    flex: 1;
+}
+.gallery-tile-title {
+    font-style: italic;
+    font-size: 0.92em;
+    line-height: 1.4em;
+    color: #0172d5;
+    /* 두 줄까지만 — 그 이상은 ellipsis. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+}
+.gallery-tile-date {
+    font-size: 0.72em;
+    color: #afafaf;
+    margin-top: auto;
+    padding-top: 0.4em;
+}
+
+/* a:link 의 전역 컬러 (.listup_module_title a 와 동일 정책) 가 타일 전체에
+   덮이지 않도록 — 타일은 색을 inherit, 안쪽의 .gallery-tile-title 만 강조. */
+* a:link.gallery-tile {
+    color: inherit;
+}
+
+/* 모바일: 한 줄에 두 칸. 패딩과 글자 크기 살짝 축소. */
+@media screen and (max-width: 600px) {
+    section.listup-gallery {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        padding: 0.2em 0.3em 0.4em 0.3em;
+    }
+    .gallery-tile-meta {
+        padding: 0.6em 0.75em 0.75em 0.75em;
+    }
+    .gallery-tile-title {
+        font-size: 0.82em;
+        line-height: 1.35em;
+    }
+    .gallery-tile-date {
+        font-size: 0.68em;
+    }
+}
+

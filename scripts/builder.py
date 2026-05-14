@@ -1,9 +1,10 @@
 """빌드 파이프라인 (Builder 클래스).
 
-15단계 파이프라인 (v0.5.1 에서 asset 단계가 article render 보다 먼저):
+16단계 파이프라인 (v0.5.3 에서 _build_feeds 추가):
   [1] _load_config           — site.yaml + legacy-map.yaml + 토크나이저 패리티 검증
   [2] _scan_articles         — Articles/ 트리 순회, _ 접두 제외
-  [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움 (seo: 블록 포함)
+  [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움 (seo: 블록 +
+                                v0.5.3 의 tags 필드 포함)
   [4] _validate              — slug 검증, 카테고리 트리 구축 (한글 폴더 워닝),
                                 카테고리 meta.yaml 파싱 (v0.4.5)
   [5] _sync_assets           — 본문 외 자원 → dist/{slug}/ (v0.5.2 부터 글의
@@ -15,18 +16,43 @@
                                 이미지는 _sync_assets 와 동일하게 WebP 변환.
   [7] _render_articles       — 본문 렌더 + 섹션 마커 처리 + nav/SEO/styles +
                                 v0.5.1 의 <img> 후처리 (WebP src + srcset +
-                                sizes + loading=lazy) → dist/{slug}/
-  [8] _build_categories      — 톱레벨 + 서브카테고리 인덱스 페이지 (v0.4.5)
-  [9] _build_home            — 루트 페이지 (Recent + 페이지네이션, v0.4.5)
+                                sizes + loading=lazy) → dist/{slug}/. v0.5.3
+                                부터 글 단위 thumb/summary 캐시 (gallery + feed
+                                가 참조) 를 self.article_render_meta 에 등록.
+  [8] _build_categories      — 톱레벨 + 서브카테고리 인덱스 페이지 (v0.4.5).
+                                v0.5.3 부터 카테고리 meta.layout='gallery' 면
+                                section 이 이미지 타일 그리드로 렌더.
+  [9] _build_home            — 루트 페이지 (Recent + 페이지네이션, v0.4.5).
+                                v0.5.3 부터 Articles/meta.yaml 의
+                                layout='gallery' 도 지원.
   [10] _build_404            — 404 페이지
   [11] _build_robots         — robots.txt (main + legacy)
   [12] _build_sitemap        — dist/sitemap.xml (v0.4.4 신설, v0.4.5 에서
                                 서브카테고리 URL 도 포함)
+  [12b] _build_feeds         — dist/feed.atom + dist/feed.rss (v0.5.3 신설).
+                                scripts/feed.py 의 추상 모델로 두 파일이 같은
+                                entry 목록을 공유.
   [13] _build_dispatcher     — dist-legacy/redirect.php (301 매핑)
   [14] _build_search         — search-index.json + search.php (+ tokenize lib
                                 + bm25 lib, v0.5.0)
   [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리 +
                                 v0.5.2: 옛 dist/src/ 트리 일괄 제거
+
+v0.5.3 변경 — tags + gallery layout + RSS/Atom 피드:
+  - meta.yaml `tags` 필드. ArticleMeta.tags 신설 (list[str]). 파싱은
+    `_parse_frontmatter`. 빈 문자열·중복 자동 제거 (순서 보존). 카테고리
+    meta.yaml 에는 의도적으로 두지 않음.
+  - 카테고리/홈 `layout: gallery`. `_gallery_tile_html` 신설,
+    `_listup_items_html` / `_render_section` 에 layout 매개변수 추가.
+    pagination.js 가 `.gallery-tile` 도 페이지네이션 대상으로 인식.
+    썸네일 결정 규칙: seo.og_image > rr.first_image > 빈 플레이스홀더.
+    이미지 자동 최적화 (v0.5.1) 와 자동 연동.
+  - scripts/feed.py 신설 — Atom 1.0 기반 추상 모델 + render_atom /
+    render_rss 두 직렬화. `_build_feeds` 가 파이프라인 [12b] 단계로 추가.
+    홈/카테고리/글 템플릿 `<head>` 에 `<link rel='alternate'>` 자동 발견
+    태그 삽입.
+  - self.article_render_meta 캐시 도입 — _render_articles 단계에서 글마다
+    {thumb, summary} 를 저장, gallery 와 feed 양쪽이 참조.
 
 v0.5.2 변경 — 자산 경로 일원화 (글 자산은 글 폴더 안으로):
   - 글 자산이 dist/src/{slug}/ 대신 dist/{slug}/ 로 (글 index.html 과 같은
@@ -155,6 +181,8 @@ from .images import (
     RASTER_EXTS,
     ALL_IMAGE_EXTS,
     _HAS_PIL,
+    _split_url,
+    _build_srcset,
 )
 
 
@@ -207,6 +235,7 @@ from .search import (
     run_parity_test,
 )
 from .sitemap import build_sitemap
+from .feed import build_feed_document, render_atom, render_rss
 
 
 # ════════════════════════════════════════════════════════════════
@@ -291,6 +320,10 @@ class Builder:
         # _sync_assets / _copy_site_assets 에서 채워지고, _render_articles 의
         # HTML 후처리 및 템플릿 컨텍스트 (face_img 등) 에서 참조한다.
         self.image_variants: dict = {}  # URL str → VariantSet
+        # v0.5.3: 글의 thumbnail / summary 캐시. _render_articles 단계에서 채워지고
+        # _build_categories (gallery layout), _build_feeds (RSS/Atom) 가 참조한다.
+        # slug → {'thumb': URL or None, 'summary': str}
+        self.article_render_meta: dict = {}
 
     # ── [1] Config load ──────────────────────────────────────
 
@@ -520,6 +553,34 @@ class Builder:
                 twitter_image=_seo_str('twitter_image'),
             )
 
+            # v0.5.3: tags — 작성자가 직접 적는 주제어 목록.
+            # YAML 파서는 inline list (`[a, b]`) 와 block list (`- a` ...) 둘 다 list 로 반환.
+            # 받아들이는 형태:
+            #   tags: [foo, bar]          → ['foo', 'bar']
+            #   tags:                     → []
+            #   tags:                     → ['foo', 'bar']
+            #     - foo
+            #     - bar
+            # 정규화: 양끝 공백 trim, 빈 문자열 제거, 중복 제거 (입력 순서 보존),
+            #          내부 공백은 그대로 둠 (한국어 다어절 태그 허용).
+            tags_raw = raw.get('tags')
+            if tags_raw is None:
+                tags = []
+            elif isinstance(tags_raw, list):
+                seen = set()
+                tags = []
+                for item in tags_raw:
+                    if item is None:
+                        continue
+                    s = str(item).strip()
+                    if not s or s in seen:
+                        continue
+                    seen.add(s)
+                    tags.append(s)
+            else:
+                die(f"meta.yaml: 'tags' 는 리스트여야 합니다 (받은 값: "
+                    f"{tags_raw!r})\n       at {meta_file}")
+
             article.meta = ArticleMeta(
                 slug=slug,
                 title=title,
@@ -529,6 +590,7 @@ class Builder:
                 lang=lang,
                 seo=seo,
                 styles=normalize_styles(raw.get('styles')),
+                tags=tags,
             )
 
     # ── [4] Validation + category tree ───────────────────────
@@ -886,6 +948,20 @@ class Builder:
 
             self.rendered_bodies[m.slug] = html_to_plain(rr.html)
 
+            # v0.5.3: gallery / feed 가 쓸 thumbnail + summary 캐시.
+            # thumbnail 폴백: seo.og_image > 본문 첫 이미지 > None.
+            # summary: seo.description > rr.first_paragraph > '' (description_truncate 적용).
+            thumb = m.seo.og_image or rr.first_image
+            summary_raw = m.seo.description or rr.first_paragraph or ''
+            if summary_raw and len(summary_raw) > self.site.description_truncate:
+                summary = summary_raw[:self.site.description_truncate].rstrip() + '…'
+            else:
+                summary = summary_raw
+            self.article_render_meta[m.slug] = {
+                'thumb': thumb,
+                'summary': summary,
+            }
+
             # v0.5.1: <img> 후처리 — WebP src 치환 + srcset + sizes + loading=lazy.
             # image_variants 가 비어 있어도 (전체 이미지 비활성 / lazy_loading
             # 만 켠 케이스) transform_img_tags 는 loading 부착은 수행한다.
@@ -1093,6 +1169,58 @@ class Builder:
 
     # ── [7] Category indexes ──────────────────────────────────
 
+    def _gallery_tile_html(self, article: 'Article', hidden: bool = False) -> str:
+        """v0.5.3: 갤러리 레이아웃의 한 타일 HTML.
+
+        썸네일 우선순위: seo.og_image > 본문 첫 이미지 > 빈 플레이스홀더.
+        가로세로 4:3 으로 강제 크롭 (CSS object-fit: cover). 썸네일이 없는
+        타일은 옅은 그라데이션 배경만 보여 일관된 그리드를 유지한다.
+        """
+        m = article.meta
+        link_text = m.title
+        rmeta = self.article_render_meta.get(m.slug, {})
+        thumb = rmeta.get('thumb')
+        style_attr = " style='display:none'" if hidden else ""
+
+        if thumb:
+            # 썸네일은 raster 원본 URL 일 수 있고, 이 경우 image_variants 에 webp
+            # 변종 정보가 등록되어 있다. transform_img_tags 와 같은 로직으로
+            # primary webp src + srcset 을 만든다. variants 가 없으면 (외부 URL,
+            # SVG, 이미 webp, 또는 images.enabled=false) src 를 그대로 사용.
+            primary_src = thumb
+            srcset_attr = ''
+            sizes_attr = ''
+            variants = self.image_variants.get(thumb)
+            if variants is not None:
+                dir_part, stem, _ext, tail = _split_url(thumb)
+                prefix = '' if dir_part in ('.', '') else dir_part + '/'
+                primary_src = f'{prefix}{stem}-{variants.primary_width}.webp{tail}'
+                srcset = _build_srcset(dir_part, stem, variants.widths)
+                srcset_attr = f" srcset='{escape_html(srcset)}'"
+                if self.site.images.default_sizes:
+                    sizes_attr = (
+                        f" sizes='{escape_html(self.site.images.default_sizes)}'"
+                    )
+            thumb_inner = (
+                f"<img src='{escape_html(primary_src)}'"
+                f"{srcset_attr}{sizes_attr}"
+                f" alt='' loading='lazy'>"
+            )
+            thumb_class = 'gallery-tile-thumb'
+        else:
+            thumb_inner = ''
+            thumb_class = 'gallery-tile-thumb gallery-tile-thumb-empty'
+
+        return (
+            f"<a class='gallery-tile' href='/{m.slug}/'{style_attr}>"
+            f"<div class='{thumb_class}'>{thumb_inner}</div>"
+            f"<div class='gallery-tile-meta'>"
+            f"<span class='gallery-tile-title'>{escape_html(link_text)}</span>"
+            f"<span class='gallery-tile-date'>{m.date}</span>"
+            f"</div>"
+            f"</a>"
+        )
+
     def _listup_module_html(self, article: 'Article', hidden: bool = False) -> str:
         """글 한 줄의 listup HTML.
 
@@ -1112,35 +1240,58 @@ class Builder:
                 f"{article.meta.date}</span>"
                 f"</div>")
 
-    def _listup_items_html(self, articles, per_page: int) -> str:
+    def _listup_items_html(self, articles, per_page: int,
+                           layout: str = 'list') -> str:
         """v0.4.6: 페이지네이션이 부착된 항목 목록 HTML.
 
         per_page 가 0 이하면 모든 항목을 그대로 출력. 그 외에는 per_page 초과
         인덱스의 항목에 `style='display:none'` 을 미리 부착하여 FOUC 방지.
+
+        v0.5.3: layout='gallery' 면 텍스트 list 대신 이미지 타일 (`_gallery_tile_html`).
         """
         parts = []
         for i, a in enumerate(articles):
             hidden = per_page > 0 and i >= per_page
-            parts.append(self._listup_module_html(a, hidden=hidden))
+            if layout == 'gallery':
+                parts.append(self._gallery_tile_html(a, hidden=hidden))
+            else:
+                parts.append(self._listup_module_html(a, hidden=hidden))
         return '\n'.join(parts)
 
     def _render_section(self, label: str, articles: list, group_key: str,
-                        per_page: int, more_url: str = None) -> str:
+                        per_page: int, more_url: str = None,
+                        layout: str = 'list') -> str:
         """페이지네이션이 부착된 한 개의 section HTML 을 반환.
 
         articles 는 이미 정렬되어 있어야 한다.
         group_key 는 같은 페이지 내에서 unique 해야 한다 (페이지 컨트롤 짝짓기).
         more_url 이 주어지면 section 우측 상단에 → 링크가 표시된다.
+        layout 이 'gallery' 면 section 에 listup-gallery 클래스가 추가되고 항목이
+        이미지 타일로 렌더된다 (v0.5.3).
         """
+        # v0.5.3: list 외 미지원 layout 은 list 로 폴백 (forward compat).
+        if layout not in ('list', 'gallery'):
+            layout = 'list'
+
+        section_extra_class = ' listup-gallery' if layout == 'gallery' else ''
+
         if not articles:
             inner = "<p>No articles found</p>"
-            attrs = "class='paginated-empty'"
+            attrs = f"class='paginated-empty{section_extra_class}'"
             nav_html = ''
         else:
-            attrs = _pagination_section_attrs(group_key, per_page)
+            # _pagination_section_attrs 의 class 를 확장.
+            base_attrs = _pagination_section_attrs(group_key, per_page)
+            if section_extra_class:
+                base_attrs = base_attrs.replace(
+                    'class="paginated"',
+                    f'class="paginated{section_extra_class}"',
+                    1,
+                )
+            attrs = base_attrs
             # v0.4.6: per_page 를 넘는 항목은 SSR 단계에서 inline style 로
             # 미리 숨겨 FOUC 를 방지.
-            inner = self._listup_items_html(articles, per_page)
+            inner = self._listup_items_html(articles, per_page, layout=layout)
             nav_html = _pagination_nav_html(group_key, len(articles), per_page)
 
         if more_url:
@@ -1194,6 +1345,8 @@ class Builder:
 
         # 자식 서브카테고리가 있는 경우 — 자식별로 section 생성.
         # 톱레벨이면 "더 보기" 링크가 자식의 자기 페이지 (`/top/sub/`) 로.
+        # v0.5.3: 자식 section 의 layout 은 그 자식 자신의 meta.layout 을 사용
+        # (Tutorials 카테고리가 gallery 면, 부모 Blog 페이지의 Tutorials section 도 gallery).
         for child in sorted_children:
             articles = self._collect_articles(child)
             articles.sort(key=lambda a: a.meta.date, reverse=True)
@@ -1206,6 +1359,7 @@ class Builder:
                     group_key=group_key,
                     per_page=self._category_preview_per_page(child),
                     more_url=child_url,
+                    layout=child.meta.layout,
                 )
             )
 
@@ -1235,6 +1389,7 @@ class Builder:
                     articles=own_articles,
                     group_key=group_key,
                     per_page=section_per_page,
+                    layout=cat.meta.layout,
                 )
             )
 
@@ -1320,8 +1475,14 @@ class Builder:
 
         # v0.4.6: Articles/meta.yaml 의 per_page 가 site 디폴트를 오버라이드.
         per_page = self._home_per_page()
+        # v0.5.3: 홈도 layout: gallery 지원.
+        home_layout = self.home_meta.layout
+        if home_layout not in ('list', 'gallery'):
+            home_layout = 'list'
         # v0.4.6: per_page 초과 항목은 SSR 단계에서 미리 hide (FOUC 방지).
-        article_items = self._listup_items_html(home_articles, per_page)
+        article_items = self._listup_items_html(
+            home_articles, per_page, layout=home_layout,
+        )
 
         # v0.4.6: 메인페이지 lang — Articles/meta.yaml 의 lang 우선, 없으면 site.lang.
         page_lang = self.home_meta.lang or self.site.lang
@@ -1330,11 +1491,14 @@ class Builder:
             'home-recent', len(home_articles), per_page,
         )
 
+        section_class = 'paginated listup-gallery' if home_layout == 'gallery' else 'paginated'
+
         vars_ = {
             'LANG': escape_html(page_lang),
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
+            'HOME_SECTION_CLASS': section_class,
             'HOME_PER_PAGE': str(per_page),
             'ARTICLE_LIST': article_items,
             'PAGINATION_NAV': pagination_nav,
@@ -1413,6 +1577,46 @@ class Builder:
         )
         self.dist.mkdir(parents=True, exist_ok=True)
         (self.dist / 'sitemap.xml').write_text(xml, encoding='utf-8')
+
+    # ── [12b] feed.atom + feed.rss (v0.5.3) ───────────────────
+
+    def _build_feeds(self):
+        """v0.5.3: dist/feed.atom 과 dist/feed.rss 를 같은 entry 목록으로 생성.
+
+        scripts/feed.py 가 Atom 1.0 기반 추상 모델 (FeedDocument / FeedEntry)
+        과 두 직렬화 (render_atom / render_rss) 를 제공. 빌더는 articles +
+        article_render_meta (글 단위 summary 캐시) 를 모아 FeedDocument 하나를
+        만들고, 두 파일에 같은 내용을 다른 포맷으로 직렬화한다.
+
+        feed 자체의 updated 는 entry 들 중 가장 최신 lastmod — 빌드 시각이 아닌
+        콘텐츠 시각이라야 빌드를 반복해도 산출물이 동일 (결정성 보장).
+        """
+        def _top_folder(article):
+            if article.category_path and len(article.category_path) >= 2:
+                return article.category_path[0]
+            return None
+
+        generator = f'siheonlee.com v0.5.3 — github.com/siheonlee'
+        doc = build_feed_document(
+            articles=self.articles,
+            site=self.site,
+            home_meta=self.home_meta,
+            article_render_meta=self.article_render_meta,
+            category_path_for_article=_top_folder,
+            generator=generator,
+        )
+
+        self.dist.mkdir(parents=True, exist_ok=True)
+        if doc is None:
+            # 표시할 entry 가 0 개 — 빈 파일을 만들지 않고 옛 파일은 정리.
+            for name in ('feed.atom', 'feed.rss'):
+                p = self.dist / name
+                if p.exists():
+                    p.unlink()
+            return
+
+        (self.dist / 'feed.atom').write_text(render_atom(doc), encoding='utf-8')
+        (self.dist / 'feed.rss').write_text(render_rss(doc), encoding='utf-8')
 
     # ── [13] Legacy dispatcher ────────────────────────────────
 
@@ -1572,6 +1776,7 @@ class Builder:
         self._build_404()                      # [10]
         self._build_robots()                   # [11]
         self._build_sitemap()                  # [12]
+        self._build_feeds()                    # [12b] (v0.5.3) RSS/Atom
         self._build_dispatcher()               # [13]
         self._build_search()                   # [14]
         self._prune_orphans()                  # [15]

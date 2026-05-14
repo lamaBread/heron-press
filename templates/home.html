@@ -4,6 +4,8 @@
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <link href='/assets/common_template.css' rel='stylesheet' type='text/css'>
+    <link rel='alternate' type='application/atom+xml' title='{{PAGE_TITLE}} (Atom)' href='/feed.atom'>
+    <link rel='alternate' type='application/rss+xml' title='{{PAGE_TITLE}} (RSS)' href='/feed.rss'>
     <title>{{PAGE_TITLE}}</title>
 </head>
 <body>
@@ -22,7 +24,7 @@
     <div class="gap">
         <p>Recent posts</p>
     </div>
-    <section class="paginated" data-pagination-group="home-recent" data-per-page="{{HOME_PER_PAGE}}">
+    <section class="{{HOME_SECTION_CLASS}}" data-pagination-group="home-recent" data-per-page="{{HOME_PER_PAGE}}">
         {{ARTICLE_LIST}}
     </section>
     {{PAGINATION_NAV}}

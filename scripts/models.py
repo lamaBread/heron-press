@@ -2,6 +2,13 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
+v0.5.3 변경:
+  - ArticleMeta 에 `tags` 필드 (list[str]) 추가. 글 작성자가 직접 적는 주제어
+    목록. 현재는 파싱만 되고 구체적인 사용처는 없음 (검색·필터·관련 글 등
+    미래 기능을 위한 토대). 카테고리 meta.yaml (CategoryMeta) 에는 의도적으로
+    `tags` 를 두지 않음 — 카테고리가 그 자체로 분류 축이라 tags 와 개념이
+    중복된다는 판단.
+
 v0.5.1 변경:
   - SiteConfig 에 `images` 필드 (ImageConfig). site.yaml 의 `images:` 블록을
     파싱한 결과. 빌드 시 raster 이미지의 WebP 변환 + 다중 해상도 + lazy
@@ -100,6 +107,10 @@ class ArticleMeta:
     # 본문 태그 (p, h3, ul, blockquote, a, ...) 의 기본 속성을 글 단위로 override.
     # 결과는 head 의 <style> 에 inject 되어 `section TAG` 선택자로 적용된다.
     styles: dict = field(default_factory=dict)
+    # v0.5.3: 글 작성자가 직접 적는 주제어 목록. 검색·필터·관련 글 등 미래 기능을
+    # 위한 토대. 현재 빌드 산출물에서 직접 쓰이지는 않지만, meta.yaml 파싱
+    # 단계에서 검증되고 정규화 (trim + dedup, 순서 보존) 된다.
+    tags: list = field(default_factory=list)
 
 
 @dataclass

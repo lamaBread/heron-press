@@ -1,4 +1,15 @@
-# siheonlee.com — 사이트 전역 설정 (v0.5.2)
+# siheonlee.com — 사이트 전역 설정 (v0.5.3)
+#
+# v0.5.3 변경 요약 — `tags` 필드 + `layout: gallery` + RSS/Atom 피드:
+#   - 글 meta.yaml 에 `tags` 필드 (리스트, 선택). 작성자가 직접 적는 주제어.
+#     site.yaml 변경 의무 없음 — 글 측에만 영향.
+#   - 카테고리/홈 meta.yaml 의 `layout: gallery` 가 새로 구현됨. 그 카테고리
+#     색인 페이지가 이미지 타일 그리드로 렌더. 썸네일은 seo.og_image > 본문
+#     첫 이미지 > 그라데이션 플레이스홀더. site.yaml 변경 의무 없음.
+#   - dist/feed.atom (Atom 1.0) + dist/feed.rss (RSS 2.0) 자동 생성. 두 파일이
+#     같은 entry 목록을 공유 (scripts/feed.py 의 추상 모델). site.yaml 의 변경
+#     의무 없음 — site.name / base_url / default_author / lang 가 그대로 사용됨.
+#     비활성화는 builder.build() 의 `_build_feeds()` 호출 주석 처리.
 #
 # v0.5.2 변경 요약 — 자산 경로 일원화 (글 자산은 글 폴더 안으로):
 #   - 글 자산이 옛 `dist/src/{slug}/` 대신 `dist/{slug}/` (= 글의 index.html 과
