@@ -1,4 +1,11 @@
-# siheonlee.com — 사이트 전역 설정 (v0.4.3)
+# siheonlee.com — 사이트 전역 설정 (v0.4.4)
+#
+# v0.4.4 변경 요약:
+#   - sitemap.xml 자동 생성. scripts/sitemap.py 가 글·톱레벨 카테고리·홈
+#     URL 을 sitemaps.org 0.9 스키마로 빌드. meta.yaml 의 `noindex: true`
+#     글과 서브카테고리 (인덱스 페이지 없음) 는 제외. lastmod 는
+#     글의 `updated` 우선, 없으면 `date`.
+#   - robots.txt 의 `Sitemap:` 디렉티브 주석 해제.
 #
 # v0.4.3 변경 요약:
 #   - 글 페이지의 <title> 이 이제 글의 title 을 정상 사용
@@ -75,11 +82,12 @@ description_truncate: 150
 
 # robots.txt — 사이트 정책은 '모든 글이 검색 가능' 이 기본.
 # 개별 글의 비공개는 meta.yaml 의 `noindex: true` 로 처리.
+# v0.4.4: sitemap.xml 자동 생성. `Sitemap:` 디렉티브가 더 이상 주석 처리되지 않음.
 robots_txt_main: |
   User-agent: *
   Allow: /
 
-  # Sitemap: https://siheonlee.com/sitemap.xml
+  Sitemap: https://siheonlee.com/sitemap.xml
 
 robots_txt_legacy: |
   User-agent: *

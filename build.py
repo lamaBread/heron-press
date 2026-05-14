@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.4.2 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.4.4 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -7,6 +7,15 @@
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
+
+v0.4.4 변경 사항 (vs v0.4.3):
+  - sitemap.xml 자동 생성 (scripts/sitemap.py + builder pipeline step [12]).
+  - robots.txt 의 `Sitemap:` 디렉티브 주석 해제.
+
+v0.4.3 변경 사항 (vs v0.4.2):
+  - 글 `<title>` 에 글 제목 사용 (이전엔 site.name 으로 덮어쓰던 quirk).
+  - 마크다운 본문에서 섹션 마커 (`===제목===` / `======`) 사용 가능.
+  - meta.yaml 의 평면 seo_* 필드 → `seo:` 하위 블록.
 
 v0.4.2 변경 사항 (vs v0.4.1):
   - 글 slug ↔ 톱레벨 카테고리 slug 충돌을 검증 단계에서 차단.

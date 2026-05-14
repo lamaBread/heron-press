@@ -1,6 +1,6 @@
 """빌드 파이프라인 (Builder 클래스).
 
-14단계 파이프라인:
+15단계 파이프라인:
   [1] _load_config           — site.yaml + legacy-map.yaml + 토크나이저 패리티 검증
   [2] _scan_articles         — Articles/ 트리 순회, _ 접두 제외
   [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움 (seo: 블록 포함)
@@ -13,9 +13,15 @@
   [9] _copy_site_assets      — assets/ → dist/assets/
   [10] _build_404            — 404 페이지
   [11] _build_robots         — robots.txt (main + legacy)
-  [12] _build_dispatcher     — dist-legacy/redirect.php (301 매핑)
-  [13] _build_search         — search-index.json + search.php (+ tokenize lib)
-  [14] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리
+  [12] _build_sitemap        — dist/sitemap.xml (v0.4.4 신설)
+  [13] _build_dispatcher     — dist-legacy/redirect.php (301 매핑)
+  [14] _build_search         — search-index.json + search.php (+ tokenize lib)
+  [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리
+
+v0.4.4 변경:
+  - sitemap.xml 자동 생성 (scripts/sitemap.py). 글·카테고리·홈 URL 을 포함.
+    noindex 글과 서브카테고리는 제외. lastmod 는 updated 우선, 없으면 date.
+  - robots.txt 의 `Sitemap:` 디렉티브가 더 이상 주석 처리되지 않음.
 
 v0.4.3 변경:
   - <title> 에 글 제목 사용 (이전엔 항상 site.name 으로 덮어쓰던 quirk 제거).
@@ -58,6 +64,7 @@ from .search import (
     build_search_index,
     run_parity_test,
 )
+from .sitemap import build_sitemap
 
 
 # ════════════════════════════════════════════════════════════════
@@ -762,7 +769,14 @@ class Builder:
             self.site.robots_txt_legacy, encoding='utf-8'
         )
 
-    # ── [12] Legacy dispatcher ────────────────────────────────
+    # ── [12] sitemap.xml ──────────────────────────────────────
+
+    def _build_sitemap(self):
+        xml = build_sitemap(self.articles, self.categories, self.site)
+        self.dist.mkdir(parents=True, exist_ok=True)
+        (self.dist / 'sitemap.xml').write_text(xml, encoding='utf-8')
+
+    # ── [13] Legacy dispatcher ────────────────────────────────
 
     def _build_dispatcher(self):
         # v0.4.2: site.yaml 의 base_url 을 사용 (이전 버전은 도메인 하드코딩).
@@ -803,7 +817,7 @@ class Builder:
             '\n'.join(lines), encoding='utf-8'
         )
 
-    # ── [13] Search index + search.php + tokenizer lib ──────
+    # ── [14] Search index + search.php + tokenizer lib ──────
 
     def _build_search(self):
         index_data = build_search_index(
@@ -843,7 +857,7 @@ class Builder:
         page = _render_template(tpl, vars_)
         (self.dist / 'search.php').write_text(page, encoding='utf-8')
 
-    # ── [14] Global orphan pruning ────────────────────────────
+    # ── [15] Global orphan pruning ────────────────────────────
 
     def _prune_orphans(self):
         current_slugs = {a.meta.slug for a in self.articles}
@@ -885,9 +899,10 @@ class Builder:
         self._copy_site_assets()               # [9]
         self._build_404()                      # [10]
         self._build_robots()                   # [11]
-        self._build_dispatcher()               # [12]
-        self._build_search()                   # [13]
-        self._prune_orphans()                  # [14]
+        self._build_sitemap()                  # [12]
+        self._build_dispatcher()               # [13]
+        self._build_search()                   # [14]
+        self._prune_orphans()                  # [15]
 
         warn_count = warning_count()
         art_count = len(self.articles)

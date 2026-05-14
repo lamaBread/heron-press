@@ -1,10 +1,12 @@
-# siheonlee.com v0.4.3 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.4.4 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
+> **v0.4.4 의 위치:** sitemap.xml 자동 생성. v0.4.0 의 전역 noindex 폐기로 글이 검색엔진에 색인되기 시작한 뒤, 검색엔진이 사이트 구조를 더 빠르고 정확하게 파악하도록 sitemap 을 제공합니다. [scripts/sitemap.py](scripts/sitemap.py) 가 글·톱레벨 카테고리·홈 URL 을 sitemaps.org 0.9 스키마로 빌드하고, robots.txt 의 `Sitemap:` 디렉티브가 더 이상 주석 처리되지 않습니다. meta.yaml 의 `noindex: true` 글은 sitemap 에서도 제외되며, lastmod 는 `updated` (없으면 `date`) 를 사용합니다.
+>
 > **v0.4.3 의 위치:** 글 페이지의 `<title>` 정상화 + 마크다운 본문의 섹션 분할 문법 + meta.yaml 의 SEO 필드 그룹화. 세 변경의 공통 동기는 *글의 의미 단위 표현* 을 일관되게 만드는 것입니다.
 >
 > 1. **`<title>` = 글 제목.** v0.3.x ~ v0.4.2 에선 글마다 `<title>` 이 항상 `Lama` 로 고정되어 있었습니다 (원본 lama.pe.kr 의 quirk 보존). v0.4.0 에서 전역 noindex 가 풀려 글이 실제로 검색 결과에 뜨기 시작하면서 이 quirk 가 부적합해졌고, v0.4.3 에서 `<title>` 이 `{seo.title_prefix}{title}{seo.title_suffix}` 형태로 출력되도록 정상화했습니다.
@@ -150,9 +152,11 @@ python -m http.server 8000
 | 8 | 홈 페이지 생성 |
 | 9 | `assets/` → `dist/assets/` 복사 |
 | 10 | 404 에러 페이지 생성 |
-| 11 | `robots.txt` 생성 |
-| 12 | `dist-legacy/redirect.php` 생성 (구 URL 리다이렉트) |
-| 13 | 이전 빌드에서 삭제된 글의 파일 정리 (고아 정리) |
+| 11 | `robots.txt` 생성 (Sitemap 디렉티브 포함, v0.4.4) |
+| 12 | `sitemap.xml` 생성 (v0.4.4) |
+| 13 | `dist-legacy/redirect.php` 생성 (구 URL 리다이렉트) |
+| 14 | 검색 인덱스 + `search.php` 생성 |
+| 15 | 이전 빌드에서 삭제된 글의 파일 정리 (고아 정리) |
 
 ---
 
@@ -838,7 +842,8 @@ v0.4.1 부터 마크다운 파서는 [scripts/parsedown.py](scripts/parsedown.py
 dist/
 ├── index.html                       ← 홈 페이지 (/)
 ├── 404.html                         ← 404 에러 페이지 (Apache 가 라우팅)
-├── robots.txt                       ← 검색엔진 크롤 정책
+├── robots.txt                       ← 검색엔진 크롤 정책 (Sitemap 디렉티브 포함, v0.4.4)
+├── sitemap.xml                      ← 사이트맵 (v0.4.4)
 │
 ├── assets/
 │   ├── common_template.css          ← 공용 스타일시트
@@ -877,6 +882,8 @@ dist-legacy/
 | 글 첨부파일 | `/src/{slug}/{경로}` | `https://siheonlee.com/src/mask-intake-3d-printing/imgs/photo.jpg` |
 | 공용 자원 | `/assets/{파일명}` | `https://siheonlee.com/assets/common_template.css` |
 | 404 | `/404.html` | Apache 가 미존재 경로에 자동 응답 |
+| robots.txt | `/robots.txt` | `https://siheonlee.com/robots.txt` (Sitemap 디렉티브 포함) |
+| 사이트맵 (v0.4.4) | `/sitemap.xml` | `https://siheonlee.com/sitemap.xml` |
 
 **모든 글·카테고리 URL 은 슬래시(`/`) 로 끝납니다.** 슬래시 없는 URL(`/my-slug`) 로 접근하면 Apache 가 자동으로 슬래시 있는 URL 로 301 리다이렉트합니다.
 
@@ -1084,6 +1091,8 @@ def hello():
 > **v0.4.3 변경:** SEO 필드들이 `seo:` 하위 블록으로 그룹화되었습니다 (예: `seo_description` → `seo.description`). meta.yaml frontmatter 가 한눈에 보입니다.
 >
 > `<meta name="keywords">` 는 v0.4.0 에서 제거되었습니다 — 주요 검색엔진이 무시하는 태그입니다.
+>
+> **v0.4.4 변경:** [sitemap.xml](sitemap.xml) 자동 생성. 모든 non-noindex 글 + 톱레벨 카테고리 + 홈을 sitemaps.org 0.9 스키마로 출력합니다. lastmod 는 `updated` (없으면 `date`). robots.txt 의 `Sitemap:` 디렉티브가 자동 활성화되어 검색엔진이 sitemap 을 자동 발견합니다.
 
 ---
 
@@ -1523,6 +1532,7 @@ curl -I https://siheonlee.com/hello-world         # 301 → /hello-world/
 curl -I https://siheonlee.com/hello-world/        # 200 OK
 curl -I https://siheonlee.com/없는페이지/           # 404 (본문은 /404.html)
 curl -I https://siheonlee.com/robots.txt          # 200 OK, text/plain
+curl -I https://siheonlee.com/sitemap.xml         # 200 OK, application/xml (v0.4.4)
 
 curl -I https://lama.pe.kr/Articles/Blog/Hello%20World/   # 301 → siheonlee.com/hello-world/
 curl -I https://lama.pe.kr/robots.txt             # 200 OK (redirect 우회)
@@ -1623,46 +1633,95 @@ python build.py --clean
 
 9. **단일 진실원의 토크나이저 (v0.4.0)** — Python/PHP 양쪽 토크나이저의 동등성을 빌드마다 fixture 패리티 테스트로 자동 검증.
 
-### 현재 버전(v0.4.3) 의 한계
+### 현재 버전(v0.4.4) 의 한계
 
 | 한계 | 내용 |
 |---|---|
-| 태그 없음 | meta.yaml 에 tags 필드가 없습니다. |
-| 페이지네이션 없음 | 카테고리에 글이 많아지면 한 페이지에 전부 나열됩니다. |
-| RSS 없음 | RSS/Atom 피드가 없습니다. |
-| sitemap.xml 미생성 | 검색엔진 인덱스를 본격 도와주는 sitemap.xml 자동 생성이 없습니다 (robots.txt 에 자리만 마련). |
-| styles 의 @-rule 미지원 | `@media`, `@keyframes` 등은 inject 안 됨. content.html 의 인라인 `<style>` 로 회피. |
-| 서브카테고리 인덱스 없음 | 톱레벨 카테고리에서 그룹으로만 표시 (원본 동작 보존). |
-| Apache 메인 설정 접근 필요 | 공유 호스팅에서 메인 설정 접근이 안 되면 호스팅 사업자에게 요청해야 함. |
-| PHP 호스팅 전제 | 검색·리다이렉트가 PHP. 배포 서버에 PHP 모듈 필요. (v0.4.1 에서 빌드 PHP 의존은 제거됨.) |
-| Parsedown 업데이트 비용 | 원본 Parsedown 신버전이 나오면 [scripts/parsedown.py](scripts/parsedown.py) 의 메서드를 수동으로 동기화해야 함 (v0.4.0 까지의 "Parsedown.php 만 교체" 보다 비용 증가). |
-| 한국어 폴더명 가독성 (v0.4.0+) | 비ASCII 카테고리 폴더는 hex 코드포인트 slug 로 자동 변환 (`/be94-b85c-adf8/`). 가독성 위해 ASCII 폴더명 권장. |
-| YAML 파서 자체 구현 | 자체 구현 부분 YAML 파서를 사용 중. PyYAML 도입 검토는 v0.4.1 단계에서 보류 (외부 의존성 추가 없이도 충분히 동작). |
-| 테스트 부족 | 단위 테스트 없음. 빌드 시 토크나이저 패리티 fixture (PHP 있을 때) 만 자동 실행. 마크다운 파서 (Parsedown 포팅) 의 PHP↔Python 동등성은 v0.4.1 출시 시점에 일회성 스크립트로 검증되었으나 재현 가능한 형태로 트리에 동봉되지는 않음 (§ 12 참조). v0.5.x 로드맵 후보. |
-| 정적 검색 인덱스 본문 포함 | search-index.json 에 모든 글의 평문 본문 전체가 들어 있어 매 검색 요청마다 PHP 가 통째 로드. 글 200건 기준 인덱스 ~900KB. 글 늘면 인덱스 본문 분리 / 카테고리별 분할 검토 (§ 13 의 "고급 — 검색 비활성화" 참조). |
+| 태그 없음 | meta.yaml 에 tags 필드가 없습니다. 분류 축은 카테고리 하나뿐. |
+| 페이지네이션 없음 | 카테고리·홈에 글이 많아지면 한 페이지에 전부 나열됩니다. |
+| RSS 없음 | RSS/Atom 피드가 없습니다. (sitemap.xml 은 v0.4.4 부터 자동 생성 — § 18 의 v0.4.4 참조.) |
+| 다국어/i18n 미지원 | 템플릿의 `<html lang='ko'>` 가 하드코딩이고 로케일 전환·hreflang 메커니즘 없음. sitemap.xml 도 기본 0.9 스키마뿐 (이미지/뉴스 sitemap 확장, hreflang 미사용). |
+| styles 의 @-rule 미지원 | `@media`, `@keyframes`, `@font-face`, `@supports`, `@import` 등 모든 at-rule 은 inject 안 됨 — [scripts/markdown.py](scripts/markdown.py) 의 `render_article_styles` 가 평면 `selector { decls }` 규칙만 직렬화. content.html 의 인라인 `<style>` 로 회피. |
+| 이미지 자동 최적화 없음 | assets/ 와 글 첨부 이미지는 빌드가 그대로 복사. webp 변환·리사이즈·`loading="lazy"` 자동화 없음. 필요하면 글마다 직접 작성. |
+| 서브카테고리 인덱스 없음 | 톱레벨 카테고리 페이지에서 자식 카테고리별 그룹으로만 표시 (원본 quirk 보존 — § 5). 서브카테고리는 별도 URL 도 없고 sitemap.xml 에서도 제외. |
+| 글/카테고리 slug ASCII 만 허용 | 글 slug 정규식은 `^[a-z0-9][a-z0-9-]*[a-z0-9]$` (영소문자·숫자·하이픈). 카테고리 폴더가 한국어 등 비ASCII 면 hex 코드포인트로 자동 변환 + 워닝 (`블로그` → `/be94-b85c-adf8/`). 가독성 위해 ASCII 폴더명 권장. |
+| Apache 메인 설정 접근 필요 | `.htaccess` 가 없는 게 설계 의도이므로 공유 호스팅에서 메인 설정 접근이 안 되면 호스팅 사업자에게 요청해야 함. |
+| 배포 서버 PHP 전제 | 검색·리다이렉트가 PHP — 배포 서버에 PHP 7.4+ 와 mbstring 확장 필요 (§ 13-7). v0.4.1 부터 *빌드 머신* 의 PHP 의존은 사라져 PHP 부재 시 토크나이저 패리티 검증만 자동으로 건너뜀. |
+| Parsedown 업데이트 비용 | 원본 Parsedown 신버전이 나오면 [scripts/parsedown.py](scripts/parsedown.py) 의 해당 메서드를 수동 동기화해야 함 — v0.3.x ~ v0.4.0 의 "Parsedown.php 만 교체" 보다 비용 증가. |
+| YAML 파서 자체 구현 | [scripts/yaml_parser.py](scripts/yaml_parser.py) 는 이 프로젝트에서 실제 쓰는 문법 부분집합만 지원 — anchor/alias (`&`/`*`), folded scalar (`>`), flow-style mapping (`{...}`) 등 고급 문법은 미지원. PyYAML 도입 검토는 v0.4.1 단계에서 보류 (외부 의존성 추가 없이도 충분히 동작). |
+| 빌드 증분 캐싱 없음 | 매 빌드마다 전체 글 재렌더 + 검색 인덱스 재구축. 글 자원만 mtime 기준 skip ([builder.py](scripts/builder.py) 의 `_copy_if_newer`) 이며 그 외 캐시 없음. 글 ≤ 수십 건 규모에선 무시 가능. |
+| 테스트 부족 | 단위 테스트 디렉터리 없음. 빌드 시 토크나이저 패리티 fixture (PHP 있을 때) 만 자동 실행. Parsedown 포팅의 PHP↔Python 동등성은 v0.4.1 출시 시점에 일회성 스크립트로 검증되었으나 재현 가능한 형태로 트리에 동봉되지 않음 (§ 12 참조). v0.5.x 로드맵 후보. |
+| 정적 검색 인덱스 본문 포함 | search-index.json 에 모든 글의 평문 본문 전체가 들어 매 검색 요청마다 PHP 가 통째 로드. § 13 표 기준 글 50건 ~250KB, 200건 ~900KB. 글이 늘면 인덱스 본문 분리·카테고리별 분할·IDF 가중치·SQLite 이주 검토 ([scripts/search.py](scripts/search.py) 의 v0.5.x 의제 참조). |
 
 ---
 
 ## 18. 업데이트 로그
 
-아홉 버전의 차이를 한눈에:
+열 버전의 차이를 한눈에:
 
-| 영역 | v0.1 | v0.2 | v0.3 | v0.3.1 | v0.3.2 | v0.4.0 | v0.4.1 | v0.4.2 | v0.4.3 (현재) |
-|---|---|---|---|---|---|---|---|---|---|
-| 시스템 정체성 | "SSG" | "SSG" | "SSG" | "SSG (런타임 PHP 검색 포함)" | (동일) | **"PHP 기반 경량 웹 사이트 생성기"** | (동일 — 빌드 PHP 의존만 사라짐) | (동일) | (동일) |
-| 출력 UI/UX | v0.1 자체 디자인 | 원본 `lama_website-main` 와 동일 | 원본 + 글마다 스타일 오버라이드 가능 | (동일) + 모든 페이지 nav 우측 검색창 + Recent posts 위 inline 폼 | (동일) — nav-search 만, 카테고리별 스코프 검색 | (동일) — nav-search 의 italic placeholder 제거 | (동일) | (동일) | (동일) |
-| 글 `<title>` | 원본 quirk: 항상 site.name | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **`{seo.title_prefix}{title}{seo.title_suffix}` 로 정상화** |
-| 마크다운 본문 구조 | 자동 단일 갭+섹션 wrap | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **섹션 마커 `===제목===` / `======`** |
-| 색인 정책 | 전역 noindex | 전역 noindex (원본 보존) | (동일) | (동일) | (동일) | **전역 noindex 제거. 글마다 `noindex: true` 로 개별 차단** | (동일) | + **검색 결과 페이지에 noindex,follow** | (동일) |
-| 마크다운 파서 | Python stdlib 자체 파서 | (동일) | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | (동일) | (동일) | (동일) | **scripts/parsedown.py — Parsedown 1.7.4 Python 포팅 (단일)** | (동일) | (동일) |
-| meta.yaml 필드 | slug, title, date, seo_* | (동일) | + **`styles:`** | (동일) | (동일) | + **`noindex:`** / − **`seo_keywords:` 폐기** | (동일) | (동일) | **seo_* 평면 필드 → `seo:` 블록 그룹화** |
-| 검색 토크나이저 | — | — | — | 1글자 한국어 그대로 인덱싱 | (동일) | **1글자 한국어 제외 (bigram 만). 본문 길이 절단 폐지. Py↔PHP 패리티 자동 검증** | (동일 — PHP 없으면 워닝 후 건너뜀) | (동일) | (동일) |
-| 빌드 검증 | slug 정규식, 날짜 형식, slug 중복 | (동일) | (동일) | (동일) | (동일) | + 토크나이저 패리티 | (동일) | + **slug ↔ 카테고리 slug 충돌 차단** | (동일) |
-| 레거시 dispatcher | 도메인 하드코딩 | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **site.yaml 의 base_url 사용** | (동일) |
-| PHP 함수 시뮬레이션 | — | imgBox/imgSlideBox | (동일) | (동일) | (동일) | (동일) | (동일) — 단순 정규식 (`[^)]*`) | **balanced parser — nested parens + quoted `)` 정상 처리** | (동일) |
-| 카테고리 한국어 폴더 | — | — | _meta.yaml 슬러그 오버라이드 | (동일) | (동일) | **_meta.yaml 오버라이드 폐기. hex 코드포인트 자동 변환 + 워닝** | (동일) | (동일) | (동일) |
-| 빌드 모듈 구조 | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py (2085줄) | **build.py + scripts/ 패키지** | + scripts/parsedown.py | (동일) | + **models.SeoMeta** |
-| 외부 의존성 | Python 3 | (동일) | Python 3 + (parsedown 시) PHP CLI | Python 3 + PHP CLI (빌드) + PHP runtime (검색) | (동일) | (동일, 다만 캐치프레이즈로 솔직 표기) | **Python 3 만 (빌드). PHP runtime 은 검색·리다이렉트용으로 여전 필요.** | (동일) | (동일) |
+| 버전 | 시스템 정체성 | 출력 UI/UX | 글 `<title>` | 마크다운 본문 구조 | 색인 정책 | sitemap.xml | 마크다운 파서 | meta.yaml 필드 | 검색 토크나이저 | 빌드 검증 | 레거시 dispatcher | PHP 함수 시뮬레이션 | 카테고리 한국어 폴더 | 빌드 모듈 구조 | 외부 의존성 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **v0.4.4 (현재)** | (동일) | (동일) | (동일) | (동일) | (동일) | **자동 생성 (글·톱레벨 카테고리·홈, noindex 제외, lastmod=updated\|date). robots.txt Sitemap 디렉티브 활성화** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/sitemap.py** | (동일) |
+| **v0.4.3** | (동일) | (동일) | **`{seo.title_prefix}{title}{seo.title_suffix}` 로 정상화** | + **섹션 마커 `===제목===` / `======`** | (동일) | 없음 (robots.txt 에 주석으로만 자리표시) | (동일) | **seo_* 평면 필드 → `seo:` 블록 그룹화** | (동일) | (동일) | (동일) | (동일) | (동일) | + **models.SeoMeta** | (동일) |
+| **v0.4.2** | (동일) | (동일) | (동일) | (동일) | + **검색 결과 페이지에 noindex,follow** | 없음 | (동일) | (동일) | (동일) | + **slug ↔ 카테고리 slug 충돌 차단** | **site.yaml 의 base_url 사용** | **balanced parser — nested parens + quoted `)` 정상 처리** | (동일) | (동일) | (동일) |
+| **v0.4.1** | (동일 — 빌드 PHP 의존만 사라짐) | (동일) | (동일) | (동일) | (동일) | 없음 | **scripts/parsedown.py — Parsedown 1.7.4 Python 포팅 (단일)** | (동일) | (동일 — PHP 없으면 워닝 후 건너뜀) | (동일) | (동일) | (동일) — 단순 정규식 (`[^)]*`) | (동일) | + scripts/parsedown.py | **Python 3 만 (빌드). PHP runtime 은 검색·리다이렉트용으로 여전 필요.** |
+| **v0.4.0** | **"PHP 기반 경량 웹 사이트 생성기"** | (동일) — nav-search 의 italic placeholder 제거 | (동일) | (동일) | **전역 noindex 제거. 글마다 `noindex: true` 로 개별 차단** | 없음 | (동일) | + **`noindex:`** / − **`seo_keywords:` 폐기** | **1글자 한국어 제외 (bigram 만). 본문 길이 절단 폐지. Py↔PHP 패리티 자동 검증** | + 토크나이저 패리티 | (동일) | (동일) | **_meta.yaml 오버라이드 폐기. hex 코드포인트 자동 변환 + 워닝** | **build.py + scripts/ 패키지** | (동일, 다만 캐치프레이즈로 솔직 표기) |
+| **v0.3.2** | (동일) | (동일) — nav-search 만, 카테고리별 스코프 검색 | (동일) | (동일) | (동일) | 없음 | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | 단일 build.py (2085줄) | (동일) |
+| **v0.3.1** | "SSG (런타임 PHP 검색 포함)" | (동일) + 모든 페이지 nav 우측 검색창 + Recent posts 위 inline 폼 | (동일) | (동일) | (동일) | 없음 | (동일) | (동일) | 1글자 한국어 그대로 인덱싱 | (동일) | (동일) | (동일) | (동일) | 단일 build.py | Python 3 + PHP CLI (빌드) + PHP runtime (검색) |
+| **v0.3** | "SSG" | 원본 + 글마다 스타일 오버라이드 가능 | (동일) | (동일) | (동일) | 없음 | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | + **`styles:`** | — | (동일) | (동일) | (동일) | _meta.yaml 슬러그 오버라이드 | 단일 build.py | Python 3 + (parsedown 시) PHP CLI |
+| **v0.2** | "SSG" | 원본 `lama_website-main` 와 동일 | (동일) | (동일) | 전역 noindex (원본 보존) | 없음 | (동일) | (동일) | — | (동일) | (동일) | imgBox/imgSlideBox | — | 단일 build.py | (동일) |
+| **v0.1** | "SSG" | v0.1 자체 디자인 | 원본 quirk: 항상 site.name | 자동 단일 갭+섹션 wrap | 전역 noindex | 없음 | Python stdlib 자체 파서 | slug, title, date, seo_* | — | slug 정규식, 날짜 형식, slug 중복 | 도메인 하드코딩 | — | — | 단일 build.py | Python 3 |
+
+### v0.4.4 (2026-05-14) — sitemap.xml 자동 생성
+
+v0.4.0 의 전역 noindex 폐기로 글이 실제로 검색엔진에 색인되기 시작한 뒤, 검색엔진이 사이트 구조를 더 빠르고 정확하게 파악하도록 sitemap 을 제공하는 것이 자연스러운 다음 단계였습니다. v0.4.2 에서 robots.txt 에 주석으로만 자리표시되어 있던 `Sitemap:` 디렉티브가 이제 실제 파일을 가리킵니다.
+
+| 개선 | 내용 |
+|---|---|
+| sitemap.xml 자동 생성 | [scripts/sitemap.py](scripts/sitemap.py) 신설. [scripts/builder.py](scripts/builder.py) 의 파이프라인에 step [12] `_build_sitemap` 으로 통합. sitemaps.org 0.9 스키마. 클라이언트 측 처리 없는 정적 XML 파일. |
+| 포함 URL | (1) 홈 (`/`), (2) 톱레벨 카테고리 인덱스 (`/{cat-slug}/`), (3) 모든 글 (`/{slug}/`). 서브카테고리는 인덱스 페이지가 없으므로 (원본 quirk — § 5 참조) 제외. `search.php` (noindex,follow) 와 `404.html`, `/src/`, `/assets/` 도 제외. |
+| noindex 글 제외 | meta.yaml 의 `noindex: true` 가 있는 글은 sitemap 에서도 제외 — `<meta robots noindex>` 와 sitemap 동시 등장은 신호 충돌. |
+| lastmod 규칙 | 글: `updated` 가 있으면 그 값, 없으면 `date`. 카테고리: 서브트리의 non-noindex 글 lastmod 중 최댓값. 홈: 홈에 실제로 노출되는 글 (즉 `home_excludes_categories` 가 아닌 non-noindex 글) lastmod 중 최댓값. |
+| changefreq / priority | 일부러 비움. Google 은 두 필드를 공식적으로 무시한다고 밝혔고, 부정확한 priority 는 오히려 신뢰도를 떨어뜨립니다. |
+| robots.txt Sitemap 디렉티브 | site.yaml 의 `robots_txt_main` 에서 `# Sitemap: ...` 의 `#` 제거. 빌드 산출물 `dist/robots.txt` 가 자동으로 `Sitemap: https://siheonlee.com/sitemap.xml` 라인을 포함. |
+| 파이프라인 단계 수 | 14 → 15 단계. `_build_robots` 와 `_build_dispatcher` 사이에 `_build_sitemap` 삽입. |
+
+**예시 출력 (현재 트리 기준):**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://siheonlee.com/</loc>
+    <lastmod>2026-05-14</lastmod>
+  </url>
+  <url>
+    <loc>https://siheonlee.com/blog/</loc>
+    <lastmod>2026-05-14</lastmod>
+  </url>
+  <url>
+    <loc>https://siheonlee.com/about/</loc>
+    <lastmod>2025-01-01</lastmod>
+  </url>
+  <url>
+    <loc>https://siheonlee.com/hello-world/</loc>
+    <lastmod>2026-05-07</lastmod>
+  </url>
+  <url>
+    <loc>https://siheonlee.com/section-markers-demo/</loc>
+    <lastmod>2026-05-14</lastmod>
+  </url>
+</urlset>
+```
+
+**호환성 노트:** 글 산출물의 바이트 단위 출력은 v0.4.3 과 동일 (회귀 0). 추가되는 파일은 `dist/sitemap.xml` 한 개와 `dist/robots.txt` 의 한 줄 변경뿐입니다.
+
+#### v0.4.3 → v0.4.4 마이그레이션 시 주의
+
+- **base_url 검증** — sitemap 의 모든 URL 은 `site.yaml` 의 `base_url` 을 접두로 사용합니다. 배포 전에 `base_url: https://siheonlee.com` 이 정확한지 확인하세요. 잘못된 도메인이면 sitemap 도 같이 잘못됩니다.
+- **robots.txt 수동 커스텀했던 사용자** — site.yaml 의 `robots_txt_main:` 블록을 직접 편집했다면, 그 블록에 `Sitemap: ...` 라인이 살아있는지 확인하세요. (v0.4.4 의 기본값은 `Sitemap: https://siheonlee.com/sitemap.xml` 한 줄을 포함합니다.)
+- **검색엔진 등록** — Google Search Console / Naver Search Advisor 에 sitemap URL (`https://siheonlee.com/sitemap.xml`) 을 등록하면 색인 속도가 빨라집니다. robots.txt 의 `Sitemap:` 디렉티브로 자동 발견되긴 하지만, 직접 제출이 더 안정적입니다.
+- **noindex 와 sitemap** — 어떤 글을 검색엔진에서 빼고 싶다면 meta.yaml 의 `noindex: true` 한 줄로 충분합니다. v0.4.4 부터는 이 글이 sitemap 에서도 자동으로 빠지므로 추가 작업 불필요.
 
 ### v0.4.3 (2026-05-14) — `<title>` 정상화 + 마크다운 섹션 마커 + SEO 그룹화
 
@@ -1851,4 +1910,4 @@ v0.1 의 SSG 내부 시스템은 그대로 유지하면서, 출력 HTML/CSS 만 
 
 ---
 
-*이 문서는 siheonlee.com v0.4.1 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python 만, 런타임은 PHP) 기준으로 작성되었습니다. (2026-05-14)*
+*이 문서는 siheonlee.com v0.4.4 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python 만, 런타임은 PHP) 기준으로 작성되었습니다. (2026-05-14)*
