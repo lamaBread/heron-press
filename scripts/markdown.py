@@ -194,7 +194,11 @@ _ABSOLUTE_PREFIXES = ('https://', 'http://', '//', '/')
 
 
 def rewrite_asset_path(url: str, slug: str) -> str:
-    """상대 URL 을 /src/{slug}/... 절대경로로 재작성."""
+    """상대 URL 을 /{slug}/... 절대경로로 재작성 (v0.5.2 자산 경로 일원화).
+
+    v0.5.1 까지는 `/src/{slug}/...` 였으나, v0.5.2 부터 글 자산이 글의
+    index.html 과 같은 폴더 (`dist/{slug}/`) 에 들어가도록 일원화됨.
+    """
     if not url:
         return url
     for prefix in _ABSOLUTE_PREFIXES:
@@ -203,7 +207,7 @@ def rewrite_asset_path(url: str, slug: str) -> str:
     clean = re.sub(r'^\./', '', url)
     if clean.startswith('/'):
         return clean
-    return f'/src/{slug}/{clean}'
+    return f'/{slug}/{clean}'
 
 
 def rewrite_asset_paths_in_html(html: str, slug: str) -> str:
@@ -260,7 +264,8 @@ def _simulate_imgslidebox(dir_path: str, slug: str, article_dir: Path) -> str:
 
     slides = []
     for idx, img in enumerate(images):
-        url = f'/src/{slug}/{clean}/{img.name}'
+        # v0.5.2: 자산 경로 일원화 — /src/{slug}/... → /{slug}/...
+        url = f'/{slug}/{clean}/{img.name}'
         cls = 'slide active' if idx == 0 else 'slide'
         slides.append(f'  <img src="{url}" class="{cls}" alt="{escape_html(img.name)}">')
 

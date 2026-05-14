@@ -14,7 +14,9 @@ sitemaps.org 0.9 스키마. 클라이언트 측 처리 없는 정적 XML 파일.
 제외되는 페이지:
   - `search.php` — v0.4.2 부터 noindex,follow 정책 (`?q=…` 노이즈 차단).
   - `404.html` — 에러 페이지.
-  - `/src/`, `/assets/` — 콘텐츠가 아닌 자원.
+  - `/assets/` — 사이트 공용 자원 디렉터리 (콘텐츠가 아님). v0.5.2 부터
+    글 자산이 `/{slug}/` 안에 들어가지만, sitemap 은 글 인덱스 페이지
+    (`/{slug}/`) 만 등록하고 자산 파일은 등록 대상이 아님.
   - meta.yaml 에 `noindex: true` 가 있는 글.
 
 lastmod 결정 규칙:

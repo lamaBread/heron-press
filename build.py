@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.5.1 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.5.2 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -9,10 +9,24 @@ Usage:
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
     python -m unittest discover -s tests   # BM25 단위 테스트 (v0.5.0)
 
-빌드 의존성 (v0.5.1):
+빌드 의존성 (v0.5.2):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.5.2 변경 사항 (vs v0.5.1):
+  - 자산 경로 일원화 (글 자산은 글 폴더 안으로). 옛 `dist/src/{slug}/...`
+    트리 폐지, 글 자산은 글의 index.html 과 같은 폴더 `dist/{slug}/` 에
+    동거. URL 도 `/src/{slug}/foo.jpg` → `/{slug}/foo.jpg`. "글 폴더 안에서
+    자료를 둔다" 라는 글 소스 측 원칙과 dist 출력 구조가 일관됨.
+  - reserved_slugs 에서 `src` 항목 제거. `assets`, `search` 만 남음.
+  - rewrite_asset_path / imgBox / imgSlideBox 시뮬레이션 모두 새 URL 스킴.
+  - _prune_article_assets 가 글 폴더에 동거하는 글 본체 산출물
+    (index.html / index.php) 을 잘못 삭제하지 않도록 가드.
+  - _prune_orphans 가 옛 빌드의 `dist/src/` 트리를 발견하면 통째로 정리.
+    재현성 확보가 필요하면 `--clean` 권장.
+  - 비-이미지 산출물 (검색, sitemap.xml, robots.txt, redirect.php, 404.html,
+    페이지 HTML 구조) 은 v0.5.1 과 동등. 자산 URL 만 다름.
 
 v0.5.1 변경 사항 (vs v0.5.0):
   - 이미지 자동 최적화 + lazy loading 도입. SEO 직접 영향 (Google

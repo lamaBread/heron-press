@@ -6,10 +6,11 @@
   [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움 (seo: 블록 포함)
   [4] _validate              — slug 검증, 카테고리 트리 구축 (한글 폴더 워닝),
                                 카테고리 meta.yaml 파싱 (v0.4.5)
-  [5] _sync_assets           — 본문 외 자원 → dist/src/{slug}/. v0.5.1 부터
-                                raster 이미지 (.jpg .jpeg .png .gif) 는
-                                Pillow 로 WebP 변종들 (srcset 너비별) 로
-                                변환 + self.image_variants 에 등록.
+  [5] _sync_assets           — 본문 외 자원 → dist/{slug}/ (v0.5.2 부터 글의
+                                index.html 과 같은 폴더). v0.5.1 부터 raster
+                                이미지 (.jpg .jpeg .png .gif) 는 Pillow 로
+                                WebP 변종들 (srcset 너비별) 로 변환 +
+                                self.image_variants 에 등록.
   [6] _copy_site_assets      — assets/ → dist/assets/. v0.5.1 부터 raster
                                 이미지는 _sync_assets 와 동일하게 WebP 변환.
   [7] _render_articles       — 본문 렌더 + 섹션 마커 처리 + nav/SEO/styles +
@@ -24,7 +25,22 @@
   [13] _build_dispatcher     — dist-legacy/redirect.php (301 매핑)
   [14] _build_search         — search-index.json + search.php (+ tokenize lib
                                 + bm25 lib, v0.5.0)
-  [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리
+  [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리 +
+                                v0.5.2: 옛 dist/src/ 트리 일괄 제거
+
+v0.5.2 변경 — 자산 경로 일원화 (글 자산은 글 폴더 안으로):
+  - 글 자산이 dist/src/{slug}/ 대신 dist/{slug}/ 로 (글 index.html 과 같은
+    폴더). "글 폴더 안에서 자료를 둔다" 라는 글 소스 측 원칙과 dist 출력
+    구조가 일관됨.
+  - reserved_slugs 에서 `src` 제거 — 더 이상 충돌 가능 디렉터리가 아님.
+    `assets`, `search` 만 남음.
+  - rewrite_asset_path / imgBox / imgSlideBox 시뮬레이션이 모두 새 URL
+    스킴 (`/{slug}/...`) 으로 출력.
+  - _prune_article_assets 가 글 폴더에 동거하는 index.html / index.php 를
+    잘못 삭제하지 않도록 가드. (asset sync 가 article render 보다 먼저
+    돌지만, 두 번째 빌드부터는 이전 빌드의 index.html 이 같은 폴더에 이미
+    존재한다.)
+  - _prune_orphans 가 옛 빌드의 dist/src/ 트리를 발견하면 통째로 정리.
 
 v0.5.1 변경 — 이미지 자동 최적화 + lazy loading:
   - 외부 의존성 도입: Pillow. v0.4.1 의 "빌드 PHP 의존 제거" 와 같은
@@ -951,20 +967,23 @@ class Builder:
     # ── [6] Asset sync ────────────────────────────────────────
 
     def _sync_assets(self):
-        """글 폴더의 자원을 dist/src/{slug}/ 로 동기화.
+        """글 폴더의 자원을 dist/{slug}/ 로 동기화 (v0.5.2 부터 글 폴더 안).
+
+        v0.5.2: 옛 `dist/src/{slug}/` 트리를 폐지하고, 글 자산을 글의 index.html
+        과 같은 폴더 (`dist/{slug}/`) 로 떨어뜨린다.
 
         v0.5.1: raster 이미지 (.jpg .jpeg .png .gif) 는 `optimize_image()` 가
         webp 변종들로 변환하고, 원본은 dist 에 복사하지 않는다. 변종 정보를
         `self.image_variants` 에 등록하여, _render_articles 의 HTML 후처리가
         `<img>` 의 src 를 webp + srcset 으로 치환할 때 참조한다. (rewrite_asset_path
-        가 상대 경로를 `/src/{slug}/...` 로 절대화한 형태가 키.)
+        가 상대 경로를 `/{slug}/...` 로 절대화한 형태가 키.)
 
         SVG / WebP / 비이미지 파일은 v0.5.0 과 동일하게 그대로 복사.
         """
         for article in self.articles:
             m = article.meta
             src_root = article.source_dir
-            dst_root = self.dist / 'src' / m.slug
+            dst_root = self.dist / m.slug
 
             for src_file in src_root.rglob('*'):
                 if not src_file.is_file():
@@ -980,7 +999,7 @@ class Builder:
                     self._optimize_and_register(
                         src_file=src_file,
                         dst_file=dst_file,
-                        url_prefix=f'/src/{m.slug}/',
+                        url_prefix=f'/{m.slug}/',
                         rel_path=rel,
                     )
                 else:
@@ -1005,7 +1024,8 @@ class Builder:
         """raster 이미지 한 장을 webp 변종들로 변환하고 image_variants 에 등록.
 
         url_prefix + rel_path 가 HTML 안의 (rewrite 된) src URL 과 매칭되어야
-        한다. 예: /src/about/face_img.png (실제 dist 에는 face_img-800.webp 등).
+        한다. 예: /about/face_img.png (실제 dist 에는 face_img-800.webp 등).
+        v0.5.2: 옛 `/src/{slug}/...` → `/{slug}/...` 로 변경.
         """
         if not _HAS_PIL:
             die(f"이미지 최적화가 켜져 있는데 Pillow 가 없습니다. "
@@ -1031,11 +1051,18 @@ class Builder:
     def _prune_article_assets(self, article: Article):
         m = article.meta
         src_root = article.source_dir
-        dst_root = self.dist / 'src' / m.slug
+        dst_root = self.dist / m.slug
         if not dst_root.exists():
             return
 
         expected = set()
+        # v0.5.2: 글 자산이 글의 index.html 과 같은 폴더에 동거하게 되어,
+        # asset 정리에서 글 본체 산출물 (index.html / index.php) 을 보존해야
+        # 한다. asset sync 단계가 article render 보다 먼저 돌긴 하지만,
+        # 두 번째 빌드부터는 이전 빌드의 결과가 이미 존재한다.
+        expected.add(dst_root / 'index.html')
+        expected.add(dst_root / 'index.php')
+
         for src_file in src_root.rglob('*'):
             if not src_file.is_file():
                 continue
@@ -1477,12 +1504,18 @@ class Builder:
         current_slugs = {a.meta.slug for a in self.articles}
         current_cat_slug_paths = {tuple(c.slug_path) for c in self.categories.values()}
 
+        # v0.5.2: 옛 빌드의 `dist/src/` 트리 (v0.5.1 까지의 글 자산 위치) 가
+        # 남아 있으면 통째로 제거. v0.5.2 부터 src 는 reserved slug 도 아니다.
+        legacy_src_tree = self.dist / 'src'
+        if legacy_src_tree.is_dir():
+            shutil.rmtree(legacy_src_tree)
+
         if self.dist.is_dir():
             for d in self.dist.iterdir():
                 if not d.is_dir():
                     continue
                 name = d.name
-                if name in ('src', 'assets'):
+                if name == 'assets':
                     continue
                 if (d / 'index.html').exists() or (d / 'index.php').exists():
                     if name not in current_slugs:
@@ -1517,12 +1550,6 @@ class Builder:
                     continue
                 if len(items) == 1 and items[0].name == 'index.html':
                     shutil.rmtree(sub)
-
-        src_dir = self.dist / 'src'
-        if src_dir.is_dir():
-            for d in src_dir.iterdir():
-                if d.is_dir() and d.name not in current_slugs:
-                    shutil.rmtree(d)
 
     # ── Build entry point ─────────────────────────────────────
 
