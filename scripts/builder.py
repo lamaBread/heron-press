@@ -1,5 +1,21 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.6.0 변경 — 검색 인덱스 재설계 (메타데이터 3-필드 + PHP 인라인):
+  - `_build_search` 가 `search-index.json` / `search_tokenize.php` /
+    `search_bm25.php` 세 파일 산출 → `dist/search.php` 한 파일 인라인으로
+    전환. 템플릿의 sentinel 주석 (`/* INLINE: SEARCH_TOKENIZE */`,
+    `/* INLINE: SEARCH_BM25 */`, `/* INLINE: SEARCH_INDEX */ []`) 을
+    builder 가 치환. `_inline_php_body` helper 가 인라인 대상 파일의
+    `<?php` 헤더 / `declare(strict_types)` / 끝의 `?>` / CLI block 을 정리.
+    v0.5.x dist 위에 빌드하면 잔존 세 파일은 명시적으로 unlink.
+  - 인덱스 자체는 [scripts/search.py](scripts/search.py) 의 v4 포맷 —
+    title / description / tags 3-필드만 색인. 본문 평문은 스니펫용으로
+    글마다 앞 1500 자만 인덱스에 보존. tags 가 새 가중치 필드 (`w_tags=2.5`).
+    `php_array_literal` 의 결정적 직렬화로 두 번 빌드 시 sha256 동일.
+  - 콘텐츠 측 (글/홈/카테고리/sitemap/robots/redirect/feed) 의 형식은
+    v0.5.5 와 동등. builder 변경은 검색 단계와 import 한 줄
+    (`from . import __version__ as _SITE_VERSION` — 피드 generator 문자열용).
+
 v0.5.5 변경 — 본문 ↔ 메타데이터 분리 원칙 + 빌드 리포트 일원화:
   - 본문 폴백 폐지: SEO description / og_image / 갤러리 썸네일 / 피드 summary
     가 더 이상 본문 첫 `<p>` / 첫 `<img>` 를 폴백 소스로 쓰지 않는다.
@@ -77,8 +93,12 @@ v0.5.4 변경 — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + n
                                 scripts/feed.py 의 추상 모델로 두 파일이 같은
                                 entry 목록을 공유.
   [13] _build_dispatcher     — dist-legacy/redirect.php (301 매핑)
-  [14] _build_search         — search-index.json + search.php (+ tokenize lib
-                                + bm25 lib, v0.5.0)
+  [14] _build_search         — dist/search.php 단일 파일 생성 (v0.6.0).
+                                메타데이터 3-필드 BM25 인덱스를 PHP 정적 배열
+                                리터럴로, 토크나이저 + BM25 점수 계산기를
+                                같은 파일에 인라인. 옛 search-index.json /
+                                search_tokenize.php / search_bm25.php 가
+                                dist 에 남아 있으면 명시적으로 unlink.
   [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리 +
                                 v0.5.2: 옛 dist/src/ 트리 일괄 제거
 
@@ -195,7 +215,6 @@ v0.4.0 변경:
   - 본문 길이 절단 제거 (search.build_search_index).
 """
 import datetime
-import json
 import os
 import re
 import shutil
@@ -276,11 +295,13 @@ from .seo import build_meta_tags, truncate_description
 from .search import (
     html_to_plain,
     build_search_index,
+    php_array_literal,
     run_parity_test,
 )
 from .sitemap import build_sitemap
 from .feed import build_feed_document, render_atom, render_rss
 from .report import BuildReport, abort
+from . import __version__ as _SITE_VERSION
 
 
 # ════════════════════════════════════════════════════════════════
@@ -1463,13 +1484,16 @@ class Builder:
                   f"       pip install Pillow 로 설치하거나 "
                   f"site.yaml 의 images.enabled 를 false 로 두세요.")
 
-        variants = optimize_image(
+        variants, err = optimize_image(
             src=src_file,
             dst_dir=dst_file.parent,
             config=self.site.images,
         )
         if variants is None:
-            # 인코딩 실패 — 폴백으로 원본 복사. 워닝은 optimize_image 가 출력.
+            # 인코딩 실패 — 폴백으로 원본 복사. 워닝은 BuildReport 로 라우팅.
+            # 산출물 자체는 정상 (원본이 그대로 dist 에 들어감) → 'warning' 분류.
+            if err:
+                _report.warning('site', '', err, location=src_file)
             _copy_if_newer(src_file, dst_file)
             return
 
@@ -1962,7 +1986,7 @@ class Builder:
                 return article.category_path[0]
             return None
 
-        generator = f'siheonlee.com v0.5.4 — github.com/siheonlee'
+        generator = f'siheonlee.com v{_SITE_VERSION} — github.com/siheonlee'
         doc = build_feed_document(
             articles=self.articles,
             site=self.site,
@@ -2025,7 +2049,21 @@ class Builder:
             '\n'.join(lines), encoding='utf-8'
         )
 
-    # ── [14] Search index + search.php + tokenizer lib ──────
+    # ── [14] Search index inlined into search.php ────────────
+    #
+    # v0.6.0: search-index.json 폐기 + search_tokenize.php / search_bm25.php
+    # 의 require_once 폐기. 세 파일의 내용 (인덱스 정적 PHP 리터럴 + 토크나이저
+    # 함수 + BM25 함수) 이 모두 dist/search.php 한 파일 안에 인라인된다.
+    # OPcache 가 search.php 의 바이트코드를 캐시하면 인덱스도 메모리 상주.
+    #
+    # 결정성: scripts/search.py 의 build_search_index() 가 dict 키를 정렬해
+    # 반환하고, php_array_literal() 는 결정적 직렬화를 보장한다. 두 번 빌드
+    # 해도 dist/search.php 의 바이트가 동일.
+    #
+    # 옛 산출물 정리: v0.5.x dist 위에 그대로 빌드하면 search-index.json /
+    # search_tokenize.php / search_bm25.php 가 남는다. _build_search 가
+    # 이들을 명시적으로 unlink — _prune_orphans 의 슬러그 폴더 정리와 결이
+    # 다르기 때문에 여기서 처리.
 
     def _build_search(self):
         index_data = build_search_index(
@@ -2036,27 +2074,47 @@ class Builder:
         )
 
         self.dist.mkdir(parents=True, exist_ok=True)
-        (self.dist / 'search-index.json').write_text(
-            json.dumps(index_data, ensure_ascii=False, separators=(',', ':')),
-            encoding='utf-8',
-        )
 
-        # search_tokenize.php 와 search_bm25.php 를 dist 에 복사
-        # (search.php 가 둘 다 require_once).
-        for lib_name in ('search_tokenize.php', 'search_bm25.php'):
-            lib_src = self.templates_dir / lib_name
-            if not lib_src.exists():
-                abort(f'templates/{lib_name} not found')
-            (self.dist / lib_name).write_text(
-                lib_src.read_text(encoding='utf-8'),
-                encoding='utf-8',
-            )
+        # v0.5.x 의 잔존 파일 정리.
+        for legacy in ('search-index.json', 'search_tokenize.php',
+                       'search_bm25.php'):
+            p = self.dist / legacy
+            if p.exists():
+                p.unlink()
 
         tpl_path = self.templates_dir / 'search.php'
         if not tpl_path.exists():
-            warn('templates/search.php not found, skipping search page build')
-            return
+            abort('templates/search.php not found')
+        tok_path = self.templates_dir / 'search_tokenize.php'
+        if not tok_path.exists():
+            abort('templates/search_tokenize.php not found')
+        bm25_path = self.templates_dir / 'search_bm25.php'
+        if not bm25_path.exists():
+            abort('templates/search_bm25.php not found')
+
         tpl = tpl_path.read_text(encoding='utf-8')
+        tok_body = self._inline_php_body(
+            tok_path.read_text(encoding='utf-8'),
+            strip_cli_block=True,
+        )
+        bm25_body = self._inline_php_body(
+            bm25_path.read_text(encoding='utf-8'),
+            strip_cli_block=False,
+        )
+        index_literal = php_array_literal(index_data)
+
+        # 세 sentinel 코멘트를 정확한 문자열로 치환 (정규식 불필요).
+        # 템플릿 파일은 sentinel 이 valid PHP comment 라 IDE 진단 통과.
+        tpl = tpl.replace('/* INLINE: SEARCH_TOKENIZE */', tok_body)
+        tpl = tpl.replace('/* INLINE: SEARCH_BM25 */', bm25_body)
+        # 인덱스 자리는 `/* INLINE: SEARCH_INDEX */ []` 형태로, 기본값 `[]`
+        # 까지 한꺼번에 교체 — 인덱스 리터럴은 빈 dict 면 `[]` 이고 아니면
+        # `[...]` 이라 어쨌든 expression context 유효.
+        tpl = tpl.replace(
+            '/* INLINE: SEARCH_INDEX */ []',
+            index_literal,
+        )
+
         # v0.5.4: search <title> 폴백 체인. 404 와 동일 — site.search_title
         # + site.default_title_prefix/suffix. search 도 meta.yaml 이 없는 시스템
         # 페이지라 site.yaml 에서만 설정한다.
@@ -2071,6 +2129,58 @@ class Builder:
         }
         page = _render_template(tpl, vars_)
         (self.dist / 'search.php').write_text(page, encoding='utf-8')
+
+    _PHP_OPEN_RE = re.compile(r'^\s*<\?php\s*\n')
+    _PHP_CLOSE_RE = re.compile(r'\?>\s*$')
+    _DECLARE_RE = re.compile(r'^\s*declare\s*\(\s*strict_types\s*=\s*1\s*\)\s*;\s*\n',
+                              re.MULTILINE)
+    _CLI_BLOCK_RE = re.compile(
+        r'//\s*CLI[^\n]*\n\s*if\s*\(\s*PHP_SAPI\s*===\s*\'cli\'.*?\}\s*\n?',
+        re.DOTALL,
+    )
+    # 인라인 시 strip 할 항목 두 개 (v0.6.0):
+    #   - 선두의 ════ 배너 + 따라오는 //-주석 블록. 스탠드얼론 source 에선
+    #     모듈을 설명하는 헤더지만, search.php 에 인라인되면 parent 의 (a)/(b)/(c)
+    #     설명 직후에 같은 톤 헤더가 또 나와 가독성을 해친다.
+    #   - search_bm25.php 의 `if (!function_exists('search_tokenize')) { require_once ... }`.
+    #     스탠드얼론에서 search_tokenize.php 를 로드하기 위한 dev-time 가드인데,
+    #     인라인 결과에선 search_tokenize 가 이미 같은 파일 위쪽에 인라인되어
+    #     있으니 function_exists() 가 항상 참 → 가드 안쪽은 실행 자체가 안 됨.
+    #     게다가 dist 에 search_tokenize.php 자체가 없어 require_once 가
+    #     의미적으로 misleading. 둘 다 인라인 출력에서만 제거하고 source 는 그대로.
+    _LEADING_HEADER_BANNER_RE = re.compile(
+        r'\A(?:\s*\n)*'                 # 선두 공백 줄
+        r'//\s*═{5,}[^\n]*\n'           # 여는 배너 ──── 일정 개수 이상의 ═
+        r'(?://[^\n]*\n)*',             # 이어지는 //-주석 줄 전부
+    )
+    _DEAD_TOKENIZE_REQUIRE_RE = re.compile(
+        r'\n?if\s*\(\s*!function_exists\(\s*[\'"]search_tokenize[\'"]\s*\)\s*\)\s*\{\s*\n'
+        r'\s*require_once[^\n]*\n'
+        r'\s*\}\s*\n',
+    )
+
+    @classmethod
+    def _inline_php_body(cls, src: str, *, strip_cli_block: bool) -> str:
+        """search_tokenize.php / search_bm25.php 의 본문을 search.php 안에
+        인라인 가능한 형태로 정리.
+
+        - 선두의 `<?php` 헤더 제거 (이미 parent search.php 가 PHP 컨텍스트).
+        - `declare(strict_types=1);` 제거 (parent 에 이미 선언됨).
+        - 선두의 ════ 배너 + 따라오는 //-주석 블록 제거 (parent 가 이미 같은
+          내용을 설명하므로 인라인 결과에 두 번 등장하면 가독성 저하).
+        - `if (!function_exists('search_tokenize')) { require_once ... }` 제거.
+          스탠드얼론 source 의 dev-time 가드인데 인라인 결과에선 dead code.
+        - 옵션: CLI 모드 if-block 제거 (search_tokenize.php 하단).
+        - 끝의 `?>` 가 있으면 제거.
+        """
+        s = cls._PHP_OPEN_RE.sub('', src, count=1)
+        s = cls._DECLARE_RE.sub('', s, count=1)
+        s = cls._LEADING_HEADER_BANNER_RE.sub('', s, count=1)
+        s = cls._DEAD_TOKENIZE_REQUIRE_RE.sub('\n', s, count=1)
+        if strip_cli_block:
+            s = cls._CLI_BLOCK_RE.sub('', s)
+        s = cls._PHP_CLOSE_RE.sub('', s)
+        return s.strip() + '\n'
 
     # ── [15] Global orphan pruning ────────────────────────────
 

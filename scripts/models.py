@@ -176,9 +176,10 @@ class CategoryMeta:
     per_page          — 이 페이지의 페이지당 글 수.
                         비우면 카테고리는 site.category_per_page (기본 20),
                         홈은 빌더의 코드 디폴트 (= 5).
-    layout            — 'list' (기본) / 'gallery' / ... 미래 확장용. 현재는
-                        'list' 만 구현. 다른 값이 와도 빌드는 통과하되 'list'
-                        로 폴백한다.
+    layout            — 'list' (기본) / 'gallery' (v0.5.3). 'gallery' 는 글
+                        목록을 텍스트 한 줄이 아니라 이미지 타일 그리드로
+                        렌더 (CSS Grid + 4:3 강제 크롭). 둘 외의 값이 오면
+                        빌드는 통과하되 'list' 로 폴백한다.
     lang              — 이 페이지의 <html lang> 오버라이드. 비우면 site.lang.
     styles            — 이 페이지 head 에 inject 되는 CSS 규칙 매핑
                         (글 단위 styles 와 동일 포맷).

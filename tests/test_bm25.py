@@ -1,22 +1,26 @@
-"""BM25 알고리즘 핵심 단위 테스트 (v0.5.0).
+"""BM25 알고리즘 핵심 단위 테스트.
+
+v0.6.0 — 인덱스 포맷 v4 (메타데이터 3-필드 색인). v0.5.0 의 25개 테스트가
+필드 이름 변경 (body → desc / tags 추가) 과 phrase 부스트 분기에 맞춰
+재구성됨.
 
 목표:
   - BM25 IDF / 필드 점수 / 전체 점수 / phrase 부스트 의 수식 회귀 차단
   - 인덱스 빌더 (build_search_index) 의 통계 (N, avgdl, df) 정확성
   - 토크나이저의 1글자 한글 제외 규칙 (v0.4.0 이래 불변)
+  - v0.4.x / v0.5.x 의 알려진 결함이 재발하지 않는지 회귀 가드
+  - v0.6.0 신규: noindex 글 제외 / 본문 색인 폐기 / tags 정확매치 부스트
 
-런타임 PHP (templates/search_bm25.php) 은 본 테스트가 검증하는 Python
-참조 구현 (scripts/search.py) 과 동일 공식. 어느 한쪽만 바뀌어도
-실제 검색 품질이 흔들리므로 두 곳을 같이 보수해야 한다.
+런타임 PHP (templates/search_bm25.php → dist/search.php 안에 인라인) 은 본
+테스트가 검증하는 Python 참조 구현 (scripts/search.py) 과 동일 공식. 어느
+한쪽만 바뀌어도 실제 검색 품질이 흔들리므로 두 곳을 같이 보수해야 한다.
 
 실행: `python -m unittest discover -s tests` (프로젝트 루트에서)
 """
-import math
 import sys
 import unittest
 from pathlib import Path
 
-# 프로젝트 루트를 sys.path 에 추가 (scripts 가 패키지)
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -31,7 +35,7 @@ from scripts.search import (  # noqa: E402
 
 
 # ════════════════════════════════════════════════════════════════
-# 토크나이저 — v0.4.0 규칙 재확인 (v0.5.0 변경 없음)
+# 토크나이저 — v0.4.0 규칙 재확인 (v0.5.0 / v0.6.0 변경 없음)
 # ════════════════════════════════════════════════════════════════
 
 class TokenizerTests(unittest.TestCase):
@@ -71,27 +75,25 @@ class TokenizerTests(unittest.TestCase):
 class IdfTests(unittest.TestCase):
 
     def test_rare_token_has_high_idf(self):
-        # 10 문서 중 1 문서에만 등장 → 큰 IDF
         idf_rare = bm25_idf(N=10, df=1)
         self.assertGreater(idf_rare, 1.0)
 
     def test_common_token_has_low_idf(self):
-        # 모든 문서에 등장 → IDF 가 0 근처. 단 +1 smoothing 으로 음수는 아님.
         idf_common = bm25_idf(N=10, df=10)
         self.assertGreaterEqual(idf_common, 0.0)
         self.assertLess(idf_common, 0.5)
 
     def test_idf_monotonic_in_df(self):
-        # df 가 클수록 IDF 는 작아진다 (단조 감소).
         prev = bm25_idf(N=100, df=1)
         for df in range(2, 101):
             cur = bm25_idf(N=100, df=df)
-            self.assertLess(cur, prev, f'IDF should decrease as df grows (df={df})')
+            self.assertLess(cur, prev,
+                            f'IDF should decrease as df grows (df={df})')
             prev = cur
 
 
 # ════════════════════════════════════════════════════════════════
-# 필드 점수 — TF 포화 + 길이 정규화
+# 필드 점수 — TF 포화 + 길이 정규화 (필드 무관 공식)
 # ════════════════════════════════════════════════════════════════
 
 class FieldScoreTests(unittest.TestCase):
@@ -113,23 +115,19 @@ class FieldScoreTests(unittest.TestCase):
         self.assertLess(s3, s10)
 
     def test_tf_saturates(self):
-        # BM25 의 핵심 특성: TF 가 커질수록 한계 이득이 감소 (포화).
-        s1  = self._score(tf=1, dl=100)
+        s1 = self._score(tf=1, dl=100)
         s10 = self._score(tf=10, dl=100)
         s100 = self._score(tf=100, dl=100)
-        # 1→10 증가폭이 10→100 증가폭보다 커야 한다.
         self.assertGreater(s10 - s1, s100 - s10)
 
     def test_length_normalization(self):
-        # 같은 TF 라도 긴 문서일수록 점수가 작아진다 (b > 0).
         s_short = self._score(tf=3, dl=50,  avgdl=100.0)
-        s_avg   = self._score(tf=3, dl=100, avgdl=100.0)
-        s_long  = self._score(tf=3, dl=500, avgdl=100.0)
+        s_avg = self._score(tf=3, dl=100, avgdl=100.0)
+        s_long = self._score(tf=3, dl=500, avgdl=100.0)
         self.assertGreater(s_short, s_avg)
         self.assertGreater(s_avg, s_long)
 
     def test_b_zero_disables_length_norm(self):
-        # b=0 이면 dl 에 무관하게 같은 점수.
         s_a = self._score(tf=3, dl=50,  b=0.0)
         s_b = self._score(tf=3, dl=500, b=0.0)
         self.assertAlmostEqual(s_a, s_b)
@@ -138,157 +136,149 @@ class FieldScoreTests(unittest.TestCase):
         s = bm25_field_score(
             tokens=['unknown'],
             df_map={'t': 1},
-            tf_map={'t': 5},  # 다른 토큰의 tf 가 있어도 'unknown' 이면 0
+            tf_map={'t': 5},
             dl=100, avgdl=100.0, N=10,
+            k1=1.5, b=0.75,
+        )
+        self.assertEqual(s, 0.0)
+
+    def test_zero_avgdl_yields_zero(self):
+        # avgdl <= 0 (이 필드에 토큰이 한 글도 없음) → 0 점수.
+        s = bm25_field_score(
+            tokens=['t'],
+            df_map={'t': 1},
+            tf_map={'t': 5},
+            dl=0, avgdl=0.0, N=10,
             k1=1.5, b=0.75,
         )
         self.assertEqual(s, 0.0)
 
 
 # ════════════════════════════════════════════════════════════════
-# 전체 점수 + phrase 부스트
+# 전체 점수 + phrase 부스트 (v4: title / desc / tags 세 필드)
 # ════════════════════════════════════════════════════════════════
 
+class _FakeSeo:
+    def __init__(self, description=''):
+        self.description = description
+
+
+class _FakeMeta:
+    def __init__(self, slug, title, description='', tags=None,
+                 date='2026-05-14', noindex=False):
+        self.slug = slug
+        self.title = title
+        self.date = date
+        self.noindex = noindex
+        self.seo = _FakeSeo(description=description)
+        self.tags = tags or []
+
+
+class _FakeArticle:
+    def __init__(self, slug, title, description='', tags=None,
+                 noindex=False):
+        self.meta = _FakeMeta(slug, title, description, tags, noindex=noindex)
+
+
 def _mk_index(docs_data, params=None):
-    """테스트용 인덱스 dict 를 토큰화 결과로부터 구성.
+    """테스트용 인덱스 dict 를 build_search_index 로 구성.
 
-    docs_data : [(title, body)] — body 는 평문 (HTML 이 아님).
+    docs_data : [(title, description, tags, body)] 튜플 또는
+                [(title, description, tags)] (body 생략 시 빈 문자열).
     """
-    p = dict(params) if params else dict(BM25_PARAMS)
-    docs = []
-    tf_body_map = {}
-    tf_title_map = {}
-    dls_b = []
-    dls_t = []
-    for i, (title, body) in enumerate(docs_data):
-        body_toks = search_tokenize(body)
-        title_toks = search_tokenize(title)
-        dl_b = len(body_toks)
-        dl_t = len(title_toks)
-        dls_b.append(dl_b)
-        dls_t.append(dl_t)
-        docs.append({
-            'slug': f'doc-{i}',
-            'title': title,
-            'date': '2026-05-14',
-            'category': '',
-            'category_slug': '',
-            'body': body,
-            'dl_body': dl_b,
-            'dl_title': dl_t,
-        })
-        tf_b = {}
-        for t in body_toks:
-            tf_b[t] = tf_b.get(t, 0) + 1
-        for t, tf in tf_b.items():
-            tf_body_map.setdefault(t, {})[i] = tf
-        tf_t = {}
-        for t in title_toks:
-            tf_t[t] = tf_t.get(t, 0) + 1
-        for t, tf in tf_t.items():
-            tf_title_map.setdefault(t, {})[i] = tf
-
-    N = len(docs)
-    return {
-        'version': 3,
-        'params': p,
-        'stats': {
-            'N': N,
-            'avgdl_body': sum(dls_b) / N if N else 0.0,
-            'avgdl_title': sum(dls_t) / N if N else 0.0,
-        },
-        'docs': docs,
-        'categories': {},
-        'df_body': {t: len(post) for t, post in tf_body_map.items()},
-        'df_title': {t: len(post) for t, post in tf_title_map.items()},
-        'tf_body': {t: [[d, tf] for d, tf in post.items()]
-                    for t, post in tf_body_map.items()},
-        'tf_title': {t: [[d, tf] for d, tf in post.items()]
-                     for t, post in tf_title_map.items()},
-    }
+    articles = []
+    rendered = {}
+    for i, row in enumerate(docs_data):
+        if len(row) == 4:
+            title, desc, tags, body = row
+        else:
+            title, desc, tags = row
+            body = ''
+        slug = f'doc-{i}'
+        articles.append(_FakeArticle(slug, title, desc, tags))
+        rendered[slug] = body
+    idx = build_search_index(
+        articles, rendered, {}, top_category_for_article=lambda a: None,
+    )
+    if params:
+        idx['params'].update(params)
+    return idx
 
 
 class FullScoreTests(unittest.TestCase):
 
-    def test_title_match_beats_body_match(self):
-        # 같은 쿼리에 대해 제목 매치 > 본문 매치 (w_title=3.0 + 짧은 dl_title).
+    def test_title_match_beats_description_match(self):
+        # 같은 쿼리에 대해 제목 매치 > description 매치 (w_title=3.0 > w_desc=1.5).
         index = _mk_index([
-            ('python tutorial', 'something unrelated about cooking'),
-            ('cooking recipes', 'python tutorial in the body somewhere'),
+            ('python tutorial', 'unrelated about cooking', []),
+            ('cooking recipes', 'python tutorial in description', []),
         ])
-        s_title_match = bm25_score(index, 0, 'python')
-        s_body_match = bm25_score(index, 1, 'python')
-        self.assertGreater(s_title_match, s_body_match)
+        s_title = bm25_score(index, 0, 'python')
+        s_desc = bm25_score(index, 1, 'python')
+        self.assertGreater(s_title, s_desc)
+
+    def test_tags_exact_match_beats_substring(self):
+        # tags 의 정확 일치는 강한 신호 — phrase_boost_tags=2.5 적용.
+        # substring 매치는 일반 BM25 만 적용.
+        index = _mk_index([
+            # doc 0: tag 'python' 완전 일치 → phrase 부스트
+            ('A', '', ['python']),
+            # doc 1: description 에 'python' substring 매치만
+            ('B', 'about python language', []),
+        ])
+        s_tag = bm25_score(index, 0, 'python')
+        s_desc = bm25_score(index, 1, 'python')
+        self.assertGreater(s_tag, s_desc)
 
     def test_rare_query_outranks_common_query(self):
-        # 모든 문서에 흔한 토큰보다, 한 문서에만 등장하는 희귀 토큰이 더 강한 신호.
         index = _mk_index([
-            ('a', 'apple banana cherry common'),
-            ('b', 'date elder fig common'),
-            ('c', 'grape kiwi lemon common rarewordhere'),
+            ('common a', 'apple banana common', []),
+            ('common b', 'date elder common', []),
+            ('common c', 'grape lemon common rarewordhere', []),
         ])
         score_common = bm25_score(index, 0, 'common')   # df=3
         score_rare = bm25_score(index, 2, 'rarewordhere')  # df=1
         self.assertGreater(score_rare, score_common)
 
     def test_unknown_query_zero_score(self):
-        index = _mk_index([('a', 'apple banana')])
+        index = _mk_index([('a', 'apple banana', [])])
         self.assertEqual(bm25_score(index, 0, 'zzznotexist'), 0.0)
 
     def test_empty_query_zero_score(self):
-        index = _mk_index([('a', 'apple banana')])
+        index = _mk_index([('a', 'apple banana', [])])
         self.assertEqual(bm25_score(index, 0, ''), 0.0)
         self.assertEqual(bm25_score(index, 0, '   '), 0.0)
 
-    def test_phrase_boost_body(self):
-        # 같은 토큰 (검색 / 색엔 / 엔진) 이 본문에 있지만, phrase 가
-        # 연속 substring 으로 등장하는 doc 이 더 높은 점수여야 한다.
-        # "검색엔진" → tokens: ['검색','색엔','엔진'].
+    def test_phrase_boost_description(self):
+        # description 에 phrase substring 매치 → ×phrase_boost_desc
         index = _mk_index([
-            # doc 0: phrase '검색엔진' 이 그대로 등장 → phrase 부스트 ×1.5
-            ('A', '검색엔진 최적화에 관한 글입니다'),
-            # doc 1: 같은 토큰들이지만 phrase 미매치 (사이에 다른 글자)
-            ('B', '검색을 위한 색엔 분리 그리고 엔진 별도 단어'),
+            # doc 0: phrase '검색엔진' 이 description 에 그대로 등장
+            ('A', '검색엔진 최적화에 관한 글입니다', []),
+            # doc 1: 같은 토큰들이지만 phrase 미매치
+            ('B', '검색을 위한 색엔 분리 그리고 엔진 별도 단어', []),
         ])
         s0 = bm25_score(index, 0, '검색엔진')
         s1 = bm25_score(index, 1, '검색엔진')
-        # phrase 매치한 doc 이 더 높아야 함.
         self.assertGreater(s0, s1)
 
     def test_phrase_boost_title_multiplicative(self):
-        # 제목에 원본 쿼리가 substring 매치되면 ×phrase_boost_title.
         index = _mk_index([
-            ('python tutorial guide', 'unrelated body'),
-            ('learn python guide', 'unrelated body'),
+            ('python tutorial guide', '', []),
+            ('learn python guide', '', []),
         ])
-        # 두 쿼리 모두 'python' 토큰 매치이지만, doc 0 의 제목에는
-        # 'python tutorial' substring 이 있고 doc 1 에는 없다.
         s0 = bm25_score(index, 0, 'python tutorial')
         s1 = bm25_score(index, 1, 'python tutorial')
         self.assertGreater(s0, s1)
 
     def test_no_phrase_boost_when_zero_score(self):
-        # phrase 부스트는 곱셈이므로 score=0 이면 여전히 0. (regression guard)
-        index = _mk_index([('a', 'apple banana')])
-        # 쿼리 'banana' 는 토큰 매치되지만, 'zzznotexist' 는 매치 안 됨.
+        # phrase 부스트는 곱셈이므로 score=0 이면 여전히 0.
+        index = _mk_index([('a', 'apple banana', [])])
         self.assertEqual(bm25_score(index, 0, 'zzznotexist'), 0.0)
 
 
 # ════════════════════════════════════════════════════════════════
-# 인덱스 빌더 — 통계 정확성
+# 인덱스 빌더 — 통계 정확성 + v0.6.0 신규 동작
 # ════════════════════════════════════════════════════════════════
-
-class _FakeMeta:
-    def __init__(self, slug, title, date='2026-05-14'):
-        self.slug = slug
-        self.title = title
-        self.date = date
-
-
-class _FakeArticle:
-    def __init__(self, slug, title):
-        self.meta = _FakeMeta(slug, title)
-
 
 class _FakeCategory:
     def __init__(self, folder_name, slug):
@@ -300,31 +290,30 @@ class IndexBuilderTests(unittest.TestCase):
 
     def test_basic_stats(self):
         articles = [
-            _FakeArticle('a', 'Hello World'),
-            _FakeArticle('b', '안녕하세요'),
+            _FakeArticle('a', 'Hello World', description='a fine intro',
+                         tags=['greet']),
+            _FakeArticle('b', '안녕하세요', description='간단한 인사말',
+                         tags=['인사']),
         ]
-        rendered = {
-            'a': 'apple banana cherry',                   # 3 tokens
-            'b': '안녕하세요',                              # 4 bigrams
-        }
+        rendered = {'a': 'apple banana cherry', 'b': '안녕하세요'}
         cats = {('blog',): _FakeCategory('Blog', 'blog')}
         idx = build_search_index(
             articles, rendered, cats,
             top_category_for_article=lambda a: None,
         )
-        self.assertEqual(idx['version'], 3)
+        self.assertEqual(idx['version'], 4)
         self.assertEqual(idx['stats']['N'], 2)
-        # avgdl_body = (3 + 4) / 2 = 3.5
-        self.assertAlmostEqual(idx['stats']['avgdl_body'], 3.5)
-        # avgdl_title : 'Hello World' → 2 tokens, '안녕하세요' → 4 bigrams.
-        # 평균 = 3.0
+        # avgdl_title: 'Hello World' → 2, '안녕하세요' → 4. 평균 3.0
         self.assertAlmostEqual(idx['stats']['avgdl_title'], 3.0)
-        # df_body['apple'] = 1, df_body 에는 한국어 토큰도 포함
-        self.assertEqual(idx['df_body'].get('apple'), 1)
-        self.assertEqual(idx['df_body'].get('안녕'), 1)
+        # description / tags 도 토큰 통계 잡혀야.
+        self.assertIn('hello', idx['df_title'])
+        self.assertIn('fine', idx['df_desc'])
+        # 'greet' 는 영문이라 그대로 토큰화
+        self.assertIn('greet', idx['df_tags'])
+        # 한국어 tag '인사' 는 1글자 bigram → '인사' (자체)
+        self.assertIn('인사', idx['df_tags'])
 
     def test_sorted_by_slug(self):
-        # build_search_index 는 슬러그 정렬 순으로 doc_id 부여
         articles = [
             _FakeArticle('zebra', 'Z'),
             _FakeArticle('alpha', 'A'),
@@ -338,7 +327,6 @@ class IndexBuilderTests(unittest.TestCase):
         self.assertEqual(slugs_in_order, ['alpha', 'mango', 'zebra'])
 
     def test_categories_only_top_level(self):
-        # categories_map 은 path 깊이 1 (톱레벨) 만 포함.
         cats = {
             ('blog',): _FakeCategory('Blog', 'blog'),
             ('blog', 'tutorials'): _FakeCategory('Tutorials', 'tutorials'),
@@ -349,46 +337,102 @@ class IndexBuilderTests(unittest.TestCase):
         self.assertIn('blog', idx['categories'])
         self.assertNotIn('tutorials', idx['categories'])
 
+    def test_noindex_excluded_from_index(self):
+        # v0.6.0 신규: noindex 글은 인덱스에서 제외 (sitemap / feed 와 일관).
+        articles = [
+            _FakeArticle('public', 'Public Title', description='public desc'),
+            _FakeArticle('hidden', 'Hidden Title', description='hidden desc',
+                         noindex=True),
+        ]
+        rendered = {'public': '', 'hidden': ''}
+        idx = build_search_index(
+            articles, rendered, {}, top_category_for_article=lambda a: None,
+        )
+        self.assertEqual(idx['stats']['N'], 1)
+        self.assertEqual(idx['docs'][0]['slug'], 'public')
+
+    def test_body_snippet_truncated(self):
+        # 본문 평문은 docs[].body_snippet 으로 보존되며 길이 제한이 있다.
+        from scripts.search import BODY_SNIPPET_MAX_CHARS
+        long_body = 'word ' * 1000  # 5000 chars
+        articles = [_FakeArticle('long', 'L', description='x')]
+        rendered = {'long': long_body}
+        idx = build_search_index(
+            articles, rendered, {}, top_category_for_article=lambda a: None,
+        )
+        self.assertLessEqual(len(idx['docs'][0]['body_snippet']),
+                             BODY_SNIPPET_MAX_CHARS)
+
+    def test_body_not_indexed_in_v4(self):
+        # v0.6.0 핵심 변화: 본문은 더 이상 색인되지 않는다.
+        # 'rarebodyterm' 이 본문에만 있고 title/desc/tags 어디에도 없으면
+        # 검색 점수가 0.
+        articles = [_FakeArticle('a', 'A title', description='nothing')]
+        rendered = {'a': 'this body contains rarebodyterm xyz'}
+        idx = build_search_index(
+            articles, rendered, {}, top_category_for_article=lambda a: None,
+        )
+        # body_snippet 에는 보존되지만 df/tf 에는 없음.
+        self.assertIn('rarebodyterm', idx['docs'][0]['body_snippet'])
+        self.assertNotIn('rarebodyterm', idx['df_title'])
+        self.assertNotIn('rarebodyterm', idx['df_desc'])
+        self.assertNotIn('rarebodyterm', idx['df_tags'])
+        self.assertEqual(bm25_score(idx, 0, 'rarebodyterm'), 0.0)
+
+    def test_deterministic_keys(self):
+        # 두 번 만들면 dict 키 순서까지 동일 (PHP literal 결정성의 근거).
+        articles = [
+            _FakeArticle('z', 'Z', description='zebra'),
+            _FakeArticle('a', 'A', description='alpha'),
+        ]
+        rendered = {'z': '', 'a': ''}
+        idx1 = build_search_index(
+            articles, rendered, {}, top_category_for_article=lambda a: None,
+        )
+        idx2 = build_search_index(
+            articles, rendered, {}, top_category_for_article=lambda a: None,
+        )
+        self.assertEqual(list(idx1['df_title'].keys()),
+                         list(idx2['df_title'].keys()))
+        self.assertEqual([d['slug'] for d in idx1['docs']],
+                         [d['slug'] for d in idx2['docs']])
+
 
 # ════════════════════════════════════════════════════════════════
-# 회귀 가드 — 알려진 v0.4.x 결함이 재발하지 않는지
+# 회귀 가드 — 알려진 v0.4.x / v0.5.x 결함이 재발하지 않는지
 # ════════════════════════════════════════════════════════════════
 
-class V04RegressionGuards(unittest.TestCase):
-
-    def test_long_doc_does_not_dominate_by_tf_alone(self):
-        # v0.4.x 결함: 단순 TF 합산. 같은 토큰이 본문에 많이 등장하는 긴 글이
-        # 부당하게 높은 점수. BM25 의 길이 정규화로 해소.
-        long_body = ' '.join(['python'] * 200 + ['filler'] * 800)
-        short_body = 'python is a programming language'
-        index = _mk_index([
-            ('A long', long_body),
-            ('B short', short_body),
-        ])
-        s_long = bm25_score(index, 0, 'python')
-        s_short = bm25_score(index, 1, 'python')
-        # v0.4.x 였다면 s_long >> s_short (단순 TF 합산). BM25 에서는
-        # 길이 정규화로 단순 TF 우위가 약화. 적어도 30배 이상 차이는 나지
-        # 않아야 한다 (감각적 임계 — 회귀 시 1000 배 이상 났던 케이스).
-        self.assertLess(s_long, s_short * 30,
-                        f's_long={s_long}, s_short={s_short} — 길이 정규화 회귀')
+class RegressionGuards(unittest.TestCase):
 
     def test_common_korean_bigram_does_not_dominate_rare_term(self):
-        # v0.4.x 결함: 흔한 한글 bigram (예: '하다' 의 '하다') 이 희귀 영문
-        # 토큰과 동등 가중치. IDF 도입으로 해소.
+        # v0.4.x 결함: 흔한 한글 bigram (예: '하다') 이 희귀 영문 토큰과
+        # 동등 가중치. IDF 도입으로 해소.
         index = _mk_index([
-            ('A', '하다 하다 하다 hello'),
-            ('B', '하다 하다 hello hello hello'),
-            ('C', '하다 hello hello'),
-            ('D', '하다 unique-term'),
+            ('A', '하다 hello', ['common']),
+            ('B', '하다 hello', ['common']),
+            ('C', '하다 hello', ['common']),
+            ('D', '하다 unique-term', ['common']),
         ])
-        # '하다' 는 모든 문서 → df=4. 'unique-term' 은 doc 3 만 → df=1.
-        # 'unique-term' 검색 시 doc 3 이 압도적이어야 함.
         scores = {i: bm25_score(index, i, 'unique-term') for i in range(4)}
         self.assertGreater(scores[3], 0)
-        # doc 3 외에는 0 (토큰 미매치)
         for i in [0, 1, 2]:
             self.assertEqual(scores[i], 0.0)
+
+    def test_tags_substring_match_does_not_boost(self):
+        # v0.6.0 정책: tags 의 정확 일치만 phrase 부스트. substring 은 일반
+        # BM25 만 적용 (짧은 tag 의 substring 매치 노이즈 방지).
+        # 두 글의 description / title 이 동일 + tag 만 다르면, "py" 검색
+        # 시 tag='python' 의 substring 으로는 phrase 부스트가 발생 안 함.
+        index = _mk_index([
+            ('A', 'a description', ['python']),
+            ('B', 'a description', ['py']),
+        ])
+        # 'py' 가 tag 와 *정확히* 일치하는 doc 1 이 phrase 부스트 ×2.5 받아
+        # doc 0 보다 점수가 높아야 함. (doc 0 의 tag 'python' 은 substring 매치
+        # 이지만 정확 일치는 아니므로 부스트 없음.)
+        s0 = bm25_score(index, 0, 'py')
+        s1 = bm25_score(index, 1, 'py')
+        self.assertGreater(s1, s0)
 
 
 if __name__ == '__main__':

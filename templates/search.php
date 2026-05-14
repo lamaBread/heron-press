@@ -2,53 +2,51 @@
 declare(strict_types=1);
 
 // ════════════════════════════════════════════════════════════════
-// search.php — siheonlee.com 검색 엔드포인트  (v0.5.0)
+// search.php — siheonlee.com 검색 엔드포인트  (v0.6.0)
 // ════════════════════════════════════════════════════════════════
 //
-// 빌드 시 build.py 가 dist/ 로 복사하면서 {{...}} placeholder 만 치환.
-// 런타임에 dist/search-index.json (build.py 가 같은 빌드에서 생성) 을
-// 읽어 BM25 + 필드 가중치 + phrase 부스트 로 랭킹을 계산.
+// 빌드 시 build.py 가 dist/ 로 복사하면서 다음을 처리 (sentinel 패턴은
+// 본 헤더에서 일부러 약간 다른 표기로 인용했다 — builder 가 본 헤더 자체를
+// 매치하지 않도록):
+//   (a) PHP 주석 "INLINE_SEARCH_TOKENIZE" 자리에 templates/search_tokenize.php
+//       의 함수 본문을 인라인
+//   (b) PHP 주석 "INLINE_SEARCH_BM25" 자리에 templates/search_bm25.php 의
+//       함수 본문을 인라인
+//   (c) PHP 주석 "INLINE_SEARCH_INDEX" 와 직후 placeholder [] 자리에 빌드
+//       시점 정적 인덱스 (PHP 배열 리터럴) 를 인라인. 결정적 직렬화
+//       (scripts/search.py 의 php_array_literal) 로 같은 입력 → 같은 PHP 텍스트.
+//   (d) {{LANG}} / {{PAGE_TITLE}} / {{MAIN_TITLE}} / {{NAV_LINKS}} /
+//       {{COPYRIGHT_YEAR}} / {{COPYRIGHT_HOLDER}} HTML 컨텍스트 치환
 //
-// v0.5.0 변경 — BM25 기반 랭킹으로 전환:
-//   - 인덱스 포맷 v3 (이전 v2). 필드별 df / dl / avgdl 추가.
-//   - 점수 계산 로직이 templates/search_bm25.php 로 분리 (require_once).
-//     이 파일 (search.php) 은 라우팅·필터·HTML 렌더만 담당.
-//   - v0.4.x 의 매직 ×5 제목 부스트, TF 누적 합산 폐지.
-//   - 매치 밀도 기반 스니펫 — 토큰 매치가 밀집된 윈도우를 우선.
+// 위 (a)·(b)·(c) 는 PHP 주석 / 빈 배열 자리에 인라인되므로, 이 템플릿
+// 파일 자체도 `php -l` 통과 + IDE 의 PHP 정적 분석 통과한다.
 //
-// v0.4.2 변경 (유지):
-//   - 검색 결과 페이지에 <meta name='robots' content='noindex,follow'>.
+// v0.6.0 변경 요약:
+//   - search-index.json 폐기. 인덱스가 이 파일 안에 PHP 정적 배열 리터럴로
+//     인라인된다. JSON 파싱 / 디스크 IO 0. OPcache 가 search.php 의 바이트
+//     코드를 캐시하면 인덱스 배열도 메모리에 상주.
+//   - 색인 대상 필드: (title, description, tags). 본문은 더 이상 색인되지
+//     않는다. 검색 결과 미리보기용 스니펫만 docs[].body_snippet 으로 보존.
+//   - 채점 함수 (bm25_search / snippet_density / highlight_html) 와 토크나이저
+//     도 이 파일 안에 인라인된다 — search_bm25.php / search_tokenize.php 의
+//     별도 require_once 호출 없음 (OPcache hit 시 한 파일 = 한 캐시 엔트리).
+//   - noindex 글은 빌드 단계에서 인덱스에서 제외 (sitemap / feed 와 일관).
 //
-// 인덱스 포맷 v3 (scripts/search.py 의 build_search_index() 참조):
-//   {
-//     "version": 3,
-//     "params": {"k1_body","b_body","k1_title","b_title",
-//                "w_title","phrase_boost_body","phrase_boost_title"},
-//     "stats":  {"N","avgdl_body","avgdl_title"},
-//     "docs":   [{"slug","title","date","category","category_slug","body",
-//                 "dl_body","dl_title"}, ...],
-//     "categories": {"<slug>": "<folder_name>", ...},
-//     "df_body":    {"<token>": <int>, ...},
-//     "df_title":   {"<token>": <int>, ...},
-//     "tf_body":    {"<token>": [[doc_id, tf], ...]},
-//     "tf_title":   {"<token>": [[doc_id, tf], ...]}
-//   }
+// v0.4.2 유지: 검색 결과 페이지에 <meta name='robots' content='noindex,follow'>.
 
-require_once __DIR__ . '/search_tokenize.php';
-require_once __DIR__ . '/search_bm25.php';
+// ── 인라인 토크나이저 ────────────────────────────────────────────
+/* INLINE: SEARCH_TOKENIZE */
 
-$INDEX_PATH = __DIR__ . '/search-index.json';
-if (!is_readable($INDEX_PATH)) {
-    http_response_code(500);
-    echo 'Search index unavailable.';
-    exit;
-}
-$INDEX = json_decode(file_get_contents($INDEX_PATH), true);
-if (!is_array($INDEX) || !isset($INDEX['docs']) || ($INDEX['version'] ?? 0) < 3) {
-    http_response_code(500);
-    echo 'Search index malformed or version mismatch (expected v3).';
-    exit;
-}
+// ── 인라인 BM25 점수 + 스니펫 + 하이라이트 ──────────────────────
+/* INLINE: SEARCH_BM25 */
+
+// ── 인라인 정적 인덱스 ──────────────────────────────────────────
+//
+// 빌드 시 scripts/search.php_array_literal() 가 결정적으로 직렬화한 PHP
+// 배열 리터럴이 아래 `[]` 자리에 인라인된다. OPcache 가 캐시하므로 매
+// 요청마다 파싱하지 않는다.
+$INDEX = /* INLINE: SEARCH_INDEX */ [];
+
 $CATEGORIES = isset($INDEX['categories']) && is_array($INDEX['categories'])
     ? $INDEX['categories'] : [];
 
@@ -133,7 +131,7 @@ if ($q === '') {
                 <a href='/<?= htmlspecialchars($doc['slug'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>/'> <?= highlight_html($doc['title'], $q) ?> </a>
             </span>
             <span class='listup_module_date'> &nbsp;&nbsp; <?= htmlspecialchars($doc['date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></span>
-<?php $snip = snippet_density($doc['body'], $q); if ($snip !== ''): ?>
+<?php $snip = snippet_density((string)($doc['body_snippet'] ?? ''), $q); if ($snip !== ''): ?>
             <div class='search-snippet'><?= highlight_html($snip, $q) ?></div>
 <?php endif ?>
         </div>

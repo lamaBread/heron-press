@@ -1,18 +1,51 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.5.5 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.6.0 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
-`scripts/` 패키지 안에 모듈별로 나뉘어 있다.
+`scripts/` 패키지 안에 모듈별로 나뉘어 있다. 사이트 전역 버전 문자열은
+[scripts/__init__.py](scripts/__init__.py) 의 `__version__` 이 단일
+source of truth — 피드 generator 등이 이 값을 참조.
 
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
-    python -m unittest discover -s tests   # BM25 단위 테스트 (v0.5.0)
+    python -m unittest discover -s tests   # 단위 테스트 (v0.6.0: 179개)
+    python tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
-빌드 의존성 (v0.5.5):
+빌드 의존성 (v0.6.0):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.6.0 변경 사항 (vs v0.5.5):
+  - **검색 인덱스를 메타데이터 3-필드 (title / description / tags) 만 색인**.
+    v0.5.x 까지 본문도 색인하던 정책 폐기. tags 가 새 가중치 필드로 합류
+    (`w_title=3.0`, `w_description=1.0`, `w_tags=2.5`). 본문 평문은 스니펫
+    추출 목적으로 글마다 앞 1500 자만 인덱스에 보존. 작성자가 의도적으로
+    메타데이터에 적은 단어만 검색의 대상이 됨 → 검색 결과의 신호/잡음비 향상.
+  - **search-index.json 폐기 + `dist/search.php` 한 파일 인라인**. 인덱스가
+    PHP 정적 배열 리터럴로 search.php 안에 직접 박힘 (`/* INLINE: SEARCH_INDEX */`
+    sentinel 치환). 토크나이저 + BM25 함수도 같은 파일에 인라인되어 dist
+    검색 산출물이 search.php 하나로 축약. require_once / 디스크 IO / JSON
+    파싱 전부 0 — OPcache 가 바이트코드와 함께 인덱스를 메모리에 캐시.
+  - **결정적 직렬화**: scripts/search.py 의 `php_array_literal()` 가 dict
+    키를 정렬해 출력 → 두 번 빌드해도 dist/search.php 의 sha256 동일. 빌드
+    당 build_time 같은 비결정 값을 산출물에 절대 새지 않는 원칙 유지.
+  - **단위 테스트 본격 확장**: 25 → **179**. `test_bm25.py` 31개 (BM25 v4
+    + 신규 가드 6개) + `test_builder.py` / `test_markdown.py` / `test_seo.py`
+    / `test_sitemap.py` / `test_feed.py` / `test_yaml_parser.py` /
+    `test_slugs.py` / `test_report.py` / `test_parsedown.py` /
+    `test_php_literal.py`.
+  - **`tests/run_diagnostics.py` 신설** — 단위 테스트 + 빌드 결정성 (sha256
+    동등성) + PHP 구문 (php -l) + Python↔PHP BM25 점수 패리티 + 인덱스
+    형식을 한 번에 검사하고 리포트 파일 생성. Windows cp949 콘솔에서도
+    동작하도록 stdout/stderr 를 UTF-8 로 재구성.
+  - **`scripts/__init__.py` 의 `__version__`** 신설 — 사이트 버전 문자열의
+    단일 source of truth. feed generator 등 버전을 표기하는 산출물이 이
+    값을 참조 (v0.5.x 의 하드코딩된 'v0.5.4' 문자열 제거).
+  - 콘텐츠 측 출력 (글 페이지, 홈, 카테고리, sitemap.xml, robots.txt,
+    redirect.php, feed.atom, feed.rss) 의 형식은 v0.5.5 와 동등. 변경은
+    검색 시스템과 단위 테스트·진단 인프라에 한정.
 
 v0.5.5 변경 사항 (vs v0.5.4):
   - **본문 ↔ 메타데이터 분리 원칙 도입** (README § 5-1). SEO description /

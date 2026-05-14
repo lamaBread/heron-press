@@ -1,4 +1,24 @@
-# siheonlee.com — 사이트 전역 설정 (v0.5.4)
+# siheonlee.com — 사이트 전역 설정 (v0.6.0)
+#
+# v0.6.0 변경 요약 — 검색 인덱스 재설계 (site.yaml 직접 영향 없음):
+#   - 검색 인덱스가 메타데이터 3-필드 (title / description / tags) 만 색인하는
+#     방식으로 바뀌었고, 산출물도 search-index.json 폐기 + dist/search.php 한
+#     파일 인라인으로 전환됨. **이 site.yaml 의 키나 값에는 영향 없음.**
+#   - 사이트 버전 문자열의 단일 source of truth 는 scripts/__init__.py 의
+#     `__version__`. 피드 generator 문자열 등이 이 값을 참조 — site.yaml 에
+#     별도 버전 필드는 없다.
+#
+# v0.5.5 변경 요약 — 본문 ↔ 메타데이터 분리 + 빌드 리포트 일원화:
+#   - **`seo.description` 이 필수 필드로 격상**. 비어 있으면 `description` /
+#     `og:description` / `twitter:description` / 피드 summary / 갤러리 description
+#     이 모두 누락된 채 산출물이 만들어지고, 빌드 리포트에 보완 필요 항목으로
+#     기록됨. 빌드는 끝까지 진행. **site.yaml 의 `description_truncate` 는**
+#     **이제 본문 폴백용이 아니라** 피드 summary / 갤러리 description 의 한도로만
+#     쓰임 (아래 해당 키 주석 참조).
+#   - og_image 의 본문 폴백 제거. `seo.og_image` > `site.default_og_image`.
+#     둘 다 부재하면 og:image 태그 자체를 출력하지 않음.
+#   - meta.yaml 필드 부족/형식 오류로 빌드를 abort 하던 동작 폐기. 글 단위
+#     issue 로 기록하고 빌드는 계속. 시스템 결함 (템플릿 누락 등) 만 abort.
 #
 # v0.5.4 변경 요약 — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + nav_priority:
 #   - 글에만 적용되던 `<title>` 폴백 체인 (`{prefix}{title}{suffix}`) 이
@@ -223,11 +243,14 @@ warn_on_stale_updated: true
 category_per_page: 20
 category_preview_per_page: 5
 
-# SEO 폴백.
-# description_truncate — meta.yaml 의 seo.description 이 비어 있어 본문 첫
-# 단락으로 폴백할 때의 최대 글자 수. v0.5.4 부터 영문 단어 경계를 존중 (절단
-# 지점이 ASCII 영문/숫자 시퀀스 한가운데이면 직전 공백까지 backup). 한국어
-# 등 CJK 글자는 글자 단위가 의미 단위라 영향 없음.
+# SEO summary 길이 한도.
+# description_truncate — 피드 summary (RSS/Atom 의 `<description>` / `<summary>`)
+# 와 갤러리 타일 description 의 최대 글자 수. v0.5.4 까지는 meta.yaml 의
+# seo.description 이 비어 있을 때 본문 첫 단락으로 폴백하던 동작에도 쓰였지만,
+# v0.5.5 의 본문 ↔ 메타데이터 분리 원칙으로 그 폴백이 폐지됨 (description 자체
+# 는 누락된 채 빌드 + 리포트 기록). 절단 규칙: 절단 지점이 ASCII 영문/숫자
+# 시퀀스 한가운데이면 직전 공백까지 backup (v0.5.4). 한국어 등 CJK 글자는 글자
+# 단위가 의미 단위라 영향 없음.
 description_truncate: 150
 
 # robots.txt — 사이트 정책은 '모든 글이 검색 가능' 이 기본.

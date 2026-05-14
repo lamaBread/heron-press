@@ -143,7 +143,7 @@ def optimize_image(
     dst_dir: Path,
     *,
     config: ImageConfig,
-) -> Optional[VariantSet]:
+) -> tuple[Optional[VariantSet], Optional[str]]:
     """원본 raster 이미지 한 장을 dst_dir 에 WebP 변종들로 변환.
 
     원본은 dst_dir 에 복사하지 않는다 (HTML 후처리 가 webp src 로 바꾸므로).
@@ -151,10 +151,16 @@ def optimize_image(
 
     캐시: dst_dir 의 각 변종이 src 보다 새것이면 재인코딩 건너뜀.
 
-    반환: 생성된 변종 정보. 인코딩 실패 시 None (호출 측에서 폴백 가능).
+    반환: `(variants, error)` 튜플.
+      - 성공:        (VariantSet, None)
+      - 인코딩 실패: (None, '사람이 읽을 에러 메시지')
+      - Pillow 미설치: (None, None) — 호출자가 abort() 로 먼저 처리하므로 도달 X.
+
+    호출자는 error 가 있으면 BuildReport.warning 으로 라우팅하고, 원본을
+    그대로 복사 (폴백) 한다. 산출물은 정상 — 사용자가 한 번 확인할 가치만 있음.
     """
     if not _HAS_PIL:
-        return None
+        return None, None
 
     try:
         with Image.open(src) as im:
@@ -198,11 +204,11 @@ def optimize_image(
             return VariantSet(
                 primary_width=_primary_width(widths),
                 widths=widths,
-            )
+            ), None
     except Exception as e:
         # 인코딩 실패는 die 가 아닌 None — 호출 측에서 원본 복사로 폴백.
-        print(f'[WARN] 이미지 최적화 실패 ({src.name}): {e}')
-        return None
+        # 워닝 메시지는 호출자가 BuildReport 로 라우팅한다 (v0.6.x 통합 리포트).
+        return None, f'이미지 최적화 실패 ({src.name}): {e}'
 
 
 # ════════════════════════════════════════════════════════════════
