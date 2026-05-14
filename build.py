@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.5.3 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.5.4 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -9,10 +9,32 @@ Usage:
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
     python -m unittest discover -s tests   # BM25 단위 테스트 (v0.5.0)
 
-빌드 의존성 (v0.5.3):
+빌드 의존성 (v0.5.4):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.5.4 변경 사항 (vs v0.5.3):
+  - `<head>`의 `<title>` 폴백 체인 (`{prefix}{title}{suffix}`) 이 글에만 적용
+    되던 한계 해소. 홈/카테고리 페이지는 각자의 meta.yaml 에서 (Articles/
+    meta.yaml, Articles/<카테고리>/meta.yaml) `title` + `seo.title_prefix` /
+    `seo.title_suffix` 로 오버라이드. 404 / search 는 콘텐츠 페이지가 아니라
+    meta.yaml 을 두지 않는 대신 site.yaml 의 `error_404_title` /
+    `search_title` 로 설정 (default_title_prefix / suffix 폴백 체인은 동일
+    적용). CategoryMeta 에 `title` / `seo` (SeoMeta) 추가. SiteConfig 에
+    `error_404_title` / `search_title` 추가.
+  - description_truncate 가 영문 단어 한가운데를 자르지 않음. scripts/seo.py
+    의 `truncate_description` (구 `_truncate` 의 word-boundary 강화판) 으로
+    통합. 절단 지점이 ASCII 영문/숫자/하이픈/언더스코어 시퀀스 한가운데이면
+    직전 공백까지 backup. 한국어 등 CJK 는 영향 없음 (글자 단위가 의미 단위
+    이므로 ASCII 단어 검사 통과 못함). builder 의 article_render_meta 캐시
+    (gallery + feed summary) 도 같은 함수를 import 해서 중복 로직 제거.
+  - 톱레벨 nav 정렬에 `nav_priority` 도입. ArticleMeta + CategoryMeta 양쪽에
+    정수 필드 (기본 0). 값이 클수록 먼저, 같은 값끼리는 폴더명 알파벳 순.
+    v0.4.6 까지의 'About 최상단 하드코딩' 폐기. `priority` (부모 카테고리
+    page 의 sibling section 정렬) 와는 별개 축. 기존 데이터 그대로 두면
+    About 은 알파벳 순으로 여전히 첫째 (A < B) — 명시적으로 다른 자리에 두려면
+    Articles/<항목>/meta.yaml 의 nav_priority 를 사용.
 
 v0.5.3 변경 사항 (vs v0.5.2):
   - meta.yaml `tags` 필드 (글 단위 주제어 리스트). 작성자가 직접 적음. inline /

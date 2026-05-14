@@ -1,5 +1,13 @@
 """SEO meta 태그 빌더 (§ 5).
 
+v0.5.4 변경:
+  - `truncate_description` (구 `_truncate`) 가 영문 단어 경계를 존중. 절단
+    지점이 ASCII alphanumeric/하이픈/언더스코어 시퀀스 한가운데 (= 양쪽 모두
+    Latin 단어 글자) 이면 직전 공백까지 backup. 한국어/한자/일본어 등 CJK
+    는 글자 단위가 의미 단위라 영향 없음 (`isascii()` 통과 못함). 빌더의
+    article_render_meta 캐시 (gallery / feed 가 참조) 도 같은 함수를 import 해서
+    중복 로직 제거.
+
 v0.4.3 변경:
   - meta.yaml 의 평면 seo_* 필드 → SeoMeta dataclass (`m.seo.*`).
   - <title> 에 들어가는 full_title 을 builder 가 정상 사용 (이전엔
@@ -11,13 +19,42 @@ v0.4.0 변경:
   - 글마다 noindex 를 meta.yaml 에서 켤 수 있음 (article 템플릿이
     ROBOTS_META placeholder 를 표시).
 """
+import re
+
 from .models import RenderResult, SiteConfig
 
 
-def _truncate(s: str, max_len: int) -> str:
+def _is_latin_word_char(c: str) -> bool:
+    """ASCII 영문/숫자/'-'/'_' 인지. 한글·한자·일본어 등 CJK 글자는 False."""
+    return bool(c) and c.isascii() and (c.isalnum() or c in '-_')
+
+
+def truncate_description(s: str, max_len: int) -> str:
+    """`s` 를 `max_len` 글자로 절단. 영문 단어를 한가운데 자르지 않는다.
+
+    절단 지점이 ASCII Latin 단어 (영문/숫자/하이픈/언더스코어 시퀀스) 한가운데
+    이면 직전 공백까지 backup. 한국어 등 CJK 글자는 글자 단위가 의미 단위라
+    그대로 절단 가능 (Latin 단어 검사를 통과하지 못한다).
+
+    백업해도 공백을 찾지 못하면 (예: max_len 안이 단일 영문 단어 하나뿐인
+    극단적 케이스) 그냥 원래 절단 지점에서 자른다 — 무한 폴백을 만들지 않기 위함.
+
+    절단이 일어난 경우 우측의 trailing whitespace 를 제거하고 '…' 를 붙인다.
+    """
     if len(s) <= max_len:
         return s
-    return s[:max_len].rstrip() + '…'
+    cut = s[:max_len]
+    c_before = cut[-1] if cut else ''
+    c_after = s[max_len] if max_len < len(s) else ''
+    if _is_latin_word_char(c_before) and _is_latin_word_char(c_after):
+        m = re.search(r'^(.*\s)\S+$', cut, re.DOTALL)
+        if m:
+            cut = m.group(1)
+    return cut.rstrip() + '…'
+
+
+# v0.5.4 이전과 호환되는 내부 이름. seo.py 내부 호출용.
+_truncate = truncate_description
 
 
 def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:

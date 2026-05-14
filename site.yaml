@@ -1,4 +1,26 @@
-# siheonlee.com — 사이트 전역 설정 (v0.5.3)
+# siheonlee.com — 사이트 전역 설정 (v0.5.4)
+#
+# v0.5.4 변경 요약 — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + nav_priority:
+#   - 글에만 적용되던 `<title>` 폴백 체인 (`{prefix}{title}{suffix}`) 이
+#     홈/카테고리/404/search 에도 동일하게 적용됨.
+#       * 홈     — Articles/meta.yaml 의 `title` (없으면 site.name) +
+#                  `seo.title_prefix` / `seo.title_suffix` 가 site 디폴트
+#                  를 오버라이드.
+#       * 카테고리 — `Articles/<카테고리>/meta.yaml` 의 `title` (없으면
+#                    folder_name) + 같은 seo 오버라이드.
+#       * 404 / search — meta.yaml 이 없는 시스템 페이지. site.yaml 의
+#                        `error_404_title` / `search_title` 필드로만 설정 (아래
+#                        참조). default_title_prefix / suffix 는 동일하게 적용.
+#   - description_truncate 가 영문 단어 한가운데를 자르지 않음. 절단 지점이
+#     ASCII 영문/숫자/하이픈/언더스코어 시퀀스 한가운데이면 직전 공백까지
+#     backup. 한국어 등 CJK 글자는 글자 단위가 의미 단위라 그대로 절단 가능
+#     (영향 없음). `seo.description` 폴백 + gallery / feed 의 summary 모두 같은
+#     함수 (`seo.truncate_description`) 를 거치므로 일관적.
+#   - 톱레벨 nav 항목 정렬에 `nav_priority` 도입. ArticleMeta + CategoryMeta
+#     양쪽에 정수 필드 (기본 0). 값이 클수록 먼저, 같은 값끼리는 폴더명
+#     알파벳 순. v0.4.6 까지의 'About 최상단 하드코딩' 폐기 — About 을 nav 상단
+#     으로 유지하려면 Articles/About/meta.yaml 에 `nav_priority: <큰 값>` 명시.
+#     `priority` (부모 카테고리 페이지의 sibling section 정렬) 와는 별개 축.
 #
 # v0.5.3 변경 요약 — `tags` 필드 + `layout: gallery` + RSS/Atom 피드:
 #   - 글 meta.yaml 에 `tags` 필드 (리스트, 선택). 작성자가 직접 적는 주제어.
@@ -153,11 +175,23 @@ default_og_image: /assets/default-og.png
 # 카테고리 meta.yaml 의 `lang:` 이 있으면 그 카테고리 인덱스 페이지에 한해 오버라이드.
 lang: ko
 
-# 글 페이지 <title> 의 기본 prefix/suffix.
-# v0.4.3 부터 글 페이지의 <title> 은 `{prefix}{title}{suffix}` 형태.
-# meta.yaml 의 `seo.title_prefix` / `seo.title_suffix` 로 글마다 override 가능.
+# 모든 페이지 <title> 의 기본 prefix/suffix (v0.4.3 부터 글, v0.5.4 부터
+# 홈/카테고리/404/search 도 포함). `<title>` 은 `{prefix}{title}{suffix}` 형태.
+# 페이지 단위 override:
+#   - 글: meta.yaml 의 `seo.title_prefix` / `seo.title_suffix`
+#   - 홈: Articles/meta.yaml 의 같은 필드
+#   - 카테고리: 카테고리 meta.yaml 의 같은 필드
+#   - 404 / search: 페이지 단위 override 불가능 — site.yaml 한 군데에서만
 default_title_prefix: ""
 default_title_suffix: ""
+
+# v0.5.4: 시스템 페이지 (404 / search) 의 <title> 본문 텍스트.
+# 양옆은 위의 default_title_prefix / default_title_suffix 로 감싸진다 — 글·홈·
+# 카테고리와 동일 체인. 두 페이지는 meta.yaml 을 두지 않으므로 (콘텐츠 페이지가
+# 아니라 시스템 페이지) 페이지 단위 override 가 없고 site.yaml 에서만 설정.
+# 비우면 각각 "Not Found" / "Search" 디폴트.
+error_404_title: Not Found
+search_title: Search
 
 # 저작권 (원본 푸터: "Copyright© 2025. 이시헌. All rights reserved.")
 copyright_holder: 이시헌
@@ -189,7 +223,11 @@ warn_on_stale_updated: true
 category_per_page: 20
 category_preview_per_page: 5
 
-# SEO 폴백
+# SEO 폴백.
+# description_truncate — meta.yaml 의 seo.description 이 비어 있어 본문 첫
+# 단락으로 폴백할 때의 최대 글자 수. v0.5.4 부터 영문 단어 경계를 존중 (절단
+# 지점이 ASCII 영문/숫자 시퀀스 한가운데이면 직전 공백까지 backup). 한국어
+# 등 CJK 글자는 글자 단위가 의미 단위라 영향 없음.
 description_truncate: 150
 
 # robots.txt — 사이트 정책은 '모든 글이 검색 가능' 이 기본.

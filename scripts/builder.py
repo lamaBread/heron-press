@@ -1,5 +1,23 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.5.4 변경 — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + nav_priority:
+  - v0.4.3 부터 글에만 적용되던 `<title>` 폴백 체인이 홈/카테고리/404/search
+    에도 적용됨. 새 helper `_wrap_page_title(body, seo_override=None)` 가
+    `{prefix}{body}{suffix}` 를 만들고, prefix/suffix 는 페이지의 seo
+    override (있으면) > site.default_title_prefix / suffix (폴백). 본문은
+    홈은 home_meta.title or site.name, 카테고리는 cat.meta.title or
+    cat.folder_name, 404 는 site.error_404_title, search 는 site.search_title.
+  - description_truncate 가 영문 단어 경계를 존중. 새 함수
+    `seo.truncate_description` (구 `_truncate` 의 word-boundary 강화판) 으로
+    통합. builder 의 article_render_meta 캐시 (gallery + feed summary) 도 같은
+    함수를 import 해서 중복 로직 제거. 영문 단어 한가운데에서 절단되려고
+    하면 직전 공백까지 backup. 한국어 등 CJK 는 영향 없음 (글자 단위가 의미
+    단위이므로 ASCII 단어 검사를 통과 못함).
+  - 톱레벨 nav 정렬에 `nav_priority` 도입. ArticleMeta + CategoryMeta 양쪽에
+    정수 필드 (기본 0). `_top_level_entries` 가 `(-nav_priority, folder_name)`
+    로 정렬. v0.4.6 까지의 'About 최상단 하드코딩' 폐기. `priority` (부모
+    카테고리 page 의 sibling section 정렬) 와는 별개 축.
+
 16단계 파이프라인 (v0.5.3 에서 _build_feeds 추가):
   [1] _load_config           — site.yaml + legacy-map.yaml + 토크나이저 패리티 검증
   [2] _scan_articles         — Articles/ 트리 순회, _ 접두 제외
@@ -228,7 +246,7 @@ def _pagination_nav_html(group_key: str, total_items: int, per_page: int) -> str
         f'aria-label="Next page">›</button>'
         f'</nav>'
     )
-from .seo import build_meta_tags
+from .seo import build_meta_tags, truncate_description
 from .search import (
     html_to_plain,
     build_search_index,
@@ -361,6 +379,10 @@ class Builder:
             lang=str(get('lang') or 'ko'),
             category_per_page=int(get('category_per_page') or 20),
             category_preview_per_page=int(get('category_preview_per_page') or 5),
+            # v0.5.4: 시스템 페이지(404 / search)의 `<title>` 본문 텍스트.
+            # 양옆은 default_title_prefix / default_title_suffix 로 감싸진다.
+            error_404_title=str(get('error_404_title') or 'Not Found'),
+            search_title=str(get('search_title') or 'Search'),
             # v0.5.1: 이미지 자동 최적화 설정.
             images=self._parse_image_config(get('images') or {}),
         )
@@ -581,6 +603,18 @@ class Builder:
                 die(f"meta.yaml: 'tags' 는 리스트여야 합니다 (받은 값: "
                     f"{tags_raw!r})\n       at {meta_file}")
 
+            # v0.5.4: nav_priority — 글이 톱레벨일 때만 의미 (예: About).
+            # CategoryMeta.nav_priority 와 같은 파싱 규칙.
+            nav_priority_raw = raw.get('nav_priority')
+            if nav_priority_raw is None:
+                nav_priority = 0
+            else:
+                try:
+                    nav_priority = int(nav_priority_raw)
+                except (TypeError, ValueError):
+                    die(f"meta.yaml: 'nav_priority' 는 정수여야 합니다 "
+                        f"(받은 값: {nav_priority_raw!r})\n       at {meta_file}")
+
             article.meta = ArticleMeta(
                 slug=slug,
                 title=title,
@@ -591,6 +625,7 @@ class Builder:
                 seo=seo,
                 styles=normalize_styles(raw.get('styles')),
                 tags=tags,
+                nav_priority=nav_priority,
             )
 
     # ── [4] Validation + category tree ───────────────────────
@@ -747,8 +782,14 @@ class Builder:
         """임의 경로의 meta.yaml 을 CategoryMeta 로 파싱 (v0.4.6 helper).
 
         `Articles/meta.yaml` (루트 = 메인페이지) 와 카테고리 폴더의 meta.yaml
-        둘 다에 동일한 파싱 로직 적용. 글 폴더의 meta.yaml 과 헷갈리지 않도록
-        slug/title/date 가 있으면 카테고리 meta.yaml 로 취급하지 않는다.
+        둘 다에 동일한 파싱 로직 적용.
+
+        v0.5.4: `title` / `seo` / `nav_priority` 도 파싱한다. `title` 은
+        페이지 자체의 `<title>` 본문이고, `seo.title_prefix` / `seo.title_suffix`
+        는 site 디폴트를 오버라이드한다. 글 폴더의 meta.yaml 이 우연히 이
+        함수로 들어와도 (`_scan_articles` 가 미리 거른 경우만) `slug` / `date`
+        가 있으면 빈 CategoryMeta 로 폴백 (안전망). 단 `title` 만 있는 경우는
+        카테고리/홈 페이지의 정상적인 title override 로 취급한다.
         """
         if not meta_file.exists():
             return CategoryMeta()
@@ -761,11 +802,13 @@ class Builder:
 
         if raw is None:
             raw = {}
-        if 'slug' in raw or 'title' in raw or 'date' in raw:
-            # 글 폴더의 meta.yaml 이 우연히 카테고리처럼 잡힌 경우 — 카테고리
-            # meta.yaml 로 취급하지 않는다 (실제로는 _scan_articles 가 글로
-            # 분류했을 것이므로, path_tuple 이 카테고리이면 이 경우는 발생하지
-            # 않아야 정상).
+        # v0.5.4: 글 meta.yaml 의 외형은 `slug` + `date` 의 동시 존재로 식별
+        # (둘 다 ArticleMeta 의 필수 필드). 한쪽만 있는 건 카테고리 meta.yaml
+        # 에서의 오타/실수일 수 있으므로 die 가 적절할 수 있겠지만, 이 함수는
+        # 카테고리 트리 구축 단계라 die 하면 정보가 적다 — 이번 버전에서는
+        # 그대로 빈 CategoryMeta 폴백을 유지하며, `title` 은 카테고리에서도
+        # 유효한 키로 통과시킨다.
+        if 'slug' in raw and 'date' in raw:
             return CategoryMeta()
 
         per_page = raw.get('per_page')
@@ -795,6 +838,47 @@ class Builder:
             die(f"meta.yaml: 'excludes_categories' 는 리스트여야 합니다 (받은 값: "
                 f"{excludes_raw!r})\n       at {meta_file}")
 
+        # v0.5.4: title (페이지 <title> 본문 override).
+        title_val = raw.get('title')
+        title = str(title_val) if title_val else None
+
+        # v0.5.4: seo (글의 SeoMeta 와 동일 스키마). 현재 실제로 사용되는 건
+        # title_prefix / title_suffix 뿐 — 나머지 필드는 forward compat 차원
+        # 에서 파싱만 한다.
+        seo_raw = raw.get('seo') or {}
+        if not isinstance(seo_raw, dict):
+            die(f"meta.yaml: 'seo' 는 매핑이어야 합니다\n       at {meta_file}")
+
+        def _seo_str(key):
+            v = seo_raw.get(key)
+            return v if v else None
+
+        seo = SeoMeta(
+            title_prefix=seo_raw.get('title_prefix'),
+            title_suffix=seo_raw.get('title_suffix'),
+            description=_seo_str('description'),
+            author=_seo_str('author'),
+            canonical=_seo_str('canonical'),
+            og_title=_seo_str('og_title'),
+            og_description=_seo_str('og_description'),
+            og_image=_seo_str('og_image'),
+            og_image_alt=_seo_str('og_image_alt'),
+            og_type=seo_raw.get('og_type') or 'website',
+            twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
+            twitter_image=_seo_str('twitter_image'),
+        )
+
+        # v0.5.4: nav_priority — 톱레벨 nav 정렬 키 (priority 와 별개 축).
+        nav_priority_raw = raw.get('nav_priority')
+        if nav_priority_raw is None:
+            nav_priority = 0
+        else:
+            try:
+                nav_priority = int(nav_priority_raw)
+            except (TypeError, ValueError):
+                die(f"meta.yaml: 'nav_priority' 는 정수여야 합니다 (받은 값: "
+                    f"{nav_priority_raw!r})\n       at {meta_file}")
+
         return CategoryMeta(
             per_page=int(per_page) if per_page is not None else None,
             preview_per_page=int(preview) if preview is not None else None,
@@ -803,6 +887,9 @@ class Builder:
             styles=normalize_styles(styles_raw),
             priority=priority,
             excludes_categories=excludes,
+            title=title,
+            seo=seo,
+            nav_priority=nav_priority,
         )
 
     def _load_home_meta(self):
@@ -853,17 +940,56 @@ class Builder:
     def _copyright_year(self) -> str:
         return str(datetime.date.today().year)
 
+    # ── Title fallback chain (v0.5.4) ─────────────────────────
+    #
+    # 글, 홈, 카테고리, 404, search 모두 동일한 폴백 규칙으로 `<title>` 을
+    # 만든다: `{prefix}{title}{suffix}`. prefix/suffix 는 페이지 단위 override
+    # 가 없으면 site.default_title_prefix / default_title_suffix.
+    #
+    # 페이지별 title 본문 결정:
+    #   글       — m.title (글 폴더명과 무관한 글 자체의 제목)
+    #   홈       — home_meta.title 이 있으면 그 값, 없으면 site.name
+    #   카테고리 — cat.meta.title 이 있으면 그 값, 없으면 cat.folder_name
+    #   404      — site.error_404_title
+    #   search   — site.search_title
+    #
+    # 글의 prefix/suffix 폴백 체인은 seo.py 의 build_meta_tags 가 담당하고,
+    # 나머지 페이지는 _wrap_page_title 이 같은 규칙을 적용한다.
+
+    def _wrap_page_title(self, body: str, seo_override: SeoMeta = None) -> str:
+        """주어진 본문 텍스트를 default_title_prefix / suffix 로 감싸 반환.
+
+        seo_override 가 있고 title_prefix / title_suffix 가 None 이 아니면
+        site 디폴트 대신 그 값을 사용. 글의 build_meta_tags 와 동일한 규칙.
+        """
+        prefix = self.site.default_title_prefix
+        suffix = self.site.default_title_suffix
+        if seo_override is not None:
+            if seo_override.title_prefix is not None:
+                prefix = seo_override.title_prefix
+            if seo_override.title_suffix is not None:
+                suffix = seo_override.title_suffix
+        return f'{prefix}{body}{suffix}'
+
     def _top_level_entries(self) -> list:
         """Articles/ 직속 항목을 [(folder_name, slug, is_article), ...] 로 반환.
 
         v0.4.5: 카테고리 폴더에도 meta.yaml 이 있을 수 있으므로, meta.yaml
         존재만으로 '글' 인지 판단하지 않는다. _scan_articles 에서 이미
         분류한 self.articles 리스트와 source_dir 매칭으로 결정.
+
+        v0.5.4: 'About 최상단 하드코딩' 폐기. 모든 톱레벨 항목 (글 + 카테고리)
+        의 `nav_priority` 로 정렬한다. 값이 클수록 먼저, 같은 값끼리는 폴더명
+        알파벳 순. nav_priority 가 없는 (= 기본 0) 항목들은 알파벳 순 폴백.
+        About 을 nav 최상단에 두고 싶으면 Articles/About/meta.yaml 에
+        `nav_priority: 100` 같은 큰 값을 명시한다.
         """
         if not self.articles_dir.is_dir():
             return []
 
-        entries = []
+        # 항목별 (folder_name, slug, is_article, nav_priority) 4-튜플.
+        # 정렬 후 외부에는 처음 3개만 노출.
+        raw_entries = []
         for child in self.articles_dir.iterdir():
             if not child.is_dir():
                 continue
@@ -874,27 +1000,19 @@ class Builder:
                 None,
             )
             if article is not None:
-                entries.append((child.name, article.meta.slug, True))
+                raw_entries.append((
+                    child.name, article.meta.slug, True,
+                    article.meta.nav_priority,
+                ))
             else:
                 key = (child.name,)
                 cat = self.categories.get(key)
                 slug = cat.slug if cat else category_slug_from_name(child.name)
-                entries.append((child.name, slug, False))
+                nav_pri = cat.meta.nav_priority if cat else 0
+                raw_entries.append((child.name, slug, False, nav_pri))
 
-        # v0.4.6: About 은 그대로 최상단 고정. 나머지는 (priority desc,
-        # folder_name asc) 로 정렬. priority 는 카테고리 meta.yaml 에서 옴 —
-        # 글 항목은 priority 가 없으므로 0 으로 간주.
-        def _entry_priority(name: str) -> int:
-            key = (name,)
-            cat = self.categories.get(key)
-            return cat.meta.priority if cat else 0
-
-        about = [e for e in entries if e[0] == 'About']
-        others = sorted(
-            (e for e in entries if e[0] != 'About'),
-            key=lambda e: (-_entry_priority(e[0]), e[0]),
-        )
-        return about + others
+        raw_entries.sort(key=lambda e: (-e[3], e[0]))
+        return [(name, slug, is_art) for (name, slug, is_art, _pri) in raw_entries]
 
     def _nav_links_html(self) -> str:
         entries = self._top_level_entries()
@@ -951,12 +1069,12 @@ class Builder:
             # v0.5.3: gallery / feed 가 쓸 thumbnail + summary 캐시.
             # thumbnail 폴백: seo.og_image > 본문 첫 이미지 > None.
             # summary: seo.description > rr.first_paragraph > '' (description_truncate 적용).
+            # v0.5.4: truncate_description 으로 영문 단어 경계 존중.
             thumb = m.seo.og_image or rr.first_image
             summary_raw = m.seo.description or rr.first_paragraph or ''
-            if summary_raw and len(summary_raw) > self.site.description_truncate:
-                summary = summary_raw[:self.site.description_truncate].rstrip() + '…'
-            else:
-                summary = summary_raw
+            summary = truncate_description(
+                summary_raw, self.site.description_truncate,
+            ) if summary_raw else ''
             self.article_render_meta[m.slug] = {
                 'thumb': thumb,
                 'summary': summary,
@@ -1415,7 +1533,11 @@ class Builder:
             crumb_parts.append((cat.folder_name, None))
         nav_tracker = self._nav_tracker_for_path(crumb_parts)
 
-        page_title = self.site.name
+        # v0.5.4: 카테고리 <title> 폴백 체인.
+        # 본문 = cat.meta.title (override) > cat.folder_name (폴백).
+        # 양옆 = cat.meta.seo.title_prefix/suffix > site.default_title_prefix/suffix.
+        title_body = cat.meta.title or cat.folder_name
+        page_title = self._wrap_page_title(title_body, cat.meta.seo)
         page_lang = cat.meta.lang or self.site.lang
 
         # 검색 스코프: 톱레벨이면 자기 slug, 서브이면 톱레벨 slug 로 한정.
@@ -1486,7 +1608,11 @@ class Builder:
 
         # v0.4.6: 메인페이지 lang — Articles/meta.yaml 의 lang 우선, 없으면 site.lang.
         page_lang = self.home_meta.lang or self.site.lang
-        page_title = self.site.name
+        # v0.5.4: 홈 <title> 폴백 체인.
+        # 본문 = home_meta.title (override) > site.name (폴백).
+        # 양옆 = home_meta.seo.title_prefix/suffix > site.default_title_prefix/suffix.
+        title_body = self.home_meta.title or self.site.name
+        page_title = self._wrap_page_title(title_body, self.home_meta.seo)
         pagination_nav = _pagination_nav_html(
             'home-recent', len(home_articles), per_page,
         )
@@ -1541,7 +1667,10 @@ class Builder:
 
     def _build_404(self):
         tpl = _load_template(self.templates_dir, '404.html')
-        page_title = 'Error 404'
+        # v0.5.4: 404 <title> 폴백 체인.
+        # 본문 = site.error_404_title. 양옆 = site.default_title_prefix/suffix
+        # (404 는 meta.yaml 이 없으므로 override 불가능 — site.yaml 한 군데에서만).
+        page_title = self._wrap_page_title(self.site.error_404_title)
         vars_ = {
             'LANG': escape_html(self.site.lang),
             'PAGE_TITLE': escape_html(page_title),
@@ -1596,7 +1725,7 @@ class Builder:
                 return article.category_path[0]
             return None
 
-        generator = f'siheonlee.com v0.5.3 — github.com/siheonlee'
+        generator = f'siheonlee.com v0.5.4 — github.com/siheonlee'
         doc = build_feed_document(
             articles=self.articles,
             site=self.site,
@@ -1691,9 +1820,13 @@ class Builder:
             warn('templates/search.php not found, skipping search page build')
             return
         tpl = tpl_path.read_text(encoding='utf-8')
+        # v0.5.4: search <title> 폴백 체인. 404 와 동일 — site.search_title
+        # + site.default_title_prefix/suffix. search 도 meta.yaml 이 없는 시스템
+        # 페이지라 site.yaml 에서만 설정한다.
+        search_title = self._wrap_page_title(self.site.search_title)
         vars_ = {
             'LANG': escape_html(self.site.lang),
-            'PAGE_TITLE': escape_html(self.site.name),
+            'PAGE_TITLE': escape_html(search_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
             'COPYRIGHT_YEAR': self._copyright_year(),

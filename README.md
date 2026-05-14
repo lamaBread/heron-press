@@ -1,11 +1,11 @@
-# siheonlee.com v0.5.3 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.5.4 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.5.3 한 줄 요약:** 네 갈래. (1) `meta.yaml` 의 `tags` 필드 — 작성자가 직접 적는 주제어 목록 (현재는 파싱만, 검색·관련 글 등 미래 기능을 위한 토대). (2) 카테고리/홈 `layout: gallery` — 이미지 타일 갤러리 레이아웃. modern minimal 톤으로 정교하게 다듬은 CSS. (3) **RSS/Atom 피드 자동 생성** — `dist/feed.atom` (Atom 1.0) + `dist/feed.rss` (RSS 2.0) 두 파일을 같은 entry 목록으로. (4) **§ 17 한계 표의 일괄 정리** — JS 비활성 환경 미지원 / WebP `<picture>` 폴백 / slug ASCII 제약 / layout 의 list·gallery 한정 / 카테고리 meta.yaml 의 위치별 적용 차이 / Apache·PHP 운영 전제 / Parsedown 업데이트 비용 / YAML 파서 자체 구현 — 한계가 아니라 정책·전제이거나 본문에 녹일 항목 8건을 표에서 제거하고 본문 적절한 위치로 옮김 (§ 5 / § 11-3 / § 12 / § 12b / § 15 / § 17 도입부). 자세한 내역과 이전 버전 (v0.5.2 ~ v0.1) 의 변경 사항은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
+> **v0.5.4 한 줄 요약:** 세 갈래의 한계 해소. (1) **`<title>` 폴백 체인 일반화** — v0.4.3 부터 글에만 적용되던 `{prefix}{title}{suffix}` 체인이 홈·카테고리·404·search 에도 동일하게 적용. 홈/카테고리는 자기 페이지의 meta.yaml 에서 `title` + `seo.title_prefix` / `seo.title_suffix` 로 오버라이드. 404 / search 는 meta.yaml 이 없는 시스템 페이지라 site.yaml 의 `error_404_title` / `search_title` 로 설정. (2) **description_truncate 단어 경계 존중** — 영문 단어를 한가운데 자르지 않음 (직전 공백까지 backup). 한국어 등 CJK 는 글자 단위가 의미 단위라 영향 없음. `seo.description` 폴백 + gallery / feed 의 summary 모두 같은 함수를 거치므로 일관적. (3) **톱레벨 nav 의 `About` 정렬 고정 폐기** — `nav_priority` 필드로 명시적 정렬. ArticleMeta + CategoryMeta 양쪽에 정수 필드, 기본 0, 값이 클수록 먼저. v0.4.6 까지의 'About 최상단 하드코딩' 제거. 자세한 내역과 이전 버전 (v0.5.3 ~ v0.1) 의 변경 사항은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
 
 | 핵심 가치 | 어떻게 보장하는가 |
 |---|---|
@@ -55,7 +55,7 @@
 
 ### 빌드
 
-이 폴더(`siheonlee.com_v0.5.3/`) 에서 터미널을 열고:
+이 폴더(`siheonlee.com_v0.5.4/`) 에서 터미널을 열고:
 
 ```bash
 python build.py
@@ -156,7 +156,7 @@ python -m http.server 8000
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.5.3/
+siheonlee.com_v0.5.4/
 │
 ├── build.py              ← 빌드 진입점 (이것을 실행합니다)
 ├── site.yaml             ← 사이트 전역 설정
@@ -1215,14 +1215,14 @@ def hello():
 
 | 어디에 설정 두는가 | 어떤 설정 |
 |---|---|
-| `site.yaml` | 사이트 전역 (도메인, name, copyright, lang 디폴트, default_og_image 등) / 여러 페이지에 공통 적용되는 디폴트 (`category_per_page`, `category_preview_per_page`) / robots.txt 본문 / reserved_slugs / warn_on_* / `description_truncate` / `images:` (v0.5.1, 이미지 최적화 정책) |
-| `Articles/meta.yaml` (v0.4.6) | 메인페이지 (= 사이트 루트, 홈) 전용 — `per_page`, `excludes_categories`, `lang`, `layout`, `styles` |
-| `Articles/<카테고리>/meta.yaml` (v0.4.5) | 그 카테고리 인덱스 페이지 전용 — `per_page`, `preview_per_page`, `priority` (v0.4.6), `lang`, `layout`, `styles` |
-| `Articles/<카테고리>/<글>/meta.yaml` | 그 글 페이지 전용 — `slug`, `title`, `date`, `updated`, `noindex`, `lang`, `seo:`, `styles` |
+| `site.yaml` | 사이트 전역 (도메인, name, copyright, lang 디폴트, default_og_image 등) / 여러 페이지에 공통 적용되는 디폴트 (`category_per_page`, `category_preview_per_page`) / robots.txt 본문 / reserved_slugs / warn_on_* / `description_truncate` / `images:` (v0.5.1, 이미지 최적화 정책) / `error_404_title` `search_title` (v0.5.4, meta.yaml 이 없는 시스템 페이지의 `<title>` 본문) |
+| `Articles/meta.yaml` (v0.4.6) | 메인페이지 (= 사이트 루트, 홈) 전용 — `per_page`, `excludes_categories`, `lang`, `layout`, `styles`, `title` (v0.5.4), `seo:` (v0.5.4) |
+| `Articles/<카테고리>/meta.yaml` (v0.4.5) | 그 카테고리 인덱스 페이지 전용 — `per_page`, `preview_per_page`, `priority` (v0.4.6), `nav_priority` (v0.5.4, 톱레벨 카테고리에서만 의미), `lang`, `layout`, `styles`, `title` (v0.5.4), `seo:` (v0.5.4) |
+| `Articles/<카테고리>/<글>/meta.yaml` | 그 글 페이지 전용 — `slug`, `title`, `date`, `updated`, `noindex`, `lang`, `seo:`, `styles`, `tags` (v0.5.3), `nav_priority` (v0.5.4, 톱레벨 글에서만 의미 — 예: About) |
 
 > **v0.4.6 의 변경:** 옛 site.yaml 의 메인페이지 전용 키 3개 (`home_per_page` / `home_excludes_categories` / `home_sort`) 가 모두 `Articles/meta.yaml` 로 이전되었습니다 (`home_sort` 는 빌더가 사용한 적 없는 dead field 라 그대로 폐기). 옛 키를 site.yaml 에 그대로 두면 빌드는 진행되지만 무시되며 워닝이 출력됩니다.
 
-### 11-2. site.yaml 예시 (v0.5.2 기준)
+### 11-2. site.yaml 예시 (v0.5.4 기준)
 
 ```yaml
 # 도메인
@@ -1243,9 +1243,19 @@ default_og_image: /assets/default-og.png
 # 글 meta.yaml / 카테고리 meta.yaml / Articles/meta.yaml 의 `lang:` 으로 페이지별 오버라이드.
 lang: ko
 
-# <title> 기본 서식
+# 모든 페이지 <title> 의 기본 prefix/suffix (글, 홈, 카테고리, 404, search).
+# v0.5.4 부터 홈/카테고리/404/search 도 같은 폴백 체인 적용.
+# 페이지 단위 override:
+#   - 글 / 홈 / 카테고리: 그 페이지의 meta.yaml `seo.title_prefix` / `seo.title_suffix`
+#   - 404 / search: 페이지 단위 override 불가능 (시스템 페이지, meta.yaml 없음)
 default_title_prefix: ""
 default_title_suffix: ""
+
+# v0.5.4 신설: 시스템 페이지 (404 / search) 의 <title> 본문 텍스트.
+# 양옆은 위의 default_title_prefix / default_title_suffix 로 감싸진다.
+# 비우면 각각 "Not Found" / "Search" 디폴트.
+error_404_title: Not Found
+search_title: Search
 
 # 저작권 표시
 copyright_holder: 이시헌
@@ -1266,7 +1276,10 @@ reserved_slugs:
 category_per_page: 20
 category_preview_per_page: 5
 
-# meta description 자동 추출 시 최대 글자 수
+# meta description 자동 추출 시 최대 글자 수.
+# v0.5.4 부터 영문 단어 경계 존중 — 절단 지점이 ASCII 영문/숫자 시퀀스
+# 한가운데이면 직전 공백까지 backup. 한국어 등 CJK 는 글자 단위가 의미
+# 단위라 그대로 절단 가능.
 description_truncate: 150
 
 # 빌드 경고 옵션
@@ -1937,19 +1950,17 @@ python build.py --clean
 
 9. **단일 진실원의 토크나이저 (v0.4.0)** — Python/PHP 양쪽 토크나이저의 동등성을 빌드마다 fixture 패리티 테스트로 자동 검증.
 
-### 현재 버전(v0.5.3) 의 한계
+### 현재 버전(v0.5.4) 의 한계
 
-> 아래 표는 v0.5.3 시점에 여전히 유효한 한계만 모았습니다. 다음 항목들은 한계가 아니므로 표에서 제거되고 본문의 적절한 위치로 옮겨졌습니다 — **JS 비활성 환경 미지원** (시스템 정책 — 지원 계획 없음, v0.5.3), **WebP 폴백 `<picture>` 미제공** (최신 브라우저 99%+ 가 WebP 지원 — 정책적 선택, 도입 계획 없음), **글/카테고리 slug 의 ASCII 제약** (DNS 자체가 ASCII 만 지원 — 한계가 아니라 외려 hex 변환으로 한국어 폴더명까지 *워닝 + 빌드 통과* 로 허용하는 적극적 수용, § 5 참조), **`layout` 의 추가 옵션 부재** (`list` / `gallery` 면 일반 사용에 충분 — 더 필요하면 빌더에 직접 등록, § 5 의 메모), **카테고리 meta.yaml 의 위치별 적용 차이** (같은 스키마를 두 위치가 공유하기 위한 의도된 비대칭 — § 5 / § 11-3 본문 참조), **Apache 메인 설정 접근 / 배포 서버 PHP 전제** (시스템의 기본 동작 환경 — § 15 참조), **Parsedown 업데이트 비용 / YAML 파서 자체 구현** (정책적 포크 + 의도된 부분집합 — § 12 / § 12b 참조).
+> 아래 표는 v0.5.4 시점에 여전히 유효한 한계만 모았습니다. v0.5.4 에서 해소된 세 항목 (글 외 페이지의 `<title>` 폴백 체인 부재 / description_truncate 단어 경계 무시 / 톱레벨 nav 의 About 정렬 고정) 은 표에서 제거되었습니다. 한계가 아니라 정책·전제이거나 본문에 녹은 항목은 v0.5.3 정리 참조 (§ 18 의 v0.5.3 항목).
 
 | 한계 | 내용 |
 |---|---|
 | `tags` 의 구체적 활용처 없음 (v0.5.3) | meta.yaml 의 `tags` 필드는 v0.5.3 부터 파싱되지만 빌드 산출물에서 직접 사용되는 곳은 RSS/Atom 의 `<category>` 뿐. 태그별 색인 페이지, 검색 가중치, 관련 글 등은 미래 의제. |
-| `<head>` 의 `<title>` 폴백 체인이 글에만 적용 (v0.4.3) | 글 페이지는 `{seo.title_prefix}{title}{seo.title_suffix}` 로 정상 출력되지만, 홈·카테고리·404·search 페이지는 모두 `site.name` 한 값 — 페이지마다 다른 `<title>` 이 필요하면 템플릿에 변수를 추가해야 함. |
 | description 폴백이 본문 전체에서 첫 `<p>` 검색 | `_FIRST_P_RE` 가 본문 첫 `<p>` 를 찾는데, 빌더가 본문을 `<div class='gap'><p>제목</p></div>` + `<section>…</section>` 로 감싸므로 결과적으로 갭 박스 안의 글 제목이 description 으로 빨릴 수 있습니다. `seo.description` 을 명시하면 덮어쓰이지만 폴백 시 SEO 신뢰도 손해 — 차기 의제. |
-| description_truncate 가 단어 경계 무시 | 150자 절단이 영어 단어 중간을 자를 수 있음. 한국어/영어 혼용이라 영향은 작지만 SEO 디테일 — 차기 의제. |
+| 홈·카테고리 페이지의 SEO 메타 태그 일부만 (v0.5.4) | v0.5.4 부터 `<title>` 폴백 체인은 글과 동일하게 작동하지만, 홈/카테고리 템플릿에는 `<meta name="description">` / `<meta property="og:*">` / `<meta name="twitter:*">` placeholder 가 없어 `seo:` 블록의 description / og_* / twitter_* 필드는 파싱만 되고 출력되지 않음. 글 페이지는 이미 전부 출력 ([scripts/seo.py](scripts/seo.py) 의 `build_meta_tags`). 차기 의제 — 같은 함수를 홈/카테고리에도 적용. |
 | styles 의 @-rule 미지원 | `@media`, `@keyframes`, `@font-face`, `@supports`, `@import` 등 모든 at-rule 은 inject 안 됨 — [scripts/markdown.py](scripts/markdown.py) 의 `render_article_styles` 가 평면 `selector { decls }` 규칙만 직렬화. content.html 의 인라인 `<style>` 로 회피. |
 | 이미지 최적화는 정적 단일 프레임만 (v0.5.1) | animated GIF 는 첫 프레임만 WebP 로 인코딩되어 애니메이션이 사라집니다. 애니메이션을 보존하려면 그 글의 첨부를 webp 로 직접 만들거나, `<img>` 의 src 를 외부 URL 로 두면 후처리에서 src 가 변경되지 않습니다. 한 글 / 한 이미지에 대해서만 최적화를 끄는 옵션은 아직 없음 (사이트 전역 토글만). |
-| 톱레벨 nav 의 `About` 정렬 고정 (v0.4.6) | 톱레벨 nav 링크는 `About` 이 최상단 고정이고, 나머지는 (priority 내림차순, folder_name 오름차순) 입니다. About 의 위치를 priority 로 조절할 수 없음 — 원본 lama 의 nav 동선 보존이 의도. |
 | 빌드 증분 캐싱 없음 | 매 빌드마다 전체 글 재렌더 + 검색 인덱스 재구축. 글 자원만 mtime 기준 skip ([builder.py](scripts/builder.py) 의 `_copy_if_newer`) 이며 그 외 캐시 없음. 글 ≤ 수십 건 규모에선 무시 가능. |
 | 테스트 부분적 (v0.5.0) | `tests/test_bm25.py` 에 BM25 알고리즘 (IDF / TF 포화 / 길이 정규화 / 필드 가중치 / phrase 부스트 / 인덱스 빌더 통계 / v0.4.x 회귀 가드) 단위 테스트 25개. 빌더·마크다운 파서·SEO·sitemap 등 그 외 모듈은 여전히 단위 테스트 없음. Parsedown 포팅의 PHP↔Python 동등성도 재현 가능 트리에 동봉되지 않음 (§ 12 참조). 추가 의제. |
 | 정적 검색 인덱스 본문 포함 | search-index.json 에 모든 글의 평문 본문 전체가 들어 매 검색 요청마다 PHP 가 통째 로드 (스니펫 추출용). v0.5.0 의 BM25 통계 (df / dl / avgdl) 가 추가되어 v0.4.x 대비 ~15% 정도 크기가 증가. 글이 매우 많아지면 인덱스 본문 분리·카테고리별 분할·SQLite 이주 검토. |
@@ -1958,11 +1969,12 @@ python build.py --clean
 
 ## 18. 업데이트 로그
 
-열네 버전의 차이를 한눈에:
+열다섯 버전의 차이를 한눈에:
 
 | 버전 | 시스템 정체성 | 검색 랭킹 | 출력 UI/UX | 글 `<title>` | 마크다운 본문 구조 | 색인 정책 | sitemap.xml / 피드 | 마크다운 파서 | meta.yaml 필드 | 검색 토크나이저 | 빌드 검증 | 레거시 dispatcher | PHP 함수 시뮬레이션 | 카테고리 한국어 폴더 | 빌드 모듈 구조 | 외부 의존성 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **v0.5.3 (현재)** | (동일) | (동일) | + **카테고리/홈 `layout: gallery` (이미지 타일 그리드 — modern minimal, 4:3 강제 크롭, hover 효과, 반응형 2/N 칸). list 와 gallery 가 페이지네이션·임베드 동작 동일** | (동일) | (동일) | (동일) | + **`dist/feed.atom` (Atom 1.0) + `dist/feed.rss` (RSS 2.0) 자동 생성 (최신 20 글, noindex/excludes_categories 존중). 홈/카테고리/글 `<head>` 에 `<link rel='alternate'>` 자동 발견 태그** | (동일) | + **`tags:` 필드 (리스트, 선택). 작성자가 직접 적는 주제어. 현재는 feed `<category>` 에만 사용. 검색·관련 글 등은 미래 의제** | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/feed.py — Atom 1.0 기반 추상 모델 + 두 직렬화** | (동일) |
+| **v0.5.4 (현재)** | (동일) | (동일) | (동일) | **`<title>` 폴백 체인이 홈·카테고리·404·search 에도 적용**. 글은 그대로 (이미 v0.4.3 부터 적용). nav 정렬은 더 이상 'About 최상단 하드코딩' 없음 — `nav_priority` 필드로 명시. | (동일) | (동일) | (동일) | (동일) | + **CategoryMeta 에 `title` / `seo` (SeoMeta) / `nav_priority` 추가** / + **ArticleMeta 에 `nav_priority` 추가** / + **SiteConfig 에 `error_404_title` / `search_title`** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) |
+| **v0.5.3** | (동일) | (동일) | + **카테고리/홈 `layout: gallery` (이미지 타일 그리드 — modern minimal, 4:3 강제 크롭, hover 효과, 반응형 2/N 칸). list 와 gallery 가 페이지네이션·임베드 동작 동일** | (동일) | (동일) | (동일) | + **`dist/feed.atom` (Atom 1.0) + `dist/feed.rss` (RSS 2.0) 자동 생성 (최신 20 글, noindex/excludes_categories 존중). 홈/카테고리/글 `<head>` 에 `<link rel='alternate'>` 자동 발견 태그** | (동일) | + **`tags:` 필드 (리스트, 선택). 작성자가 직접 적는 주제어. 현재는 feed `<category>` 에만 사용. 검색·관련 글 등은 미래 의제** | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/feed.py — Atom 1.0 기반 추상 모델 + 두 직렬화** | (동일) |
 | **v0.5.2** | (동일) | (동일) | + **글 자산 URL `/src/{slug}/...` → `/{slug}/...` (자산 경로 일원화 — 글 자산이 글 index.html 과 같은 폴더로). 페이지 HTML 구조·렌더링·CSS·JS·페이지네이션 모두 (동일)** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **`reserved_slugs` 에서 `src` 제거 (assets/search 만 남음). builder.py 의 asset 출력 경로 + markdown.py 의 rewrite_asset_path / imgBox / imgSlideBox URL 스킴 일괄 변경.** | (동일) |
 | **v0.5.1** | (동일) | (동일) | + **모든 `<img>` 에 WebP src + srcset (다중 해상도) + sizes + `loading="lazy"` 자동 부착. raster 원본 (.jpg .png .gif) 은 dist 에서 제거되고 `{stem}-{w}.webp` 변종만 남음** | (동일) | (동일) | (동일) | (동일) | (동일) | + **`images:` 블록 (site.yaml — enabled/widths/max_width/quality/lazy_loading/default_sizes)** | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/images.py** | + **Pillow (이미지 최적화 — `images.enabled=false` 로 끄면 stdlib 만으로 빌드 가능)** |
 | **v0.5.0** | (동일) | **Okapi BM25 + 필드 가중치 (body/title 독립 k1·b, w_title=3.0) + phrase 부스트 (×1.5/×2.0) + 매치 밀도 스니펫. 인덱스 v3 (df/dl/avgdl). tests/test_bm25.py 신설.** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **tests/ 단위 테스트** | (동일) | (동일) | (동일) | + **templates/search_bm25.php / tests/test_bm25.py** | (동일) |
@@ -1979,6 +1991,40 @@ python build.py --clean
 | **v0.3** | "SSG" | — | 원본 + 글마다 스타일 오버라이드 가능 | (동일) | (동일) | (동일) | 없음 | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | + **`styles:`** | — | (동일) | (동일) | (동일) | _meta.yaml 슬러그 오버라이드 | 단일 build.py | Python 3 + (parsedown 시) PHP CLI |
 | **v0.2** | "SSG" | — | 원본 `lama_website-main` 와 동일 | (동일) | (동일) | 전역 noindex (원본 보존) | 없음 | (동일) | (동일) | — | (동일) | (동일) | imgBox/imgSlideBox | — | 단일 build.py | (동일) |
 | **v0.1** | "SSG" | — | v0.1 자체 디자인 | 원본 quirk: 항상 site.name | 자동 단일 갭+섹션 wrap | 전역 noindex | 없음 | Python stdlib 자체 파서 | slug, title, date, seo_* | — | slug 정규식, 날짜 형식, slug 중복 | 도메인 하드코딩 | — | — | 단일 build.py | Python 3 |
+
+### v0.5.4 (2026-05-14) — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + `nav_priority`
+
+v0.4.2 로드맵의 미해소 의제 + v0.5.3 시점 한계 표의 세 항목을 일괄 해소. 모든 변경이 *글 측 작업 의무 없음* — 옛 글 / 옛 카테고리 meta.yaml 을 변경하지 않아도 v0.5.4 빌드가 정상 통과합니다 (기본값은 v0.5.3 과 출력 동일).
+
+| 변경 | 내용 |
+|---|---|
+| `<title>` 폴백 체인 일반화 | v0.4.3 부터 글에만 적용되던 `{prefix}{title}{suffix}` 체인이 홈·카테고리·404·search 에도 동일하게 적용. 페이지별 title 본문 결정: 글 = `m.title` / 홈 = `home_meta.title` (없으면 `site.name`) / 카테고리 = `cat.meta.title` (없으면 `cat.folder_name`) / 404 = `site.error_404_title` / search = `site.search_title`. 양옆은 페이지의 `seo.title_prefix` / `seo.title_suffix` (있으면) > `site.default_title_prefix` / `site.default_title_suffix`. **모델 변경**: [scripts/models.py](scripts/models.py) 의 `CategoryMeta` 에 `title: Optional[str]` + `seo: SeoMeta` 추가. `SiteConfig` 에 `error_404_title='Not Found'` + `search_title='Search'` 추가. 새 helper `Builder._wrap_page_title(body, seo_override=None)` 가 한 군데에서 체인 적용. 글의 `build_meta_tags` 는 그대로 — 폴백 규칙 자체가 동등. |
+| description_truncate 가 단어 경계 존중 | [scripts/seo.py](scripts/seo.py) 의 `_truncate` → 공개 함수 `truncate_description` 으로 승격 + 단어 경계 로직 추가. 절단 지점이 ASCII 영문/숫자/하이픈/언더스코어 시퀀스 한가운데 (= `cut[-1]` 과 `s[max_len]` 둘 다 Latin 단어 글자) 이면, `cut` 안의 마지막 공백까지 backup. 백업해도 공백이 없으면 (max_len 안이 단일 영문 단어 하나뿐인 극단적 케이스) 그대로 원래 절단 지점에서 자른다 — 무한 폴백을 만들지 않기 위함. 한국어 등 CJK 는 `isascii()` 통과 못해서 검사를 건너뜀 → 글자 단위로 자유롭게 절단. `builder` 의 `article_render_meta` 캐시 (gallery + feed summary) 도 같은 함수를 import 해서 중복 로직 제거. SEO description 폴백 + gallery 타일 caption + feed entry summary 모두 일관된 절단 규칙. |
+| 톱레벨 nav 의 `nav_priority` | ArticleMeta + CategoryMeta 양쪽에 `nav_priority: int = 0` 필드 추가. `Builder._top_level_entries` 가 모든 항목을 `(-nav_priority, folder_name)` 으로 정렬. v0.4.6 까지의 'About 최상단 하드코딩' 제거 — About 을 톱에 두려면 `Articles/About/meta.yaml` 의 `nav_priority` 에 큰 값을 명시. **기본 동작은 알파벳 순** — 현재 데이터로 본다면 About (A) 이 Blog (B) 앞에 와 자연스럽게 옛 순서 유지 (의도된 결과는 아니지만 마이그레이션 부담 0). `priority` (부모 카테고리 page 의 sibling section 정렬 + 옛날엔 nav 도 같이 영향) 와는 **별개 축**. nav 정렬을 바꾸고 싶을 때 카테고리 페이지 안의 section 정렬이 의도치 않게 같이 바뀌지 않음. |
+
+**검증 (현재 트리):**
+
+- 빌드 6 글, 2 카테고리, 0 경고. 두 번째 빌드도 0 경고 + dist 결정성 보장 (sha256 동일).
+- BM25 단위 테스트 25개 그대로 통과 (회귀 0 — title / truncate / nav 변경 모두 검색·인덱스 모듈과 독립).
+- truncate_description 단위 동작: 11/11 케이스 통과 (영문 단어 한가운데 backup, 한국어 글자 단위 절단, 단일 긴 영문 단어 fallback, 짧은 입력 변화 없음).
+- 기본 빌드의 `<title>` 출력: 홈=`Lama` / Blog=`Blog` / Tutorials=`Tutorials` / 404=`Not Found` / Search=`Search` / About=`About` / Hello World=`Hello, World!`. 모두 `site.default_title_prefix=""` + 페이지 title + `site.default_title_suffix=""` 의 0 길이 폴백 + 폴더명/이름 fallback 으로 자연스러운 값.
+- 오버라이드 빌드의 `<title>` 출력 (테스트로 일시 적용): site.default_title_suffix=" - siheonlee.com", Blog meta 의 seo.title_prefix="[Blog] " + title_suffix=" | site" + title="My Blog", home meta 의 title="Homepage" + seo.title_prefix="@HOME ", site.error_404_title="페이지를 찾을 수 없습니다", site.search_title="검색" → 홈=`@HOME Homepage - siheonlee.com` / Blog=`[Blog] My Blog | site` (site 디폴트 무시 — seo override 가 prefix/suffix 둘 다 set) / Tutorials=`Tutorials - siheonlee.com` (seo override 없음 → site 디폴트) / 404=`페이지를 찾을 수 없습니다 - siheonlee.com` / Search=`검색 - siheonlee.com` / About=`About - siheonlee.com` / Hello World=`Hello, World! - siheonlee.com`.
+- 오버라이드 빌드의 nav 정렬: Blog (`nav_priority=10`), About (`nav_priority=5`) → 순서 `Blog, About` (큰 값 먼저). 기본 빌드 (모두 0) 에서는 `About, Blog` 알파벳 순.
+
+**적용 메모:**
+
+- **글 측**: meta.yaml 변경 의무 없음. 모든 신설 필드는 선택. About 의 nav 위치를 톱으로 명시하려면 `Articles/About/meta.yaml` 에 `nav_priority: 100` 같은 큰 값 한 줄.
+- **카테고리 측**: 카테고리 meta.yaml 변경 의무 없음. `title` / `seo` / `nav_priority` 는 모두 선택.
+- **site.yaml**: 변경 의무 없음. `error_404_title` / `search_title` 가 비어 있으면 각각 "Not Found" / "Search" 디폴트.
+- **점진 빌드**: v0.5.3 dist 위에 그대로 빌드 가능. 출력의 차이는 (a) 홈·카테고리·404·search 의 `<title>` 끝/시작에 site.default_title_prefix/suffix 가 붙어 보일 수 있음 (현재 사이트 설정은 두 값 모두 빈 문자열이므로 출력 차이 없음), (b) 임의 카테고리/글의 meta.yaml 에 `nav_priority` 를 추가하지 않는 한 nav 순서는 알파벳 순 그대로.
+
+**미수용 (차기 의제):**
+
+- 홈/카테고리 페이지의 SEO meta 태그 (description / og_* / twitter_*) — 현재 `seo:` 블록이 파싱은 되지만 `<title>` 외 출력은 글에만 적용 ([scripts/seo.py](scripts/seo.py) 의 `build_meta_tags` 가 글 전용 함수). 같은 함수를 홈/카테고리에 적용하면 됨.
+- description 폴백 추출 범위 (v0.4.2 로드맵 B-5) — 본문 첫 `<p>` 가 갭 박스의 글 제목을 잡는 문제. 섹션 마커 (v0.4.3) 도입 후 영향 분석 필요.
+- 단위 테스트 디렉터리 확장 (v0.4.2 로드맵 B-1) — 빌더·마크다운·SEO·sitemap 단위 테스트.
+
+---
 
 ### v0.5.3 (2026-05-14) — `tags` 필드 + `layout: gallery` + RSS/Atom 피드
 

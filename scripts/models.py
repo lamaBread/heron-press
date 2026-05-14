@@ -2,6 +2,21 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
+v0.5.4 변경:
+  - CategoryMeta 에 `title` (Optional[str]) 과 `seo` (SeoMeta) 추가. 홈/카테고리
+    페이지의 `<title>` 폴백 체인을 글과 동일하게 작동시키기 위함 (v0.4.3 에서
+    글에만 적용되던 한계 해소). 카테고리는 `title` 없으면 폴더명, 홈은
+    site.name 이 폴백. 두 페이지 모두 `seo.title_prefix` / `seo.title_suffix`
+    가 site.default_title_prefix / default_title_suffix 를 오버라이드.
+  - ArticleMeta + CategoryMeta 에 `nav_priority` (int) 추가. 톱레벨 nav 의
+    항목 정렬 키 — `priority` (부모 카테고리 page 안에서의 sibling section
+    정렬) 와 별개 축. 값이 클수록 먼저, 같은 값끼리는 폴더명 알파벳 순.
+    이전 버전의 'About 최상단 하드코딩' 폐기.
+  - SiteConfig 에 `error_404_title` / `search_title`. 404·search 페이지는
+    meta.yaml 을 두지 않으므로 (콘텐츠 페이지가 아님) site.yaml 에서 직접
+    설정. 두 페이지 모두 default_title_prefix / default_title_suffix 폴백
+    체인 적용 (글·홈·카테고리와 동일).
+
 v0.5.3 변경:
   - ArticleMeta 에 `tags` 필드 (list[str]) 추가. 글 작성자가 직접 적는 주제어
     목록. 현재는 파싱만 되고 구체적인 사용처는 없음 (검색·필터·관련 글 등
@@ -69,6 +84,11 @@ class SiteConfig:
     lang: str = 'ko'
     category_per_page: int = 20
     category_preview_per_page: int = 5
+    # v0.5.4: meta.yaml 을 두지 않는 시스템 페이지(404 / search)의 `<title>`
+    # 본문 텍스트. default_title_prefix / default_title_suffix 폴백 체인은
+    # 글·홈·카테고리와 동일하게 적용된다. site.yaml 의 키는 같은 이름.
+    error_404_title: str = 'Not Found'
+    search_title: str = 'Search'
     # v0.5.1: 이미지 자동 최적화 정책 (WebP + 다중 해상도 + lazy loading).
     images: ImageConfig = field(default_factory=ImageConfig)
 
@@ -111,6 +131,11 @@ class ArticleMeta:
     # 위한 토대. 현재 빌드 산출물에서 직접 쓰이지는 않지만, meta.yaml 파싱
     # 단계에서 검증되고 정규화 (trim + dedup, 순서 보존) 된다.
     tags: list = field(default_factory=list)
+    # v0.5.4: 톱레벨 nav 의 항목 정렬 키. 글이 톱레벨 (Articles/ 직속) 일 때만
+    # 의미가 있다 (예: About). priority 와 별개 축 — priority 는 부모 카테고리
+    # page 안에서의 sibling section 정렬, nav_priority 는 사이트 전역 nav 정렬.
+    # 값이 클수록 먼저, 같은 값끼리는 폴더명 알파벳 순. 기본 0.
+    nav_priority: int = 0
 
 
 @dataclass
@@ -151,6 +176,22 @@ class CategoryMeta:
                           제외할 톱레벨 카테고리 폴더명 목록. 기본값 [].
                           예: [About] 이면 About 카테고리의 글은 홈 목록과
                           sitemap.xml 의 홈 lastmod 계산에서 제외된다.
+
+    ── 공통, v0.5.4 신설 ────────────────────────────────────────────────
+    title             — 이 페이지의 `<title>` 본문. 비우면 폴백:
+                        카테고리는 folder_name, 홈은 site.name. 글의
+                        ArticleMeta.title 과 같은 자리 (페이지 = 글/홈/카테고리
+                        통일 관점). 양옆은 seo.title_prefix / seo.title_suffix
+                        (없으면 site.default_title_prefix / suffix) 로 감싸진다.
+    seo               — 페이지의 SEO 메타. SeoMeta 와 같은 dataclass. 현재
+                        실제 사용처는 `<title>` 폴백 체인의 prefix/suffix 뿐이며,
+                        나머지 필드 (description / og_* / twitter_*) 는 파싱만
+                        되고 사용되지 않음 (forward compat). 글 (ArticleMeta) 의
+                        seo 와 동일 의미.
+    nav_priority      — 톱레벨 nav 의 정렬 키. 글의 nav_priority 와 같은 의미.
+                        톱레벨 카테고리에서만 의미가 있다 — 서브카테고리/홈에서는
+                        파싱만 되고 사용되지 않음. 값이 클수록 먼저, 같은 값끼리는
+                        폴더명 알파벳 순. 기본 0.
     """
     per_page: Optional[int] = None
     preview_per_page: Optional[int] = None
@@ -159,6 +200,10 @@ class CategoryMeta:
     styles: dict = field(default_factory=dict)
     priority: int = 0
     excludes_categories: list = field(default_factory=list)
+    # v0.5.4: `<title>` 폴백 체인을 글과 동일하게 작동시키기 위한 필드들.
+    title: Optional[str] = None
+    seo: SeoMeta = field(default_factory=SeoMeta)
+    nav_priority: int = 0
 
 
 @dataclass
