@@ -17,8 +17,21 @@
   [12] _build_sitemap        — dist/sitemap.xml (v0.4.4 신설, v0.4.5 에서
                                 서브카테고리 URL 도 포함)
   [13] _build_dispatcher     — dist-legacy/redirect.php (301 매핑)
-  [14] _build_search         — search-index.json + search.php (+ tokenize lib)
+  [14] _build_search         — search-index.json + search.php (+ tokenize lib
+                                + bm25 lib, v0.5.0)
   [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리
+
+v0.5.0 변경 — BM25 검색 시스템:
+  - scripts/search.py 가 BM25 인덱스 (포맷 v3) 를 빌드. 필드별 (body/title)
+    df / dl / avgdl 통계 + tf posting.
+  - 런타임 점수 계산이 templates/search_bm25.php (신설) 로 분리. search.php
+    는 라우팅·필터·HTML 렌더만. _build_search 가 search_bm25.php 도 dist 로
+    복사 (search.php 가 require_once).
+  - v0.4.x 의 단순 TF 누적 + 매직 ×5 제목 부스트 폐지. 흔한 한글 bigram 의
+    과대 영향, 긴 글의 부당한 가산점, 짧은 매치 vs 정확한 phrase 매치의
+    역전 등 알려진 결함 일괄 해소.
+  - 매치 밀도 기반 스니펫 — 토큰 매치가 가장 밀집된 80자 윈도우.
+  - tests/test_bm25.py 신설 — BM25 알고리즘 핵심 회귀 차단.
 
 v0.4.7 변경:
   - _build_home 의 카테고리 path 분기 dead branch 정리 (출력 동일).
@@ -1217,14 +1230,16 @@ class Builder:
             encoding='utf-8',
         )
 
-        # search_tokenize.php 를 dist 에 복사 (search.php 가 require_once)
-        tok_src = self.templates_dir / 'search_tokenize.php'
-        if not tok_src.exists():
-            die(f'templates/search_tokenize.php not found')
-        (self.dist / 'search_tokenize.php').write_text(
-            tok_src.read_text(encoding='utf-8'),
-            encoding='utf-8',
-        )
+        # search_tokenize.php 와 search_bm25.php 를 dist 에 복사
+        # (search.php 가 둘 다 require_once).
+        for lib_name in ('search_tokenize.php', 'search_bm25.php'):
+            lib_src = self.templates_dir / lib_name
+            if not lib_src.exists():
+                die(f'templates/{lib_name} not found')
+            (self.dist / lib_name).write_text(
+                lib_src.read_text(encoding='utf-8'),
+                encoding='utf-8',
+            )
 
         tpl_path = self.templates_dir / 'search.php'
         if not tpl_path.exists():

@@ -2,37 +2,40 @@
 declare(strict_types=1);
 
 // ════════════════════════════════════════════════════════════════
-// search.php — siheonlee.com 검색 엔드포인트  (v0.4.2)
+// search.php — siheonlee.com 검색 엔드포인트  (v0.5.0)
 // ════════════════════════════════════════════════════════════════
 //
 // 빌드 시 build.py 가 dist/ 로 복사하면서 {{...}} placeholder 만 치환.
 // 런타임에 dist/search-index.json (build.py 가 같은 빌드에서 생성) 을
-// 읽어 한글 bigram + 영문 토큰 역색인 위에서 검색을 수행한다.
+// 읽어 BM25 + 필드 가중치 + phrase 부스트 로 랭킹을 계산.
 //
-// v0.4.2 변경:
-//   - 검색 결과 페이지에 `<meta name='robots' content='noindex,follow'>` 추가.
-//     v0.4.0 의 "전역 noindex 폐기" 정책의 예외. ?q=… 같은 thin/duplicate
-//     content 가 색인되는 것을 방지하되, follow 로 결과 링크는 추적 허용.
+// v0.5.0 변경 — BM25 기반 랭킹으로 전환:
+//   - 인덱스 포맷 v3 (이전 v2). 필드별 df / dl / avgdl 추가.
+//   - 점수 계산 로직이 templates/search_bm25.php 로 분리 (require_once).
+//     이 파일 (search.php) 은 라우팅·필터·HTML 렌더만 담당.
+//   - v0.4.x 의 매직 ×5 제목 부스트, TF 누적 합산 폐지.
+//   - 매치 밀도 기반 스니펫 — 토큰 매치가 밀집된 윈도우를 우선.
 //
-// v0.4.0 변경:
-//   - 토크나이저 함수가 별도 파일 (search_tokenize.php) 로 분리됨.
-//     이 파일이 single source of truth. Python ↔ PHP 패리티가 빌드마다
-//     자동 검증된다.
-//   - 한국어 1글자 쿼리는 자연스럽게 빈 토큰 셋 → 결과 없음.
-//   - 본문 5000자 절단 제거됨 (인덱스 측). 스니펫은 평문 본문 전체에서.
-//   - 전역 noindex 제거. 사이트 정책은 '검색 가능' 이 기본 (검색 결과
-//     페이지는 v0.4.2 부터 예외).
+// v0.4.2 변경 (유지):
+//   - 검색 결과 페이지에 <meta name='robots' content='noindex,follow'>.
 //
-// 인덱스 포맷 (build.py 의 search.build_search_index() 참조):
+// 인덱스 포맷 v3 (scripts/search.py 의 build_search_index() 참조):
 //   {
-//     "version": 2,
-//     "docs":  [{"slug","title","date","category","category_slug","body"}, ...],
-//     "categories":  {"<slug>": "<folder_name>", ...},
-//     "index":       {"<token>": [[doc_id, tf], ...]},  # 본문
-//     "title_index": {"<token>": [[doc_id, tf], ...]}   # 제목 (가중치 ×5)
+//     "version": 3,
+//     "params": {"k1_body","b_body","k1_title","b_title",
+//                "w_title","phrase_boost_body","phrase_boost_title"},
+//     "stats":  {"N","avgdl_body","avgdl_title"},
+//     "docs":   [{"slug","title","date","category","category_slug","body",
+//                 "dl_body","dl_title"}, ...],
+//     "categories": {"<slug>": "<folder_name>", ...},
+//     "df_body":    {"<token>": <int>, ...},
+//     "df_title":   {"<token>": <int>, ...},
+//     "tf_body":    {"<token>": [[doc_id, tf], ...]},
+//     "tf_title":   {"<token>": [[doc_id, tf], ...]}
 //   }
 
 require_once __DIR__ . '/search_tokenize.php';
+require_once __DIR__ . '/search_bm25.php';
 
 $INDEX_PATH = __DIR__ . '/search-index.json';
 if (!is_readable($INDEX_PATH)) {
@@ -41,9 +44,9 @@ if (!is_readable($INDEX_PATH)) {
     exit;
 }
 $INDEX = json_decode(file_get_contents($INDEX_PATH), true);
-if (!is_array($INDEX) || !isset($INDEX['docs'])) {
+if (!is_array($INDEX) || !isset($INDEX['docs']) || ($INDEX['version'] ?? 0) < 3) {
     http_response_code(500);
-    echo 'Search index malformed.';
+    echo 'Search index malformed or version mismatch (expected v3).';
     exit;
 }
 $CATEGORIES = isset($INDEX['categories']) && is_array($INDEX['categories'])
@@ -60,77 +63,10 @@ if ($cat !== '' && !isset($CATEGORIES[$cat])) {
 
 $hits = [];
 if ($q !== '') {
-    $tokens = search_tokenize($q);
-    if (!empty($tokens)) {
-        $scores = [];
-        foreach ($tokens as $t) {
-            if (isset($INDEX['index'][$t])) {
-                foreach ($INDEX['index'][$t] as $entry) {
-                    $d = $entry[0]; $tf = $entry[1];
-                    if ($cat !== '') {
-                        $doc = $INDEX['docs'][$d] ?? null;
-                        if (!$doc || ($doc['category_slug'] ?? '') !== $cat) continue;
-                    }
-                    $scores[$d] = ($scores[$d] ?? 0) + $tf;
-                }
-            }
-            if (isset($INDEX['title_index'][$t])) {
-                foreach ($INDEX['title_index'][$t] as $entry) {
-                    $d = $entry[0]; $tf = $entry[1];
-                    if ($cat !== '') {
-                        $doc = $INDEX['docs'][$d] ?? null;
-                        if (!$doc || ($doc['category_slug'] ?? '') !== $cat) continue;
-                    }
-                    $scores[$d] = ($scores[$d] ?? 0) + $tf * 5;
-                }
-            }
-        }
-        arsort($scores);
-        foreach ($scores as $doc_id => $score) {
-            $doc = $INDEX['docs'][$doc_id] ?? null;
-            if ($doc) $hits[] = ['doc' => $doc, 'score' => $score];
-        }
+    $ranked = bm25_search($INDEX, $q, $cat !== '' ? $cat : null);
+    foreach ($ranked as $r) {
+        $hits[] = ['doc' => $r[2], 'score' => $r[1]];
     }
-}
-
-function snippet(string $body, string $q, int $context = 40): string {
-    if ($q === '' || $body === '') return '';
-    $pos = mb_stripos($body, $q, 0, 'UTF-8');
-    if ($pos === false) {
-        foreach (search_tokenize($q) as $t) {
-            $pos = mb_stripos($body, $t, 0, 'UTF-8');
-            if ($pos !== false) break;
-        }
-    }
-    if ($pos === false) {
-        return mb_substr($body, 0, $context * 2, 'UTF-8');
-    }
-    $start = max(0, $pos - $context);
-    $len = $context * 2 + mb_strlen($q, 'UTF-8');
-    $s = mb_substr($body, $start, $len, 'UTF-8');
-    if ($start > 0) $s = '…' . $s;
-    if ($start + $len < mb_strlen($body, 'UTF-8')) $s .= '…';
-    return $s;
-}
-
-function highlight_html(string $text, string $q): string {
-    $escaped = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    if ($q === '') return $escaped;
-    $patterns = array_unique(array_filter(
-        array_merge([$q], search_tokenize($q)),
-        fn($p) => $p !== ''
-    ));
-    usort($patterns, fn($a, $b) => mb_strlen($b, 'UTF-8') - mb_strlen($a, 'UTF-8'));
-    if (empty($patterns)) return $escaped;
-    $alts = array_map(
-        fn($p) => preg_quote(htmlspecialchars($p, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), '/'),
-        $patterns
-    );
-    return preg_replace(
-        '/(' . implode('|', $alts) . ')/iu',
-        '<mark>$1</mark>',
-        $escaped
-    );
 }
 
 $q_attr = htmlspecialchars($q, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -197,7 +133,7 @@ if ($q === '') {
                 <a href='/<?= htmlspecialchars($doc['slug'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>/'> <?= highlight_html($doc['title'], $q) ?> </a>
             </span>
             <span class='listup_module_date'> &nbsp;&nbsp; <?= htmlspecialchars($doc['date'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></span>
-<?php $snip = snippet($doc['body'], $q); if ($snip !== ''): ?>
+<?php $snip = snippet_density($doc['body'], $q); if ($snip !== ''): ?>
             <div class='search-snippet'><?= highlight_html($snip, $q) ?></div>
 <?php endif ?>
         </div>

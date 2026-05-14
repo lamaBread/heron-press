@@ -1,18 +1,35 @@
-"""검색 인덱스 구축 + Python↔PHP 토크나이저 패리티 테스트.
+"""검색 인덱스 구축 (BM25, v3 포맷) + Python↔PHP 토크나이저 패리티 테스트.
 
-v0.4.0 변경:
-  (a) 한국어 토큰화 규칙 강화. 한 글자 한글은 인덱싱하지 않고,
-      bigram (2-gram) 만 토큰으로 인정. 한 글자 쿼리는 빈 토큰 셋을 만들어
-      자연스럽게 결과 없음으로 떨어진다.
-  (b) 본문 5000자 절단 제거. 글의 전체 평문이 인덱스/스니펫 후보가 된다.
-  (c) build.py 가 fixture 입력에 대해 Py↔PHP 출력 동등성을 빌드마다 검증.
-      어긋나면 빌드 실패. parsers 가 PHP 파일을 직접 require_once 하므로
-      한쪽만 수정해도 패리티가 깨지면 즉시 발견.
+v0.5.0 변경 — BM25 기반 랭킹으로 전환:
+  (a) 인덱스 포맷 v3. tf 가 필드별 (body / title) 로 분리. df_body / df_title
+      (문서 빈도) 와 dl_body / dl_title (문서별 토큰 수), avgdl_body / avgdl_title
+      (평균 토큰 수) 추가. 런타임에 search.php 가 이 통계로 BM25 IDF 와 길이
+      정규화를 계산.
+  (b) 단순 TF 합산 (v0.4.x) → Okapi BM25 점수.
+      score = bm25_body(Q,D) + w_title · bm25_title(Q,D)
+      옵션 phrase 부스트 (원본 쿼리 substring 매치 시 곱셈) 는 PHP 측에서.
+  (c) 한국어 토크나이저 자체는 v0.4.0 과 동일 (1글자 한글 제외, bigram).
+      토크나이저 패리티 테스트도 그대로 유지.
+  (d) `bm25_score()` Python 참조 구현 추가. tests/test_bm25.py 가 이를 호출
+      해 알고리즘 회귀를 차단. 런타임 (PHP) 과 동일 공식.
 
-인덱스 포맷 v2 그대로 (docs[], categories, index, title_index).
-v0.5.0 이후에 IDF 가중치, posting 분할, 클라이언트 색인 등을 검토.
+인덱스 포맷 v3:
+  {
+    "version": 3,
+    "params": {"k1_body", "b_body", "k1_title", "b_title",
+               "w_title", "phrase_boost_body", "phrase_boost_title"},
+    "stats":  {"N", "avgdl_body", "avgdl_title"},
+    "docs":   [{"slug","title","date","category","category_slug","body",
+                "dl_body","dl_title"}, ...],
+    "categories": {"<slug>": "<folder_name>", ...},
+    "df_body":    {"<token>": <doc count>, ...},
+    "df_title":   {"<token>": <doc count>, ...},
+    "tf_body":    {"<token>": [[doc_id, tf], ...]},
+    "tf_title":   {"<token>": [[doc_id, tf], ...]},
+  }
 """
 import json
+import math
 import re
 import subprocess
 from pathlib import Path
@@ -25,7 +42,7 @@ _SEARCH_HAN_RE = re.compile(r'[가-힣]+')
 def search_tokenize(text: str) -> list:
     """build.py / search.php 가 동일하게 사용하는 토크나이저.
 
-    v0.4.0 규칙:
+    v0.4.0 규칙 (v0.5.0 변경 없음):
       - 영문/숫자 (lowercase) : 단어 단위로 그대로
       - 한글 (가-힣) : 음절 2-gram (bigram). 길이 1 인 한글 시퀀스는 무시.
       - 그 외 문자 : 토큰 분리자로만 작용
@@ -68,19 +85,141 @@ def html_to_plain(html: str) -> str:
 
 
 # ════════════════════════════════════════════════════════════════
-# Python ↔ PHP parity test
+# BM25 hyperparameters
+# ════════════════════════════════════════════════════════════════
+#
+# 두 필드 (body, title) 에 독립적인 BM25 파라미터를 둔다. 제목은 짧고
+# 토큰 하나의 의미 비중이 크므로 b 를 낮춰 길이 정규화 영향을 줄이고
+# k1 도 살짝 낮춰 첫 TF 의 보상을 크게.
+#
+# w_title : 두 필드 점수를 합칠 때 제목 필드 가중치. v0.4.x 의 매직 ×5
+#           대신 BM25 정규화된 점수 위에 곱하므로 의미가 명확.
+#
+# phrase_boost_* : 원본 쿼리 문자열이 평문 본문/제목에 substring 매치되면
+#                  최종 점수에 곱하는 부스트. 토큰 단위로 흩어진 매치보다
+#                  연속 substring 매치가 훨씬 강한 관련성 신호.
+
+BM25_PARAMS = {
+    'k1_body': 1.5,
+    'b_body': 0.75,
+    'k1_title': 1.2,
+    'b_title': 0.5,
+    'w_title': 3.0,
+    'phrase_boost_body': 1.5,
+    'phrase_boost_title': 2.0,
+}
+
+
+def bm25_idf(N: int, df: int) -> float:
+    """Okapi BM25 IDF (Robertson-Spärck Jones, +1 smoothing).
+
+    IDF(t) = ln( (N - df + 0.5) / (df + 0.5) + 1 )
+
+    df=0 (인덱스에 없는 토큰) 은 호출자가 미리 거른다. df=N 이어도 +1 덕에
+    음수가 되지 않고 0 에 수렴.
+    """
+    return math.log((N - df + 0.5) / (df + 0.5) + 1.0)
+
+
+def bm25_field_score(tokens, df_map, tf_map, dl, avgdl, N, k1, b):
+    """한 필드 BM25 점수.
+
+    score = Σ_{t ∈ tokens} IDF(t) · ( tf(t,D) · (k1+1) ) /
+                            ( tf(t,D) + k1 · (1 - b + b · dl/avgdl) )
+
+    tokens   : 쿼리 토큰 리스트 (중복 허용 — 같은 토큰 2번 들어오면 2번 가산.
+               단순 BM25 의 표준 동작. 쿼리 측 TF 가중치를 BM25-Q 식으로
+               별도 도입하지는 않음.)
+    df_map   : {token: df}.
+    tf_map   : {token: tf} — 해당 문서 D 의 토큰 빈도.
+    dl       : 문서 D 의 길이 (이 필드 토큰 수).
+    avgdl    : 전체 문서의 이 필드 평균 토큰 수.
+    """
+    if N <= 0 or avgdl <= 0:
+        return 0.0
+    score = 0.0
+    norm = 1.0 - b + b * (dl / avgdl)
+    for t in tokens:
+        df = df_map.get(t, 0)
+        if df <= 0:
+            continue
+        tf = tf_map.get(t, 0)
+        if tf <= 0:
+            continue
+        idf = bm25_idf(N, df)
+        score += idf * (tf * (k1 + 1.0)) / (tf + k1 * norm)
+    return score
+
+
+def bm25_score(index: dict, doc_id: int, query: str,
+               params: dict = None) -> float:
+    """완전한 BM25 점수 (body + w_title·title) + phrase 부스트.
+
+    Python 참조 구현. tests/test_bm25.py 가 이를 호출해 알고리즘을 검증.
+    런타임 (PHP) 의 search.php 도 동일 공식을 구현해야 한다.
+
+    index : build_search_index() 반환값.
+    doc_id : 채점 대상 docs[] 인덱스.
+    query  : 사용자 쿼리 원문 (phrase 부스트용으로 원본 보존 필요).
+    params : 하이퍼파라미터 오버라이드 — None 이면 index['params'].
+    """
+    p = params if params is not None else index.get('params', BM25_PARAMS)
+    stats = index['stats']
+    N = stats['N']
+    if doc_id < 0 or doc_id >= len(index['docs']):
+        return 0.0
+    doc = index['docs'][doc_id]
+
+    tokens = search_tokenize(query)
+    if not tokens:
+        return 0.0
+
+    # 단일 문서의 필드별 TF 를 posting 에서 역추출.
+    # (런타임 PHP 는 posting 순회 중 누적하므로 비효율 없음. 참조 구현은
+    # 명확성 우선으로 검색-친화적 lookup 으로 구성.)
+    def _tf_for_doc(tf_postings, did):
+        out = {}
+        for tok, posting in tf_postings.items():
+            for entry in posting:
+                if entry[0] == did:
+                    out[tok] = entry[1]
+                    break
+        return out
+
+    tf_body_doc = _tf_for_doc(index['tf_body'], doc_id)
+    tf_title_doc = _tf_for_doc(index['tf_title'], doc_id)
+
+    score_body = bm25_field_score(
+        tokens, index['df_body'], tf_body_doc,
+        doc['dl_body'], stats['avgdl_body'], N,
+        p['k1_body'], p['b_body'],
+    )
+    score_title = bm25_field_score(
+        tokens, index['df_title'], tf_title_doc,
+        doc['dl_title'], stats['avgdl_title'], N,
+        p['k1_title'], p['b_title'],
+    )
+
+    total = score_body + p['w_title'] * score_title
+    if total <= 0:
+        return 0.0
+
+    # Phrase 부스트 — 원본 쿼리 (lowercase) 가 평문에 substring 매치되면
+    # 곱셈 부스트. 0 점수에는 효과 없고 의미 있는 점수만 강화.
+    q_lower = query.strip().lower()
+    if len(q_lower) >= 2:
+        if q_lower in (doc.get('body') or '').lower():
+            total *= p['phrase_boost_body']
+        if q_lower in (doc.get('title') or '').lower():
+            total *= p['phrase_boost_title']
+
+    return total
+
+
+# ════════════════════════════════════════════════════════════════
+# Python ↔ PHP tokenizer parity test  (unchanged from v0.4.x)
 # ════════════════════════════════════════════════════════════════
 
-# fixture 의 의도:
-#   - 영문 단어, 숫자, 영숫자 혼합
-#   - 한글 1글자 (인덱싱 안 됨)
-#   - 한글 2글자, 3글자 (bigram 1개, 2개)
-#   - 영문+한글 혼합
-#   - 구두점, 특수문자 (분리자 동작)
-#   - 빈 문자열
-#   - 좌/우 공백
-#   - 대문자 정규화
-#   - 한자, 일본어 (가-힣 범위 밖 — 토큰 0개여야 함)
 PARITY_FIXTURES = [
     '',
     ' ',
@@ -117,19 +256,11 @@ def _php_tokenize_one(text: str, tokenizer_php: Path, php_bin: str = 'php') -> l
 
 
 def run_parity_test(templates_dir: Path, php_bin: str, warn_fn, die_fn) -> bool:
-    """fixture 입력에 대해 Py↔PHP 토크나이저 출력 동등성 검증.
-
-    PHP 가 없으면 _warn 후 True 를 반환 (Builder 가 검색 비활성화 경로로
-    빠지든, builtin 파서 환경에서 검색 인덱스만 만든 후 PHP 부재로 검색
-    엔드포인트가 실패하든 책임은 호출자에게).
-
-    동등성 어긋남이 있으면 die_fn 호출 (빌드 실패).
-    """
+    """fixture 입력에 대해 Py↔PHP 토크나이저 출력 동등성 검증."""
     tokenizer_php = templates_dir / 'search_tokenize.php'
     if not tokenizer_php.exists():
         die_fn(f'search_tokenize.php not found at {tokenizer_php}')
 
-    # PHP 부재 감지
     try:
         probe = subprocess.run(
             [php_bin, '-v'],
@@ -166,20 +297,23 @@ def run_parity_test(templates_dir: Path, php_bin: str, warn_fn, die_fn) -> bool:
 
 
 # ════════════════════════════════════════════════════════════════
-# Search index build  (v0.4.0: full body, no length cap)
+# Search index build  (v0.5.0: BM25 v3 format)
 # ════════════════════════════════════════════════════════════════
 
 def build_search_index(articles, rendered_bodies, categories,
                        top_category_for_article) -> dict:
-    """검색 인덱스 dict 생성. dist 쓰기는 호출자가 수행.
+    """BM25 검색 인덱스 dict 생성. dist 쓰기는 호출자가 수행.
 
-    docs[i].body 는 평문 본문 전체 (v0.4.0: 길이 제한 없음).
-    스니펫 추출은 search.php 측에서 수행하므로 본문이 길어지면 응답 시
-    조금 더 작업이 늘지만, 운영 글 수가 ≤ 수십 건이라 무시 가능.
+    포맷 v3 (이 모듈 docstring 참조). v0.4.x 의 v2 와 비호환:
+      - 인덱스 키 이름 변경 (`index` → `tf_body`, `title_index` → `tf_title`)
+      - 필드별 df 추가 (BM25 IDF 용)
+      - 문서별 dl_body / dl_title 와 전역 avgdl_* 추가 (길이 정규화 용)
     """
     docs = []
-    body_index = {}
-    title_index = {}
+    body_tf_map = {}   # token → {doc_id: tf}
+    title_tf_map = {}
+    body_dls = []
+    title_dls = []
 
     sorted_articles = sorted(articles, key=lambda a: a.meta.slug)
 
@@ -191,6 +325,13 @@ def build_search_index(articles, rendered_bodies, categories,
         top_cat_name = top_cat_obj.folder_name if top_cat_obj else ''
         top_cat_slug = top_cat_obj.slug if top_cat_obj else ''
 
+        body_tokens = search_tokenize(body_plain)
+        title_tokens = search_tokenize(m.title)
+        dl_body = len(body_tokens)
+        dl_title = len(title_tokens)
+        body_dls.append(dl_body)
+        title_dls.append(dl_title)
+
         docs.append({
             'slug': m.slug,
             'title': m.title,
@@ -198,19 +339,30 @@ def build_search_index(articles, rendered_bodies, categories,
             'category': top_cat_name,
             'category_slug': top_cat_slug,
             'body': body_plain,
+            'dl_body': dl_body,
+            'dl_title': dl_title,
         })
 
+        # 필드별 TF 집계
         body_tf = {}
-        for t in search_tokenize(body_plain):
+        for t in body_tokens:
             body_tf[t] = body_tf.get(t, 0) + 1
         for t, tf in body_tf.items():
-            body_index.setdefault(t, {})[doc_id] = tf
+            body_tf_map.setdefault(t, {})[doc_id] = tf
 
         title_tf = {}
-        for t in search_tokenize(m.title):
+        for t in title_tokens:
             title_tf[t] = title_tf.get(t, 0) + 1
         for t, tf in title_tf.items():
-            title_index.setdefault(t, {})[doc_id] = tf
+            title_tf_map.setdefault(t, {})[doc_id] = tf
+
+    N = len(docs)
+    avgdl_body = (sum(body_dls) / N) if N > 0 else 0.0
+    avgdl_title = (sum(title_dls) / N) if N > 0 else 0.0
+
+    # df_field[token] = posting 길이 (그 토큰이 등장한 문서 수)
+    df_body = {tok: len(post) for tok, post in body_tf_map.items()}
+    df_title = {tok: len(post) for tok, post in title_tf_map.items()}
 
     def compact(idx):
         return {tok: [[d, tf] for d, tf in posting.items()]
@@ -223,9 +375,17 @@ def build_search_index(articles, rendered_bodies, categories,
     }
 
     return {
-        'version': 2,
+        'version': 3,
+        'params': dict(BM25_PARAMS),
+        'stats': {
+            'N': N,
+            'avgdl_body': avgdl_body,
+            'avgdl_title': avgdl_title,
+        },
         'docs': docs,
         'categories': categories_map,
-        'index': compact(body_index),
-        'title_index': compact(title_index),
+        'df_body': df_body,
+        'df_title': df_title,
+        'tf_body': compact(body_tf_map),
+        'tf_title': compact(title_tf_map),
     }

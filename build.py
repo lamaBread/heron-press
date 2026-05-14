@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.4.7 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.5.0 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -7,6 +7,23 @@
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
+    python -m unittest discover -s tests   # BM25 단위 테스트 (v0.5.0)
+
+v0.5.0 변경 사항 (vs v0.4.7):
+  - 검색 시스템을 Okapi BM25 기반 랭킹으로 전환.
+      * 검색 인덱스 포맷 v3 (이전 v2 와 비호환). 필드별 df_*, dl_*,
+        stats.avgdl_*, params 추가. scripts/search.py 가 빌드.
+      * Per-field BM25 점수 (본문: k1=1.5, b=0.75 / 제목: k1=1.2, b=0.5,
+        w_title=3.0). v0.4.x 의 매직 ×5 제목 부스트, 단순 TF 합산 폐지.
+      * Phrase 부스트 (곱셈) — 원본 쿼리 substring 매치 시 본문 ×1.5,
+        제목 ×2.0. 매치 밀도 기반 스니펫.
+      * 점수 계산 모듈 분리 (templates/search_bm25.php). search.php 는
+        라우팅·필터·HTML 렌더만 담당.
+  - tests/ 디렉터리 신설 — BM25 알고리즘 핵심 회귀 차단 (25개 단위 테스트).
+    `python -m unittest discover -s tests` 로 실행.
+  - 콘텐츠 측 출력 (글 페이지, 홈, 카테고리, sitemap.xml, robots.txt,
+    redirect.php) 은 v0.4.7 과 출력 동일. 변하는 것은 검색 결과 순서와
+    스니펫 구간뿐.
 
 v0.4.7 변경 사항 (vs v0.4.6):
   - 문서·코드 정합성 회복 (회귀 0, dist 산출물은 v0.4.6 과 바이트 동일).
