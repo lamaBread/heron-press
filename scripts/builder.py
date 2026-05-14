@@ -20,6 +20,10 @@
   [14] _build_search         — search-index.json + search.php (+ tokenize lib)
   [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리
 
+v0.4.7 변경:
+  - _build_home 의 카테고리 path 분기 dead branch 정리 (출력 동일).
+  - docstring 의 v0.4.x 버전 표기 일괄 갱신. 동작 변경 없음.
+
 v0.4.6 변경:
   - 페이지네이션 nav 의 상/하단 여백 축소 (assets/common_template.css).
   - SSR 단계에서 페이지네이션 첫 페이지 상태를 정적으로 출력 — 비활성 페이지
@@ -1065,16 +1069,14 @@ class Builder:
         # v0.4.6: 홈 전용 설정은 site.yaml 이 아니라 Articles/meta.yaml 에서.
         exclude_top = set(self.home_meta.excludes_categories)
 
-        home_articles = []
-        for article in self.articles:
-            if article.category_path:
-                top_cat = article.category_path[0]
-                if top_cat in exclude_top:
-                    continue
-            if (len(article.category_path) == 1
-                    and article.category_path[0] in exclude_top):
-                continue
-            home_articles.append(article)
+        # category_path 는 _scan_articles 가 [..., article_folder] 형태로 채우므로
+        # 항상 1+ 요소이며, [0] 은 (a) 톱레벨 카테고리 폴더명 (글이 카테고리 안에
+        # 있을 때) 또는 (b) 톱레벨 글 폴더명 자체 (About 처럼). 두 경우 모두 같은
+        # 검사 한 번으로 처리 — v0.4.7 에서 중복 검사 분기를 정리.
+        home_articles = [
+            a for a in self.articles
+            if not (a.category_path and a.category_path[0] in exclude_top)
+        ]
 
         home_articles.sort(key=lambda a: a.meta.date, reverse=True)
 

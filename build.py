@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.4.5 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.4.7 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -7,6 +7,32 @@
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
+
+v0.4.7 변경 사항 (vs v0.4.6):
+  - 문서·코드 정합성 회복 (회귀 0, dist 산출물은 v0.4.6 과 바이트 동일).
+      * build.py / scripts/ docstring 의 v0.4.x 표기 일괄 갱신.
+      * README §1·§3 의 폴더명 표기를 현행화 (`siheonlee.com_v0.4.7/`).
+      * README §11 (site.yaml) 의 옛 home_* 키 예시 제거 + v0.4.6 의
+        "설정 책임 분리표" 를 §11 본문으로 끌어올림.
+      * README §17 "한계 표" 를 v0.4.6 기준으로 전면 재작성 — v0.4.5 에서
+        해결된 항목 (페이지네이션 / i18n / 서브카테고리 인덱스) 제거 +
+        v0.4.5/v0.4.6 에서 새로 명시화된 한계 추가.
+      * builder._build_home 의 카테고리 path 분기 dead branch 정리.
+
+v0.4.6 변경 사항 (vs v0.4.5):
+  - 페이지네이션 nav 의 상/하단 여백 축소 (assets/common_template.css).
+  - SSR 시점의 첫 페이지 상태 정적 생성 — 비활성 페이지 항목에 inline
+    `style='display:none'` 을 미리 부착해 FOUC 제거. pagination.js 는
+    클릭 핸들러만 부착하고, 첫 페이지 항목의 inline style 을 비워 표시.
+  - `Articles/meta.yaml` 신설 — 메인페이지 (홈) 의 카테고리-격 설정.
+    카테고리 폴더 meta.yaml 과 동일 스키마.
+  - `priority` 필드 신설 — 카테고리 meta.yaml 에서 카테고리들이 함께
+    표시될 때의 등장 순서를 결정. 값이 클수록 먼저. 같은 값끼리는
+    폴더명 알파벳 순. 정수, 기본값 0.
+  - 설정 일원화 — 옛 site.yaml 의 `home_per_page` /
+    `home_excludes_categories` / `home_sort` 를 `Articles/meta.yaml`
+    로 이전 (마지막 항목은 빌더가 사용한 적 없는 dead field 라 폐기).
+    site.yaml 은 이제 진짜 '전역' 만 보유.
 
 v0.4.5 변경 사항 (vs v0.4.4):
   - 페이지네이션: 메인 / 카테고리 인덱스 (대분류·소분류) / 상위 인덱스의
