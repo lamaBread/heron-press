@@ -1,16 +1,17 @@
-# siheonlee.com v0.5.0 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.5.1 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.5.0 한 줄 요약:** 검색 시스템을 **Okapi BM25 기반 랭킹** 으로 전환. v0.4.x 의 단순 TF 합산 + 매직 ×5 제목 부스트의 결함 (흔한 한글 bigram 과대 영향, 본문 길이 점수 폭주, phrase 매치 미반영) 을 per-field BM25 + phrase 부스트 + 매치 밀도 스니펫으로 일괄 해소. 자세한 내역과 이전 버전 (v0.4.7 ~ v0.1) 의 변경 사항은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
+> **v0.5.1 한 줄 요약:** 빌드 시 모든 raster 이미지 (.jpg .jpeg .png .gif) 를 **WebP 다중 해상도 변종** 으로 자동 변환하고, 글 본문의 모든 `<img>` 에 **WebP src + srcset + sizes + `loading="lazy"`** 를 자동 부착. SEO 직접 영향 (Google PageSpeed Insights / Lighthouse 의 Modern image format / responsive srcset / lazy loading 미사용 감점) 을 고려해 "최소한도의 외부 의존성 원칙" 의 예외로 **Pillow 의존성 도입**. site.yaml 의 `images.enabled=false` 로 두면 Pillow 없이도 v0.5.0 동등 동작. 자세한 내역과 이전 버전 (v0.5.0 ~ v0.1) 의 변경 사항은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
 
 | 핵심 가치 | 어떻게 보장하는가 |
 |---|---|
 | **URL 영구성** — 한 번 발급한 URL 은 절대 깨지지 않는다 | 글 URL(`slug`) 은 카테고리·폴더명과 분리. 글을 옮기거나 폴더명을 바꿔도 URL 불변. |
-| **운영 의존성 최소** — 빌드 환경은 Python 만, 런타임은 Apache+PHP 만 | Python 3 표준 라이브러리. `pip install` 없음, `composer` 없음, 클라이언트 JS 의존성 없음. (v0.4.1 부터 빌드 PHP 의존 제거) |
+| **운영 의존성 최소** — 빌드 환경은 Python (+ Pillow), 런타임은 Apache+PHP 만 | Python 3 표준 라이브러리 + **Pillow** (v0.5.1, 이미지 최적화 전용). `composer` 없음, 클라이언트 JS 의존성 없음. (v0.4.1 부터 빌드 PHP 의존 제거.) Pillow 가 부담되면 `images.enabled=false` 로 끄면 v0.5.0 처럼 stdlib 만으로 빌드 가능. |
+| **이미지 자동 최적화** (v0.5.1) — SEO 직접 영향 항목을 빌드가 처리 | raster 이미지 자동 WebP 변환 + 다중 해상도 srcset + 모든 `<img>` 에 `loading="lazy"` 자동 부착. 글마다 별도 작업 없음. |
 | **서버 설정과 콘텐츠 분리** — 글을 추가해도 서버를 안 건든다 | `.htaccess` 미사용. 모든 라우팅 규칙은 Apache VirtualHost 메인 설정에 한 번만 등록. |
 | **두 도메인 동시 관리** — 신규 도메인과 구 도메인 리다이렉트를 한 번에 | 빌드 산출물이 `dist/`(siheonlee.com)와 `dist-legacy/`(lama.pe.kr 301 리다이렉트)로 분리됨. |
 | **글마다 표현 제어** — 사이트 전역 CSS 와 별도로 글 단위 미세 조정 가능 | `meta.yaml` 의 `styles:` 필드로 본문 태그(p, h3, ul 등)의 CSS 속성을 글마다 독립적으로 override. |
@@ -47,12 +48,12 @@
 ### 준비물
 
 - **Python 3.x** (3.8 이상 권장). 터미널에서 `python --version` 으로 확인.
+- **Pillow** (v0.5.1 신설) — 빌드 시 raster 이미지 (.jpg .jpeg .png .gif) 를 WebP 다중 해상도 변종으로 자동 변환합니다. `pip install Pillow` 한 줄. 회피하려면 `site.yaml` 의 `images.enabled: false` 로 두면 Pillow 없이도 빌드 통과 (단 v0.5.0 처럼 원본 raster 가 그대로 dist 에 떨어지며, `loading="lazy"` 부착은 `images.lazy_loading: true` 면 별도 동작).
 - **PHP CLI** (선택) — 빌드 시 search.php 의 토크나이저가 Python 토크나이저와 동등한지 자동 검증하는 데 사용됩니다. 없으면 패리티 검증만 워닝으로 건너뛰고 나머지 빌드는 정상 진행. (v0.4.0 까지는 마크다운 파싱에도 PHP 가 필수였지만 v0.4.1 부터는 마크다운도 순수 Python.)
-- 그 외 패키지 설치 불필요.
 
 ### 빌드
 
-이 폴더(`siheonlee.com_v0.5.0/`) 에서 터미널을 열고:
+이 폴더(`siheonlee.com_v0.5.1/`) 에서 터미널을 열고:
 
 ```bash
 python build.py
@@ -153,7 +154,7 @@ python -m http.server 8000
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.5.0/
+siheonlee.com_v0.5.1/
 │
 ├── build.py              ← 빌드 진입점 (이것을 실행합니다)
 ├── site.yaml             ← 사이트 전역 설정
@@ -180,6 +181,7 @@ siheonlee.com_v0.5.0/
 │   ├── seo.py                ← <meta> 태그 빌더
 │   ├── search.py             ← 토크나이저, BM25 인덱스 빌드, Python BM25 참조 구현, Py↔PHP 패리티 테스트
 │   ├── sitemap.py            ← sitemap.xml 빌더 (v0.4.4)
+│   ├── images.py             ← (v0.5.1) WebP 다중 해상도 변환 + <img> 후처리 (srcset, sizes, loading=lazy)
 │   ├── builder.py            ← 빌드 파이프라인 (Builder 클래스)
 │   └── migrate.py            ← 기존 글 마이그레이션 (§ 14, 일회성)
 │
@@ -1147,14 +1149,14 @@ def hello():
 
 | 어디에 설정 두는가 | 어떤 설정 |
 |---|---|
-| `site.yaml` | 사이트 전역 (도메인, name, copyright, lang 디폴트, default_og_image 등) / 여러 페이지에 공통 적용되는 디폴트 (`category_per_page`, `category_preview_per_page`) / robots.txt 본문 / reserved_slugs / warn_on_* / `description_truncate` |
+| `site.yaml` | 사이트 전역 (도메인, name, copyright, lang 디폴트, default_og_image 등) / 여러 페이지에 공통 적용되는 디폴트 (`category_per_page`, `category_preview_per_page`) / robots.txt 본문 / reserved_slugs / warn_on_* / `description_truncate` / `images:` (v0.5.1, 이미지 최적화 정책) |
 | `Articles/meta.yaml` (v0.4.6) | 메인페이지 (= 사이트 루트, 홈) 전용 — `per_page`, `excludes_categories`, `lang`, `layout`, `styles` |
 | `Articles/<카테고리>/meta.yaml` (v0.4.5) | 그 카테고리 인덱스 페이지 전용 — `per_page`, `preview_per_page`, `priority` (v0.4.6), `lang`, `layout`, `styles` |
 | `Articles/<카테고리>/<글>/meta.yaml` | 그 글 페이지 전용 — `slug`, `title`, `date`, `updated`, `noindex`, `lang`, `seo:`, `styles` |
 
 > **v0.4.6 의 변경:** 옛 site.yaml 의 메인페이지 전용 키 3개 (`home_per_page` / `home_excludes_categories` / `home_sort`) 가 모두 `Articles/meta.yaml` 로 이전되었습니다 (`home_sort` 는 빌더가 사용한 적 없는 dead field 라 그대로 폐기). 옛 키를 site.yaml 에 그대로 두면 빌드는 진행되지만 무시되며 워닝이 출력됩니다.
 
-### 11-2. site.yaml 예시 (v0.4.6 기준)
+### 11-2. site.yaml 예시 (v0.5.1 기준)
 
 ```yaml
 # 도메인
@@ -1215,6 +1217,23 @@ robots_txt_main: |
 robots_txt_legacy: |
   User-agent: *
   Allow: /
+
+# v0.5.1: 이미지 자동 최적화 정책. 전체를 생략해도 아래 기본값으로 동작.
+#   enabled       — 전체 토글. false 면 Pillow 없이 빌드 통과 (raster 이미지는
+#                   v0.5.0 처럼 그대로 dist 에 복사). lazy_loading 만 따로 켤 수
+#                   있어, Pillow 없는 환경에서도 loading="lazy" 는 부착 가능.
+#   widths        — 생성할 WebP 변종 너비 (px). 원본 width 이하만 실제 파일이 생성됨.
+#   max_width     — 원본이 이보다 크면 다운스케일. widths 의 max 와 동기화면 충분.
+#   quality       — WebP 인코더 quality (0~100). Google 권장 85.
+#   lazy_loading  — 모든 <img> 에 loading="lazy" 자동 부착. enabled=false 여도 독립.
+#   default_sizes — srcset 과 짝이 되는 sizes 디폴트. siheonlee.com main column 800px 기준.
+images:
+  enabled: true
+  widths: [400, 800, 1600]
+  max_width: 1600
+  quality: 85
+  lazy_loading: true
+  default_sizes: "(max-width: 800px) 100vw, 800px"
 
 # v0.4.1: markdown_parser 옵션 폐지. 마크다운 파서는 단일 (scripts/parsedown.py)
 # 로 통일되어 사이트 설정에서 선택할 필요가 없습니다. 기존 설정은 무시됩니다.
@@ -1784,7 +1803,7 @@ python build.py --clean
 
 2. **표시명과 URL slug 분리** — 화면에 보이는 이름은 한국어 폴더명, URL 은 영문 ASCII slug 로 독립 관리.
 
-3. **운영 의존성 명시** — 빌드는 Python 3 만, 런타임은 PHP (검색·리다이렉트). `pip install`/`composer install`/클라이언트 JS 의존성은 없음. v0.4.0 부터 "외부 의존성 0" 이 아니라 "두 런타임 명시" 로 솔직히 표기하기 시작했고, v0.4.1 에서 빌드 PHP 의존이 제거되어 명시 대상이 더 줄었음.
+3. **운영 의존성 명시** — 빌드는 Python 3 + Pillow (v0.5.1), 런타임은 PHP (검색·리다이렉트). 클라이언트 JS 의존성·composer 의존성 없음. v0.4.0 부터 "외부 의존성 0" 이 아니라 "런타임 명시" 로 솔직히 표기하기 시작했고, v0.4.1 에서 빌드 PHP 의존이 제거되어 명시 대상이 줄었음. v0.5.1 에서 Pillow 가 새로 도입되었지만 "SEO 직접 영향" 예외로 도입한 단일 의존성이며 `images.enabled=false` 로 끄면 v0.5.0 처럼 stdlib 만으로 빌드 가능 — "필요한 만큼만, 끄는 옵션 함께 제공" 정책으로 유지.
 
 4. **서버 설정과 콘텐츠 분리** — `.htaccess` 가 없어 서버 설정과 콘텐츠가 완전히 분리. 글을 아무리 많이 추가해도 서버 설정을 건드릴 필요가 없음.
 
@@ -1798,9 +1817,9 @@ python build.py --clean
 
 9. **단일 진실원의 토크나이저 (v0.4.0)** — Python/PHP 양쪽 토크나이저의 동등성을 빌드마다 fixture 패리티 테스트로 자동 검증.
 
-### 현재 버전(v0.5.0) 의 한계
+### 현재 버전(v0.5.1) 의 한계
 
-> v0.5.0 에서 BM25 검색 시스템과 단위 테스트 디렉터리가 도입되었습니다. 아래 표는 v0.5.0 시점에 여전히 유효한 한계만 모았습니다.
+> v0.5.1 에서 이미지 자동 최적화 (WebP 다중 해상도 + `loading="lazy"`) 가 도입되어, v0.5.0 의 "이미지 자동 최적화 없음" 한계는 해소되었습니다. 아래 표는 v0.5.1 시점에 여전히 유효한 한계만 모았습니다.
 
 | 한계 | 내용 |
 |---|---|
@@ -1809,10 +1828,11 @@ python build.py --clean
 | layout 은 `list` 만 구현 (v0.4.5) | 카테고리/홈 meta.yaml 의 `layout:` 필드는 `list` 외의 값 (`gallery` 등) 이 와도 빌드는 통과하되 'list' 로 폴백합니다. 갤러리·카드 등 다른 레이아웃은 미래 의제. |
 | JS 비활성화 시 페이지 2+ 미표시 (v0.4.6) | 페이지네이션이 부착된 section 의 비활성 페이지 항목은 SSR 시점에 inline `style='display:none'` 으로 부착됩니다 (FOUC 제거 목적). 그래서 JS 가 비활성화된 환경에서는 첫 페이지만 보이고 페이지 2 이후 항목은 표시되지 않습니다. 콘텐츠 자체는 글 URL 직접 접근으로 접근 가능. `<noscript>` fallback 은 별도 의제. |
 | `<head>` 의 `<title>` 폴백 체인이 글에만 적용 (v0.4.3) | 글 페이지는 `{seo.title_prefix}{title}{seo.title_suffix}` 로 정상 출력되지만, 홈·카테고리·404·search 페이지는 모두 `site.name` 한 값 — 페이지마다 다른 `<title>` 이 필요하면 템플릿에 변수를 추가해야 함. |
-| description 폴백이 본문 전체에서 첫 `<p>` 검색 | `_FIRST_P_RE` 가 본문 첫 `<p>` 를 찾는데, 빌더가 본문을 `<div class='gap'><p>제목</p></div>` + `<section>…</section>` 로 감싸므로 결과적으로 갭 박스 안의 글 제목이 description 으로 빨릴 수 있습니다. `seo.description` 을 명시하면 덮어쓰이지만 폴백 시 SEO 신뢰도 손해 — v0.5.0 의제. |
-| description_truncate 가 단어 경계 무시 | 150자 절단이 영어 단어 중간을 자를 수 있음. 한국어/영어 혼용이라 영향은 작지만 SEO 디테일 — v0.5.0 의제. |
+| description 폴백이 본문 전체에서 첫 `<p>` 검색 | `_FIRST_P_RE` 가 본문 첫 `<p>` 를 찾는데, 빌더가 본문을 `<div class='gap'><p>제목</p></div>` + `<section>…</section>` 로 감싸므로 결과적으로 갭 박스 안의 글 제목이 description 으로 빨릴 수 있습니다. `seo.description` 을 명시하면 덮어쓰이지만 폴백 시 SEO 신뢰도 손해 — 차기 의제. |
+| description_truncate 가 단어 경계 무시 | 150자 절단이 영어 단어 중간을 자를 수 있음. 한국어/영어 혼용이라 영향은 작지만 SEO 디테일 — 차기 의제. |
 | styles 의 @-rule 미지원 | `@media`, `@keyframes`, `@font-face`, `@supports`, `@import` 등 모든 at-rule 은 inject 안 됨 — [scripts/markdown.py](scripts/markdown.py) 의 `render_article_styles` 가 평면 `selector { decls }` 규칙만 직렬화. content.html 의 인라인 `<style>` 로 회피. |
-| 이미지 자동 최적화 없음 | assets/ 와 글 첨부 이미지는 빌드가 그대로 복사. webp 변환·리사이즈·`loading="lazy"` 자동화 없음. 필요하면 글마다 직접 작성. |
+| 이미지 최적화는 정적 단일 프레임만 (v0.5.1) | animated GIF 는 첫 프레임만 WebP 로 인코딩되어 애니메이션이 사라집니다. 애니메이션을 보존하려면 그 글의 첨부를 webp 로 직접 만들거나, `<img>` 의 src 를 외부 URL 로 두면 후처리에서 src 가 변경되지 않습니다. 한 글 / 한 이미지에 대해서만 최적화를 끄는 옵션은 아직 없음 (사이트 전역 토글만). |
+| WebP 폴백 (`<picture>`) 미제공 (v0.5.1) | 출력이 `<img src="*.webp">` 단일 — IE11 및 구버전 Safari (< 14) 는 깨진 이미지로 표시. siheonlee.com 의 실제 트래픽 대상은 최신 브라우저 99%+ 라 단순 정책 선택. 폴백이 필요하면 차기에서 `<picture>` 옵션 도입 의제. |
 | 글/카테고리 slug ASCII 만 허용 | 글 slug 정규식은 `^[a-z0-9][a-z0-9-]*[a-z0-9]$` (영소문자·숫자·하이픈). 카테고리 폴더가 한국어 등 비ASCII 면 hex 코드포인트로 자동 변환 + 워닝 (`블로그` → `/be94-b85c-adf8/`). 가독성 위해 ASCII 폴더명 권장. |
 | 카테고리 meta.yaml 의 일부 필드는 위치별로 적용 대상 다름 (v0.4.5/v0.4.6) | `preview_per_page` 는 톱레벨 카테고리에는 사실상 의미 없음 (상위가 없으므로). `priority` / `preview_per_page` 는 `Articles/meta.yaml` (홈) 에선 적용 대상 없음. 같은 스키마를 두 위치가 공유하기 위한 의도된 비대칭이며 잘못된 값을 넣어도 빌드는 통과. |
 | 톱레벨 nav 의 `About` 정렬 고정 (v0.4.6) | 톱레벨 nav 링크는 `About` 이 최상단 고정이고, 나머지는 (priority 내림차순, folder_name 오름차순) 입니다. About 의 위치를 priority 로 조절할 수 없음 — 원본 lama 의 nav 동선 보존이 의도. |
@@ -1832,7 +1852,8 @@ python build.py --clean
 
 | 버전 | 시스템 정체성 | 검색 랭킹 | 출력 UI/UX | 글 `<title>` | 마크다운 본문 구조 | 색인 정책 | sitemap.xml | 마크다운 파서 | meta.yaml 필드 | 검색 토크나이저 | 빌드 검증 | 레거시 dispatcher | PHP 함수 시뮬레이션 | 카테고리 한국어 폴더 | 빌드 모듈 구조 | 외부 의존성 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **v0.5.0 (현재)** | (동일) | **Okapi BM25 + 필드 가중치 (body/title 독립 k1·b, w_title=3.0) + phrase 부스트 (×1.5/×2.0) + 매치 밀도 스니펫. 인덱스 v3 (df/dl/avgdl). tests/test_bm25.py 신설.** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **tests/ 단위 테스트** | (동일) | (동일) | (동일) | + **templates/search_bm25.php / tests/test_bm25.py** | (동일) |
+| **v0.5.1 (현재)** | (동일) | (동일) | + **모든 `<img>` 에 WebP src + srcset (다중 해상도) + sizes + `loading="lazy"` 자동 부착. raster 원본 (.jpg .png .gif) 은 dist 에서 제거되고 `{stem}-{w}.webp` 변종만 남음** | (동일) | (동일) | (동일) | (동일) | (동일) | + **`images:` 블록 (site.yaml — enabled/widths/max_width/quality/lazy_loading/default_sizes)** | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/images.py** | + **Pillow (이미지 최적화 — `images.enabled=false` 로 끄면 stdlib 만으로 빌드 가능)** |
+| **v0.5.0** | (동일) | **Okapi BM25 + 필드 가중치 (body/title 독립 k1·b, w_title=3.0) + phrase 부스트 (×1.5/×2.0) + 매치 밀도 스니펫. 인덱스 v3 (df/dl/avgdl). tests/test_bm25.py 신설.** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **tests/ 단위 테스트** | (동일) | (동일) | (동일) | + **templates/search_bm25.php / tests/test_bm25.py** | (동일) |
 | **v0.4.7** | (동일) | 단순 TF 합산 + 매직 ×5 제목 부스트. 인덱스 v2 | (동일 — dist 바이트 동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) |
 | **v0.4.6** | (동일) | (동일) | + **페이지네이션 nav 여백 축소 + SSR 시점의 첫 페이지 정적 생성 (FOUC 제거)** | (동일) | (동일) | (동일) | (동일) | (동일) | + **`Articles/meta.yaml` (홈 = 루트의 페이지 설정 — per_page / excludes_categories / ...)** / + **카테고리·홈 meta.yaml 의 `priority` (정수, 큰 값 먼저)** / **site.yaml 의 home_* 류 키 폐기 (전역 ↔ 페이지 설정 분리)** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) |
 | **v0.4.5** | (동일) | (동일) | + **JS DOM 페이지네이션 컨트롤 (홈·카테고리 인덱스·서브카테고리 section). `<html lang>` 동적화** | (동일) | (동일) | (동일) | + **서브카테고리 URL 포함** | (동일) | + **글 `lang:`** / + **카테고리 meta.yaml (per_page / preview_per_page / layout / styles / lang)** | (동일) | (동일) | (동일) | (동일) | + **워닝 메시지에 슬러그 변환 결과 표기 + ASCII rename 권장** | + **assets/pagination.js** | (동일) |
@@ -1846,6 +1867,47 @@ python build.py --clean
 | **v0.3** | "SSG" | — | 원본 + 글마다 스타일 오버라이드 가능 | (동일) | (동일) | (동일) | 없음 | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | + **`styles:`** | — | (동일) | (동일) | (동일) | _meta.yaml 슬러그 오버라이드 | 단일 build.py | Python 3 + (parsedown 시) PHP CLI |
 | **v0.2** | "SSG" | — | 원본 `lama_website-main` 와 동일 | (동일) | (동일) | 전역 noindex (원본 보존) | 없음 | (동일) | (동일) | — | (동일) | (동일) | imgBox/imgSlideBox | — | 단일 build.py | (동일) |
 | **v0.1** | "SSG" | — | v0.1 자체 디자인 | 원본 quirk: 항상 site.name | 자동 단일 갭+섹션 wrap | 전역 noindex | 없음 | Python stdlib 자체 파서 | slug, title, date, seo_* | — | slug 정규식, 날짜 형식, slug 중복 | 도메인 하드코딩 | — | — | 단일 build.py | Python 3 |
+
+### v0.5.1 (2026-05-14) — 이미지 자동 최적화 + lazy loading
+
+v0.5.0 까지의 빌더는 글 폴더 / `assets/` 의 raster 이미지를 그대로 dist 에 복사했습니다. v0.4.0 에서 전역 noindex 가 풀려 글이 검색엔진에 색인되기 시작한 뒤로 SEO 가 실제 트래픽에 영향을 미치는 단계가 되었는데, Google PageSpeed Insights / Lighthouse 가 ① "Serve images in next-gen formats (WebP)" ② "Properly size images" ③ "Defer offscreen images (loading=lazy)" 세 항목을 명시적으로 감점하면서, 빌드 산출물의 이미지 정책이 Core Web Vitals (LCP) 와 모바일 검색 랭킹에 직접 영향을 미치는 구조로 굳어졌습니다.
+
+v0.5.1 은 이 세 항목을 빌드 단계에서 한꺼번에 해소합니다. 글마다 별도 마크업을 손볼 필요 없이, `![alt](photo.jpg)` 한 줄이나 `<img src="photo.png" alt="">` HTML 그대로 둬도 빌드 후 dist 에는 WebP 다중 해상도 변종 + responsive `<img srcset>` + `loading="lazy"` 가 자동으로 떨어집니다.
+
+| 변경 | 내용 |
+|---|---|
+| 외부 의존성 도입 — Pillow ([scripts/images.py](scripts/images.py)) | v0.4.1 의 "빌드 PHP 의존 제거" 와 같은 보수적 의존성 정책에도 불구하고 도입. WebP 인코딩 / 정확한 리샘플링은 stdlib 만으로 현실적으로 구현 불가 (수천 줄의 디코더/리샘플러). Pillow 는 PSF 라이선스 (BSD 호환), `pip install Pillow` 한 줄. 두 가지 안전망: ① `images.enabled=false` 로 끄면 raster 이미지를 v0.5.0 처럼 그대로 복사하고 HTML 후처리도 안 함 → Pillow 없이 빌드 통과. ② `images.lazy_loading=true` 는 별도 토글이라 enabled=false 여도 `loading="lazy"` 부착은 동작 — Pillow 없는 환경에서도 SEO 의 lazy loading 부분은 챙길 수 있음. |
+| WebP 다중 해상도 변종 자동 생성 | raster 이미지 (.jpg .jpeg .png .gif) 가 `_sync_assets` / `_copy_site_assets` 단계에서 Pillow 로 디코드 → site.yaml 의 `images.widths` (기본 `[400, 800, 1600]`) 중 원본 width 이하인 너비별로 LANCZOS 리샘플 → WebP 인코딩 (quality 85, method 6). 결과: `{stem}-{width}.webp` 파일들이 dist 의 원본 자리에 떨어지고 **원본 raster 파일은 dist 에 복사되지 않음**. SVG / 이미 webp 인 파일은 그대로 복사 (벡터 / 이미 최적화). 캐시 — variant mtime ≥ 원본 mtime 이면 재인코딩 건너뜀. |
+| HTML 후처리 — `transform_img_tags` ([scripts/images.py](scripts/images.py)) | 글 본문의 모든 `<img>` 를 정규식으로 잡아 속성을 파싱 + 재조립. 변환 결과: ① src 가 webp primary variant (800px 부근, 디스플레이용) 로 치환, ② srcset 에 변종별 `{stem}-{w}.webp {w}w` 등록, ③ sizes 디폴트 `(max-width: 800px) 100vw, 800px` 부착 (siheonlee.com main column 너비 기준 — `images.default_sizes` 로 사이트마다 조정), ④ `loading="lazy"` 자동 부착 (이미 loading 속성이 있으면 보존 — eager 명시 의도 존중). 외부 URL (https://, //, data:) 의 `<img>` 와 SVG `<img>` 는 src 그대로 두고 `loading="lazy"` 만 부착. |
+| 빌드 파이프라인 단계 순서 재배치 ([scripts/builder.py](scripts/builder.py)) | v0.5.0 까지는 `[5] _render_articles → [6] _sync_assets → ... → [9] _copy_site_assets` 순. v0.5.1 에서 asset 단계가 article render 보다 먼저 와야 (asset 단계가 `self.image_variants` 를 채워야 article render 의 `<img>` 후처리가 그 정보를 참조할 수 있어) `[5] _sync_assets → [6] _copy_site_assets → [7] _render_articles → ...` 로 재배치. 이 순서 변경은 v0.5.0 의 빌드 산출물에 영향을 주지 않는다 — 두 asset 단계는 _render_articles 의 입력에 의존하지 않으므로 (`articles` / `categories` 만 사용) 결정성 유지. |
+| 새 site.yaml 블록 `images:` | 기본값 보유 — 옛 site.yaml 그대로 두면 자동으로 v0.5.1 기본 정책으로 빌드. 키: `enabled` (기본 true) / `widths` (기본 [400, 800, 1600]) / `max_width` (기본 widths 의 max) / `quality` (기본 85) / `lazy_loading` (기본 true) / `default_sizes` (기본 `"(max-width: 800px) 100vw, 800px"`). [SiteConfig.images](scripts/models.py) 가 [ImageConfig](scripts/images.py) 를 보유. |
+| `_prune_article_assets` 의 webp 자매 파일 인식 | raster 원본 자리에 떨어지는 `{stem}-*.webp` 변종 파일을 자매로 인식. 원본 파일명이 dist 에 없는 상태에서도 다음 빌드에서 변종이 stale 로 잘못 정리되지 않도록. 옛 변종 (예전 widths 설정으로 만들어진 잔재) 은 같은 stem 의 새 widths 와 충돌하지 않는 한 보존. |
+
+**검증 (출시 시점, 현재 트리):**
+
+- About 페이지의 face_img.png (1,090,494 bytes / 778×W) → dist/src/about/face_img-400.webp (8,948 bytes) + face_img-778.webp (33,414 bytes). 원본 PNG 대비 약 30× ~ 120× 절감.
+- dist/src/about/index.html 의 `<img src="./face_img.png" alt=''>` 가 후처리 후 `<img src="/src/about/face_img-778.webp" alt='' srcset="/src/about/face_img-400.webp 400w, /src/about/face_img-778.webp 778w" sizes="(max-width: 800px) 100vw, 800px" loading="lazy">` 로 변환됨.
+- 두 번째 빌드 (캐시) — 변종 mtime 이 첫 빌드와 동일 (재인코딩 건너뜀 정상 동작).
+- 외부 URL `<img src="https://...">` — src 그대로 + loading="lazy" 만 추가.
+- SVG `<img src="/assets/icon.svg">` — src 그대로 + loading="lazy" 만 추가.
+- 기존 BM25 단위 테스트 25개 그대로 통과 (회귀 0).
+
+**호환성 노트:**
+
+- v0.5.0 까지의 dist 와 v0.5.1 의 dist 는 **검색 / sitemap.xml / robots.txt / redirect.php / 404.html / 페이지 HTML 구조 모든 측면에서 동일.** 차이는 ① 본문의 `<img>` 마크업이 webp + srcset + lazy 로 확장 (외부 URL / SVG 는 loading 한 줄만), ② raster 이미지 자리에 원본 대신 webp 변종 파일.
+- meta.yaml / Articles/meta.yaml / 카테고리 meta.yaml 변경 불필요.
+- site.yaml 의 옛 키 변경/추가 의무 없음. `images:` 블록을 명시하지 않으면 v0.5.1 기본값으로 동작.
+- 외부 의존성: 빌드 머신에 `pip install Pillow` 가 새로 필요. 회피하려면 site.yaml 에 `images: { enabled: false }` 한 줄을 추가.
+
+#### v0.5.0 → v0.5.1 마이그레이션 시 주의
+
+- `pip install Pillow` (또는 `pip install -r requirements.txt` — 다만 이 프로젝트는 의존성 1개라 requirements.txt 를 도입하지 않음. 다음 의존성 추가 시 함께 도입 검토).
+- 첫 `python build.py --clean` 후 dist 의 raster 이미지 자리가 webp 변종으로 바뀜. 옛 dist 를 그대로 두고 partial 빌드를 돌리면 dist/src 안에 옛 jpg/png 와 새 webp 가 공존할 수 있으니, 첫 빌드는 `--clean` 권장.
+- Apache `mod_mime` 가 `.webp` 의 MIME 타입을 정상 인식하는지 확인 (대부분의 Apache 2.4 디폴트 mime.types 에 포함). 미인식 시 `AddType image/webp .webp` 한 줄 추가.
+- 이미지 변종 너비를 조정하고 싶다면 site.yaml 의 `images.widths` 수정 후 재빌드 — `_prune_article_assets` 가 옛 너비 변종을 정리한다.
+- v0.4.2 로드맵의 미수용 B-5 (description 폴백 추출 범위) / B-6 (description_truncate 단어 경계) 는 v0.5.1 범위 밖. 별도 의제로 이월.
+
+---
 
 ### v0.5.0 (2026-05-14) — BM25 기반 검색 시스템
 
@@ -2256,4 +2318,4 @@ v0.1 의 SSG 내부 시스템은 그대로 유지하면서, 출력 HTML/CSS 만 
 
 ---
 
-*이 문서는 siheonlee.com v0.5.0 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python 만, 런타임은 PHP; 검색은 Okapi BM25) 기준으로 작성되었습니다. (2026-05-14)*
+*이 문서는 siheonlee.com v0.5.1 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25; 이미지는 WebP 다중 해상도 자동 변환) 기준으로 작성되었습니다. (2026-05-14)*

@@ -1,17 +1,22 @@
 """빌드 파이프라인 (Builder 클래스).
 
-15단계 파이프라인:
+15단계 파이프라인 (v0.5.1 에서 asset 단계가 article render 보다 먼저):
   [1] _load_config           — site.yaml + legacy-map.yaml + 토크나이저 패리티 검증
   [2] _scan_articles         — Articles/ 트리 순회, _ 접두 제외
   [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움 (seo: 블록 포함)
   [4] _validate              — slug 검증, 카테고리 트리 구축 (한글 폴더 워닝),
                                 카테고리 meta.yaml 파싱 (v0.4.5)
-  [5] _render_articles       — 본문 렌더 + 섹션 마커 처리 + nav/SEO/styles
-                                → dist/{slug}/
-  [6] _sync_assets           — 본문 외 자원 → dist/src/{slug}/
-  [7] _build_categories      — 톱레벨 + 서브카테고리 인덱스 페이지 (v0.4.5)
-  [8] _build_home            — 루트 페이지 (Recent + 페이지네이션, v0.4.5)
-  [9] _copy_site_assets      — assets/ → dist/assets/
+  [5] _sync_assets           — 본문 외 자원 → dist/src/{slug}/. v0.5.1 부터
+                                raster 이미지 (.jpg .jpeg .png .gif) 는
+                                Pillow 로 WebP 변종들 (srcset 너비별) 로
+                                변환 + self.image_variants 에 등록.
+  [6] _copy_site_assets      — assets/ → dist/assets/. v0.5.1 부터 raster
+                                이미지는 _sync_assets 와 동일하게 WebP 변환.
+  [7] _render_articles       — 본문 렌더 + 섹션 마커 처리 + nav/SEO/styles +
+                                v0.5.1 의 <img> 후처리 (WebP src + srcset +
+                                sizes + loading=lazy) → dist/{slug}/
+  [8] _build_categories      — 톱레벨 + 서브카테고리 인덱스 페이지 (v0.4.5)
+  [9] _build_home            — 루트 페이지 (Recent + 페이지네이션, v0.4.5)
   [10] _build_404            — 404 페이지
   [11] _build_robots         — robots.txt (main + legacy)
   [12] _build_sitemap        — dist/sitemap.xml (v0.4.4 신설, v0.4.5 에서
@@ -20,6 +25,27 @@
   [14] _build_search         — search-index.json + search.php (+ tokenize lib
                                 + bm25 lib, v0.5.0)
   [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리
+
+v0.5.1 변경 — 이미지 자동 최적화 + lazy loading:
+  - 외부 의존성 도입: Pillow. v0.4.1 의 "빌드 PHP 의존 제거" 와 같은
+    보수적 의존성 정책에도 불구하고, WebP 인코딩 / 정확한 리샘플링은
+    stdlib 만으로 현실적으로 구현 불가. WebP / responsive srcset 부재는
+    Google PageSpeed Insights 및 모바일 검색 랭킹에 직접 감점 요인이라
+    "최소한도의 외부 의존성 원칙" 의 SEO 예외로 허용. site.yaml 의
+    images.enabled=false 로 끄면 의존성 없이 v0.5.0 과 동등 동작.
+  - 새 모듈 scripts/images.py — ImageConfig dataclass + optimize_image()
+    (raster → WebP 변종 다중 해상도) + transform_img_tags() (<img> 후처리:
+    WebP src 치환, srcset / sizes 추가, loading="lazy" 자동 부착).
+  - 빌드 파이프라인 단계 순서 변경 — _sync_assets / _copy_site_assets 가
+    _render_articles 보다 먼저. 두 asset 단계가 self.image_variants 에
+    원본 URL → 변종 정보를 등록하고, _render_articles 가 그 정보로 본문
+    <img> 를 후처리한다.
+  - raster 이미지 (.jpg .jpeg .png .gif) 는 원본을 dist 에 복사하지 않고
+    `{stem}-{width}.webp` 변종만 생성. 원본 width 이하의 widths 만 실제
+    파일이 생긴다. SVG / 이미 webp 인 파일은 그대로 복사하고 후처리는
+    loading="lazy" 부착에만 한정.
+  - 캐시 — variant 의 mtime 이 원본 mtime 이상이면 재인코딩 건너뜀.
+    _prune_article_assets 가 stem-*.webp 자매 파일을 보존 대상으로 인식.
 
 v0.5.0 변경 — BM25 검색 시스템:
   - scripts/search.py 가 BM25 인덱스 (포맷 v3) 를 빌드. 필드별 (body/title)
@@ -104,6 +130,15 @@ from .markdown import (
     process_html,
     has_live_php,
     resolve_section_markers,
+)
+from .images import (
+    ImageConfig,
+    VariantSet,
+    optimize_image,
+    transform_img_tags,
+    RASTER_EXTS,
+    ALL_IMAGE_EXTS,
+    _HAS_PIL,
 )
 
 
@@ -236,6 +271,10 @@ class Builder:
         # v0.4.6: Articles/meta.yaml — 메인페이지 (루트) 의 카테고리-격 설정.
         # 없으면 기본 CategoryMeta (모든 필드 None / 0).
         self.home_meta: CategoryMeta = CategoryMeta()
+        # v0.5.1: 이미지 최적화 — 원본 URL → VariantSet (생성된 webp 변종 정보).
+        # _sync_assets / _copy_site_assets 에서 채워지고, _render_articles 의
+        # HTML 후처리 및 템플릿 컨텍스트 (face_img 등) 에서 참조한다.
+        self.image_variants: dict = {}  # URL str → VariantSet
 
     # ── [1] Config load ──────────────────────────────────────
 
@@ -273,6 +312,8 @@ class Builder:
             lang=str(get('lang') or 'ko'),
             category_per_page=int(get('category_per_page') or 20),
             category_preview_per_page=int(get('category_preview_per_page') or 5),
+            # v0.5.1: 이미지 자동 최적화 설정.
+            images=self._parse_image_config(get('images') or {}),
         )
 
         # v0.4.6: 사용자가 옛 home_* 키를 site.yaml 에 그대로 두면 알아채지
@@ -290,6 +331,81 @@ class Builder:
         # 토크나이저 패리티 검증 (PHP 없으면 워닝만)
         run_parity_test(self.templates_dir, php_bin='php',
                         warn_fn=warn, die_fn=die)
+
+        # v0.5.1: 이미지 최적화가 켜져 있는데 Pillow 가 없으면 워닝 (die 가 아닌
+        # 워닝 — 이미지가 한 장도 없는 사이트는 빌드가 통과해야 하므로 _sync_assets
+        # 단계에서 실제 raster 이미지를 만났을 때 die 한다).
+        if self.site.images.enabled and not _HAS_PIL:
+            warn('이미지 최적화가 켜져 있지만 Pillow 가 설치되지 않았습니다. '
+                 'raster 이미지를 만나면 빌드가 중단됩니다. '
+                 "pip install Pillow 로 설치하거나 site.yaml 의 "
+                 "images.enabled 를 false 로 두세요.")
+
+    def _parse_image_config(self, raw) -> ImageConfig:
+        """site.yaml 의 `images:` 블록을 ImageConfig 로 파싱 (v0.5.1).
+
+        비어 있거나 모든 키가 없으면 ImageConfig 의 기본값. 알 수 없는 키는
+        조용히 무시 (forward compat).
+        """
+        if not isinstance(raw, dict):
+            raw = {}
+
+        def _bool(key, default):
+            v = raw.get(key)
+            if v is None:
+                return default
+            return bool(v)
+
+        widths_raw = raw.get('widths')
+        if widths_raw is None:
+            widths = [400, 800, 1600]
+        elif isinstance(widths_raw, list):
+            try:
+                widths = sorted({int(w) for w in widths_raw if int(w) > 0})
+            except (TypeError, ValueError):
+                die(f"site.yaml: images.widths 는 양의 정수 리스트여야 합니다 "
+                    f"(받은 값: {widths_raw!r})")
+            if not widths:
+                die("site.yaml: images.widths 가 비어 있습니다")
+        else:
+            die(f"site.yaml: images.widths 는 리스트여야 합니다 "
+                f"(받은 값: {widths_raw!r})")
+
+        max_width_raw = raw.get('max_width')
+        if max_width_raw is None:
+            max_width = max(widths)
+        else:
+            try:
+                max_width = int(max_width_raw)
+            except (TypeError, ValueError):
+                die(f"site.yaml: images.max_width 는 정수여야 합니다 "
+                    f"(받은 값: {max_width_raw!r})")
+
+        quality_raw = raw.get('quality')
+        if quality_raw is None:
+            quality = 85
+        else:
+            try:
+                quality = int(quality_raw)
+            except (TypeError, ValueError):
+                die(f"site.yaml: images.quality 는 정수여야 합니다 "
+                    f"(받은 값: {quality_raw!r})")
+            if not (0 <= quality <= 100):
+                die(f"site.yaml: images.quality 는 0~100 범위여야 합니다 "
+                    f"(받은 값: {quality})")
+
+        sizes = raw.get('default_sizes')
+        if sizes is None:
+            sizes = "(max-width: 800px) 100vw, 800px"
+
+        return ImageConfig(
+            enabled=_bool('enabled', True),
+            widths=widths,
+            max_width=max_width,
+            quality=quality,
+            lazy_loading=_bool('lazy_loading', True),
+            default_sizes=str(sizes),
+        )
 
     # ── [2] Content scan ──────────────────────────────────────
 
@@ -754,6 +870,17 @@ class Builder:
 
             self.rendered_bodies[m.slug] = html_to_plain(rr.html)
 
+            # v0.5.1: <img> 후처리 — WebP src 치환 + srcset + sizes + loading=lazy.
+            # image_variants 가 비어 있어도 (전체 이미지 비활성 / lazy_loading
+            # 만 켠 케이스) transform_img_tags 는 loading 부착은 수행한다.
+            if (self.site.images.enabled
+                    or self.site.images.lazy_loading):
+                body_html = transform_img_tags(
+                    body_html,
+                    variant_lookup=self.image_variants.get,
+                    config=self.site.images,
+                )
+
             article_styles = render_article_styles(m.styles)
 
             if self.site.warn_on_underscore_ref:
@@ -824,6 +951,16 @@ class Builder:
     # ── [6] Asset sync ────────────────────────────────────────
 
     def _sync_assets(self):
+        """글 폴더의 자원을 dist/src/{slug}/ 로 동기화.
+
+        v0.5.1: raster 이미지 (.jpg .jpeg .png .gif) 는 `optimize_image()` 가
+        webp 변종들로 변환하고, 원본은 dist 에 복사하지 않는다. 변종 정보를
+        `self.image_variants` 에 등록하여, _render_articles 의 HTML 후처리가
+        `<img>` 의 src 를 webp + srcset 으로 치환할 때 참조한다. (rewrite_asset_path
+        가 상대 경로를 `/src/{slug}/...` 로 절대화한 형태가 키.)
+
+        SVG / WebP / 비이미지 파일은 v0.5.0 과 동일하게 그대로 복사.
+        """
         for article in self.articles:
             m = article.meta
             src_root = article.source_dir
@@ -838,9 +975,58 @@ class Builder:
                     continue
                 rel = src_file.relative_to(src_root)
                 dst_file = dst_root / rel
-                _copy_if_newer(src_file, dst_file)
+
+                if self._should_optimize_image(src_file):
+                    self._optimize_and_register(
+                        src_file=src_file,
+                        dst_file=dst_file,
+                        url_prefix=f'/src/{m.slug}/',
+                        rel_path=rel,
+                    )
+                else:
+                    _copy_if_newer(src_file, dst_file)
 
             self._prune_article_assets(article)
+
+    def _should_optimize_image(self, src: Path) -> bool:
+        """이 파일이 WebP 변환 대상인지."""
+        if not self.site.images.enabled:
+            return False
+        return src.suffix.lower() in RASTER_EXTS
+
+    def _optimize_and_register(
+        self,
+        *,
+        src_file: Path,
+        dst_file: Path,
+        url_prefix: str,
+        rel_path: Path,
+    ):
+        """raster 이미지 한 장을 webp 변종들로 변환하고 image_variants 에 등록.
+
+        url_prefix + rel_path 가 HTML 안의 (rewrite 된) src URL 과 매칭되어야
+        한다. 예: /src/about/face_img.png (실제 dist 에는 face_img-800.webp 등).
+        """
+        if not _HAS_PIL:
+            die(f"이미지 최적화가 켜져 있는데 Pillow 가 없습니다. "
+                f"raster 이미지를 만났습니다: {src_file}\n"
+                f"       pip install Pillow 로 설치하거나 "
+                f"site.yaml 의 images.enabled 를 false 로 두세요.")
+
+        variants = optimize_image(
+            src=src_file,
+            dst_dir=dst_file.parent,
+            config=self.site.images,
+        )
+        if variants is None:
+            # 인코딩 실패 — 폴백으로 원본 복사. 워닝은 optimize_image 가 출력.
+            _copy_if_newer(src_file, dst_file)
+            return
+
+        # URL 등록 — HTML 의 <img src> 가 갖는 형태와 정확히 일치해야 함.
+        rel_str = str(rel_path).replace('\\', '/')
+        url = url_prefix + rel_str
+        self.image_variants[url] = variants
 
     def _prune_article_assets(self, article: Article):
         m = article.meta
@@ -858,7 +1044,19 @@ class Builder:
             if src_file.name in ('meta.yaml', 'content.md', 'content.html'):
                 continue
             rel = src_file.relative_to(src_root)
-            expected.add(dst_root / rel)
+            # v0.5.1: raster 이미지는 원본 자리에 webp 변종들이 떨어진다.
+            # expected 에 변종 파일명들을 등록 (원본 파일명은 dist 에 없음).
+            if self._should_optimize_image(src_file):
+                stem = src_file.stem
+                for w in self.site.images.widths:
+                    expected.add(dst_root / rel.parent / f'{stem}-{w}.webp')
+                # 더 큰 원본 width 변종도 있을 수 있으므로 (optimize_image 가
+                # 원본 width 가 max(widths) 보다 크면 그 변종도 만든다),
+                # dir 내의 같은 stem-*.webp 파일은 모두 보존 대상으로 간주.
+                for sibling in (dst_root / rel.parent).glob(f'{stem}-*.webp'):
+                    expected.add(sibling)
+            else:
+                expected.add(dst_root / rel)
 
         for existing in list(dst_root.rglob('*')):
             if existing.is_file() and existing not in expected:
@@ -1123,14 +1321,30 @@ class Builder:
     # ── [9] Site assets ───────────────────────────────────────
 
     def _copy_site_assets(self):
+        """assets/ → dist/assets/ 동기화.
+
+        v0.5.1: assets/ 안의 raster 이미지도 webp 변환 대상. variants 는
+        `/assets/{rel}` URL 키로 등록 — 템플릿/HTML 에서 `/assets/foo.png` 형태로
+        참조되는 이미지가 후처리에서 webp 로 치환된다.
+        """
         if not self.assets_dir.is_dir():
             return
         dst_assets = self.dist / 'assets'
         dst_assets.mkdir(parents=True, exist_ok=True)
         for src_file in self.assets_dir.rglob('*'):
-            if src_file.is_file():
-                rel = src_file.relative_to(self.assets_dir)
-                _copy_if_newer(src_file, dst_assets / rel)
+            if not src_file.is_file():
+                continue
+            rel = src_file.relative_to(self.assets_dir)
+            dst_file = dst_assets / rel
+            if self._should_optimize_image(src_file):
+                self._optimize_and_register(
+                    src_file=src_file,
+                    dst_file=dst_file,
+                    url_prefix='/assets/',
+                    rel_path=rel,
+                )
+            else:
+                _copy_if_newer(src_file, dst_file)
 
     # ── [10] 404 page ─────────────────────────────────────────
 
@@ -1315,15 +1529,19 @@ class Builder:
     def build(self):
         print('빌드 시작...', flush=True)
 
+        # v0.5.1: 이미지 최적화 도입으로 asset 단계가 article render 보다
+        # 먼저 와야 한다. asset 단계가 raster 이미지를 webp 변종으로 만들고
+        # self.image_variants 를 채우면, _render_articles 가 그 정보로
+        # 글 본문 HTML 의 <img> 를 webp + srcset + lazy 로 치환한다.
         self._load_config()                    # [1]
         self._scan_articles()                  # [2]
         self._parse_frontmatter()              # [3]
         self._validate()                       # [4]
-        self._render_articles()                # [5]
-        self._sync_assets()                    # [6]
-        self._build_categories()               # [7]
-        self._build_home()                     # [8]
-        self._copy_site_assets()               # [9]
+        self._sync_assets()                    # [5] (v0.5.1: 옛 [6])
+        self._copy_site_assets()               # [6] (v0.5.1: 옛 [9])
+        self._render_articles()                # [7] (v0.5.1: 옛 [5])
+        self._build_categories()               # [8]
+        self._build_home()                     # [9]
         self._build_404()                      # [10]
         self._build_robots()                   # [11]
         self._build_sitemap()                  # [12]

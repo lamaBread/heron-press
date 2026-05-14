@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.5.0 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.5.1 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다.
@@ -8,6 +8,35 @@ Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
     python -m unittest discover -s tests   # BM25 단위 테스트 (v0.5.0)
+
+빌드 의존성 (v0.5.1):
+    Python 3.10+ stdlib
+    Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
+        site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.5.1 변경 사항 (vs v0.5.0):
+  - 이미지 자동 최적화 + lazy loading 도입. SEO 직접 영향 (Google
+    PageSpeed Insights / Lighthouse 가 Modern image format 미사용 +
+    responsive srcset 부재를 명시적으로 감점) 을 고려해 "최소한도의 외부
+    의존성 원칙" 의 SEO 예외로 Pillow 의존성 도입.
+  - 새 모듈 scripts/images.py — ImageConfig + optimize_image() + transform_img_tags().
+  - 빌드 시 모든 raster 이미지 (.jpg .jpeg .png .gif) 를 WebP 다중 해상도
+    변종 `{stem}-{width}.webp` 로 변환. site.yaml 의 images.widths 가 기본
+    [400, 800, 1600] — 원본 width 이하인 변종만 실제 파일로 생성.
+  - 글 본문 HTML 의 모든 <img> 를 후처리 — WebP src 치환 + srcset (다중
+    해상도) + sizes 디폴트 + loading="lazy" 자동 부착. 외부 URL / SVG 는
+    src 그대로 두고 loading="lazy" 만 추가.
+  - 빌드 파이프라인 단계 순서 변경 — _sync_assets / _copy_site_assets 가
+    _render_articles 보다 먼저 ([5][6][7] 로 재배치). asset 단계가
+    self.image_variants 를 채워야 article render 단계의 <img> 후처리가
+    참조할 수 있기 때문.
+  - 새 site.yaml 블록 `images:` (enabled / widths / max_width / quality /
+    lazy_loading / default_sizes). 모든 키가 기본값 보유 — 옛 site.yaml
+    그대로 두어도 v0.5.1 기본 정책으로 동작.
+  - dist 산출물 변화: raster 이미지 자리에 `{stem}-{w}.webp` 가 떨어지고,
+    원본 파일은 dist 에 복사되지 않음. HTML 의 <img> src 도 webp 로 치환.
+  - 검색 / sitemap / robots.txt / redirect.php 등 비-이미지 산출물은 v0.5.0
+    과 바이트 동일.
 
 v0.5.0 변경 사항 (vs v0.4.7):
   - 검색 시스템을 Okapi BM25 기반 랭킹으로 전환.

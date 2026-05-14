@@ -2,6 +2,12 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
+v0.5.1 변경:
+  - SiteConfig 에 `images` 필드 (ImageConfig). site.yaml 의 `images:` 블록을
+    파싱한 결과. 빌드 시 raster 이미지의 WebP 변환 + 다중 해상도 + lazy
+    loading 정책을 보유. 자세한 의미는 scripts/images.py 의 ImageConfig
+    docstring 참조. site.yaml 에 `images:` 블록이 없으면 기본값으로 채워짐.
+
 v0.4.6 변경:
   - 메인페이지(홈) 전용 설정을 site.yaml 에서 분리 → Articles/meta.yaml
     로 일원화. SiteConfig 에서 home_per_page / home_excludes_categories /
@@ -27,6 +33,8 @@ v0.4.3 변경:
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from .images import ImageConfig
 
 
 @dataclass
@@ -54,6 +62,8 @@ class SiteConfig:
     lang: str = 'ko'
     category_per_page: int = 20
     category_preview_per_page: int = 5
+    # v0.5.1: 이미지 자동 최적화 정책 (WebP + 다중 해상도 + lazy loading).
+    images: ImageConfig = field(default_factory=ImageConfig)
 
 
 @dataclass
