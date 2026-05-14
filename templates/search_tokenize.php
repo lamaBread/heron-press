@@ -6,18 +6,22 @@ declare(strict_types=1);
 // ════════════════════════════════════════════════════════════════
 //
 // 두 가지 모드로 동작:
-//   (a) require_once: search_tokenize() 함수만 정의. 다른 PHP 가 include.
+//   (a) 빌더가 인라인: build.py 가 빌드 시 이 파일의 함수 본문을 dist/search
+//       .php 의 sentinel 자리에 직접 인라인한다 (v0.6.0 부터; v0.5.x 까지는
+//       dist/search_tokenize.php 로 복사되고 search.php 가 require_once 했음).
+//       헤더 배너와 `<?php` 등은 builder._inline_php_body 가 strip.
 //   (b) CLI 직접 호출: argv[1] 로 입력 문자열을 받아 JSON 배열을 stdout 으로.
-//       — Python 의 scripts/search.py 가 빌드 시 패리티 검증에 사용.
+//       — scripts/search.py 가 빌드 시 패리티 검증에 사용 + tests/run_diagnostics
+//       .py 가 Python↔PHP 점수 패리티 검사에서 토크나이저 일치까지 함께 검증.
 //
 // 출력 규칙 (scripts/search.py 의 search_tokenize() 와 1:1 일치):
 //   - 영문/숫자 (lowercase) : 단어 단위로
 //   - 한글 (가-힣)          : 2-gram. 1글자 시퀀스는 제외 (v0.4.0)
 //   - 그 외 문자             : 분리자
 //
-// 이 파일은 단일 진실원 (single source of truth) 이다. search.php 가
-// require_once 하고, build.py 가 CLI 로 직접 실행해 패리티를 검증한다.
-// 어느 한 쪽에 사본을 두지 말 것.
+// 이 파일은 단일 진실원 (single source of truth) 이다 — 빌더가 인라인하고
+// build.py / 진단 스크립트가 CLI 로 직접 실행해 패리티를 검증한다. 어느
+// 한쪽에 사본을 두지 말 것.
 
 function search_tokenize(string $text): array {
     if ($text === '') return [];

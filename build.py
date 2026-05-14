@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.6.0 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.6.1 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다. 사이트 전역 버전 문자열은
@@ -9,13 +9,44 @@ source of truth — 피드 generator 등이 이 값을 참조.
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
-    python -m unittest discover -s tests   # 단위 테스트 (v0.6.0: 179개)
+    python -m unittest discover -s tests   # 단위 테스트 (v0.6.1: 179개)
     python tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
-빌드 의존성 (v0.6.0):
+빌드 의존성 (v0.6.1):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.6.1 변경 사항 (vs v0.6.0) — 문서·주석·산출물 가독성 안정화 3회차:
+  - 콘텐츠 측 meta.yaml 의 폐기된 동작 안내 정리. Articles/Blog/Hello
+    World/meta.yaml 의 "본문에서의 자동 폴백 (first_paragraph, first_image
+    등)" 안내가 v0.5.5 의 본문 ↔ 메타데이터 분리 원칙으로 사라진 동작을
+    여전히 가르치고 있던 부분 + 같은 글의 tags 주석 "현재 빌드 산출물에는
+    직접 노출되지 않지만" 이 v0.5.3 의 feed `<category>` / v0.6.0 의 BM25
+    색인 합류로 거짓이 된 부분 동시 갱신.
+  - 카테고리 meta.yaml 의 layout 거짓말 잔존분 (`Articles/Blog/meta.yaml`)
+    을 v0.5.3 의 gallery 구현 사실로 정정. 2회차 패치에서 Articles/meta.yaml
+    과 scripts/models.py 의 같은 거짓말은 잡았으나 형제 카테고리 meta.yaml
+    한 곳을 빠뜨린 누락분.
+  - scripts/models.py 의 ArticleMeta.tags 관련 두 군데 (v0.5.3 변경 절 +
+    필드 옆 인라인 주석) 가 "tags 는 현재 미사용" 으로 굳어 있던 부분 정리.
+  - 템플릿 source 의 v0.6.0 미반영 주석 잔존분: templates/search_tokenize
+    .php 의 "search.php 가 require_once 하고" 안내가 v0.6.0 의 인라인 흐름
+    에 맞춰 갱신.
+  - dist/search.php 헤더 주석의 placeholder 누수 결함 해소. 빌더의
+    `_render_template` 가 `(d) {{LANG}} / {{PAGE_TITLE}} / ...` 같이 주석
+    *안* 의 placeholder 도 동등하게 치환해버려 dist 헤더가 자기 자신의
+    결과를 인용하던 메타-광경 (예: `(d) ko / Search / Lama / <a ...>...</a>`)
+    을 정리. 템플릿 측에서 안내 줄에 실제 placeholder 토큰을 쓰지 않고
+    plain 이름으로 표기.
+  - README.md §12 의 마크다운 파이프라인 도식이 v0.5.5 폐기된 `first_paragraph`
+    / `first_image` 를 여전히 그리고 있던 부분 + §13 의 토크나이저 "PHP 가
+    require_once 하고 dist/search_tokenize.php 로 복사" 가 v0.6.0 의 인라인
+    흐름에 어긋나던 부분 + 파일 트리에서 search_tokenize.php 의 인라인 사실
+    누락 동시 정정. §18 history 의 v0.x.x 검증 노트는 역사 기록으로 보존.
+  - **코드 동작 변경 0**. site.yaml / Articles/ 스키마 / 글 산출물 / 검색
+    결과 모두 v0.6.0 과 바이트 단위로 동등 (search.php 의 헤더 주석 텍스트만
+    가독성 정정으로 달라짐).
 
 v0.6.0 변경 사항 (vs v0.5.5):
   - **검색 인덱스를 메타데이터 3-필드 (title / description / tags) 만 색인**.

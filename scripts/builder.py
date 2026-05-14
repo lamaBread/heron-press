@@ -1,5 +1,25 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.6.1 변경 — 문서·주석·산출물 가독성 안정화 3회차 (코드 동작 변경 0):
+  - templates/search.php 헤더 주석의 placeholder 누수 결함 해소. `(d) {{LANG}}
+    / {{PAGE_TITLE}} / ...` 같이 안내 자체에 placeholder 토큰을 박아 두면
+    `_render_template` 의 단순 문자열 치환이 주석 안에서도 동작해 dist 의
+    헤더가 "이 자리에 ko / Search / Lama / <a ...>...</a> 가 들어간다" 라고
+    자기 결과를 인용하는 메타-광경이 됐다. 템플릿 측에서 안내 줄에 plain
+    변수명 (LANG, PAGE_TITLE, ...) 만 적도록 정리. 빌더 코드는 그대로.
+  - templates/search_tokenize.php 의 헤더 주석 "search.php 가 require_once 하고
+    build.py 가 CLI 로 실행" 이 v0.6.0 의 인라인 흐름과 모순되던 부분 갱신.
+    템플릿은 진단·CLI 패리티용 단일 진실원으로 그대로 유지된다.
+  - scripts/models.py 의 ArticleMeta.tags 관련 두 군데가 v0.5.3 / v0.6.0 의
+    실제 사용처 (feed `<category>` + BM25 색인) 를 누락하고 "미사용" 으로
+    안내하던 부분, Articles/Blog/Hello World/meta.yaml 의 옛 본문 폴백 안내
+    + tags 미사용 안내, Articles/Blog/meta.yaml 의 layout=gallery 미구현
+    안내가 일괄 정리됨.
+  - README §12 마크다운 파이프라인 도식의 first_paragraph / first_image
+    잔존 + §13 토크나이저 절의 require_once 흐름 + 파일 트리에서
+    search_tokenize.php 의 인라인 사실 누락 정정. §18 release notes 의 v0.x.x
+    검증 노트는 역사 기록으로 보존.
+
 v0.6.0 변경 — 검색 인덱스 재설계 (메타데이터 3-필드 + PHP 인라인):
   - `_build_search` 가 `search-index.json` / `search_tokenize.php` /
     `search_bm25.php` 세 파일 산출 → `dist/search.php` 한 파일 인라인으로

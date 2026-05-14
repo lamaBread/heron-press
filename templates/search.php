@@ -15,8 +15,12 @@ declare(strict_types=1);
 //   (c) PHP 주석 "INLINE_SEARCH_INDEX" 와 직후 placeholder [] 자리에 빌드
 //       시점 정적 인덱스 (PHP 배열 리터럴) 를 인라인. 결정적 직렬화
 //       (scripts/search.py 의 php_array_literal) 로 같은 입력 → 같은 PHP 텍스트.
-//   (d) {{LANG}} / {{PAGE_TITLE}} / {{MAIN_TITLE}} / {{NAV_LINKS}} /
-//       {{COPYRIGHT_YEAR}} / {{COPYRIGHT_HOLDER}} HTML 컨텍스트 치환
+//   (d) HTML 컨텍스트의 변수 placeholder (LANG, PAGE_TITLE, MAIN_TITLE,
+//       NAV_LINKS, COPYRIGHT_YEAR, COPYRIGHT_HOLDER) 들을 실제 값으로 치환.
+//       빌더의 `_render_template` 가 두 겹 중괄호 패턴을 찾아 단순 문자열
+//       교체 — 이 헤더 주석에선 일부러 중괄호를 빼고 적어 placeholder 가
+//       주석 안에서도 치환되어 자기 결과를 인용하는 메타-광경을 피한다
+//       (v0.6.1).
 //
 // 위 (a)·(b)·(c) 는 PHP 주석 / 빈 배열 자리에 인라인되므로, 이 템플릿
 // 파일 자체도 `php -l` 통과 + IDE 의 PHP 정적 분석 통과한다.
