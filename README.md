@@ -1,10 +1,18 @@
-# siheonlee.com v0.4.5 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.4.6 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
+> **v0.4.6 의 위치:** v0.4.5 의 페이지네이션 UX 와 카테고리 meta.yaml 스키마를 다듬은 점진 버전. 다섯 갈래 변경:
+>
+> 1. **페이지네이션 nav 여백 축소.** `.pagination-nav` 의 상단 padding 을 제거하고 음수 margin-top 으로 위 section 과 더 가깝게. 하단 padding 도 약간 축소. ([assets/common_template.css](assets/common_template.css))
+> 2. **SSR 시점의 첫 페이지 상태 정적 생성.** v0.4.5 까지는 페이지 로드 직후 모든 항목이 잠깐 보였다가 JS 가 hide 하는 FOUC (Flash Of Unstyled Content) 가 있었습니다. v0.4.6 부터는 빌드 시 `data-per-page` 를 넘는 항목에 `style='display:none'` 을 inline 으로 부착해 둠. 페이지네이션 버튼은 SSR 단계에서 렌더되지만 클릭 핸들러는 [assets/pagination.js](assets/pagination.js) 가 나중에 부착합니다 — 표면적 변동 없음.
+> 3. **`Articles/meta.yaml` 신설.** 메인페이지 (사이트 루트) 의 카테고리-격 설정 파일. 다른 카테고리 meta.yaml 과 동일 스키마. `per_page` 로 메인페이지 Recent posts 의 페이지당 글 수 오버라이드, `excludes_categories` 로 Recent posts 에서 제외할 톱레벨 카테고리 지정.
+> 4. **`priority` 필드 신설.** 모든 카테고리 meta.yaml (`Articles/meta.yaml` 포함) 에 `priority: <정수>` 를 둘 수 있습니다. **값이 클수록 먼저** 등장. 같은 값끼리는 폴더명 알파벳 순. 0 을 포함한 임의의 정수 (1, 2, 100, 1000 등 자유). 적용 위치: (a) 부모 카테고리의 인덱스 페이지에 section 으로 임베드될 때의 순서, (b) 톱레벨 nav 링크의 순서 (About 은 그대로 최상단 고정).
+> 5. **설정 일원화 — site.yaml = 전역만, meta.yaml = 각자 자기 페이지.** 옛 `site.yaml` 에 있던 메인페이지 전용 키 (`home_per_page` / `home_excludes_categories` / 빌더가 사용한 적 없는 `home_sort`) 를 모두 `Articles/meta.yaml` 로 이전. site.yaml 은 이제 진짜 전역 (사이트 메타, lang 디폴트, 카테고리 디폴트, SEO 폴백 등) 만 보유 — 페이지 한 종에만 적용되는 설정은 그 페이지의 meta.yaml 에 둔다는 규약이 모든 페이지(글/카테고리/홈)에 통일적으로 적용됩니다.
+>
 > **v0.4.5 의 위치:** 인덱스 페이지의 형식과 다국어 표현을 보강한 점진 버전. 다섯 갈래 변경이 한데 묶여 있습니다.
 >
 > 1. **페이지네이션.** 메인페이지 Recent / 카테고리 인덱스 (대분류·소분류) / 상위 카테고리에 임베드된 서브카테고리 section 마다 독립적인 페이지 컨트롤이 부착됩니다. 모든 항목은 서버에서 렌더되고 (SEO 친화), [assets/pagination.js](assets/pagination.js) 가 클라이언트에서 DOM 을 hide/show 합니다. 디자인은 사이트의 nav-search 입력과 톤을 맞춘 미니멀한 회색 회전 화살표 + 페이지 번호.
@@ -1719,11 +1727,12 @@ python build.py --clean
 
 ## 18. 업데이트 로그
 
-열 버전의 차이를 한눈에:
+열한 버전의 차이를 한눈에:
 
 | 버전 | 시스템 정체성 | 출력 UI/UX | 글 `<title>` | 마크다운 본문 구조 | 색인 정책 | sitemap.xml | 마크다운 파서 | meta.yaml 필드 | 검색 토크나이저 | 빌드 검증 | 레거시 dispatcher | PHP 함수 시뮬레이션 | 카테고리 한국어 폴더 | 빌드 모듈 구조 | 외부 의존성 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| **v0.4.5 (현재)** | (동일) | + **JS DOM 페이지네이션 컨트롤 (홈·카테고리 인덱스·서브카테고리 section). `<html lang>` 동적화** | (동일) | (동일) | (동일) | + **서브카테고리 URL 포함** | (동일) | + **글 `lang:`** / + **카테고리 meta.yaml (per_page / preview_per_page / layout / styles / lang)** | (동일) | (동일) | (동일) | (동일) | + **워닝 메시지에 슬러그 변환 결과 표기 + ASCII rename 권장** | + **assets/pagination.js** | (동일) |
+| **v0.4.6 (현재)** | (동일) | + **페이지네이션 nav 여백 축소 + SSR 시점의 첫 페이지 정적 생성 (FOUC 제거)** | (동일) | (동일) | (동일) | (동일) | (동일) | + **`Articles/meta.yaml` (홈 = 루트의 페이지 설정 — per_page / excludes_categories / ...)** / + **카테고리·홈 meta.yaml 의 `priority` (정수, 큰 값 먼저)** / **site.yaml 의 home_* 류 키 폐기 (전역 ↔ 페이지 설정 분리)** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) |
+| **v0.4.5** | (동일) | + **JS DOM 페이지네이션 컨트롤 (홈·카테고리 인덱스·서브카테고리 section). `<html lang>` 동적화** | (동일) | (동일) | (동일) | + **서브카테고리 URL 포함** | (동일) | + **글 `lang:`** / + **카테고리 meta.yaml (per_page / preview_per_page / layout / styles / lang)** | (동일) | (동일) | (동일) | (동일) | + **워닝 메시지에 슬러그 변환 결과 표기 + ASCII rename 권장** | + **assets/pagination.js** | (동일) |
 | **v0.4.4** | (동일) | (동일) | (동일) | (동일) | (동일) | **자동 생성 (글·톱레벨 카테고리·홈, noindex 제외, lastmod=updated\|date). robots.txt Sitemap 디렉티브 활성화** | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **scripts/sitemap.py** | (동일) |
 | **v0.4.3** | (동일) | (동일) | **`{seo.title_prefix}{title}{seo.title_suffix}` 로 정상화** | + **섹션 마커 `===제목===` / `======`** | (동일) | 없음 (robots.txt 에 주석으로만 자리표시) | (동일) | **seo_* 평면 필드 → `seo:` 블록 그룹화** | (동일) | (동일) | (동일) | (동일) | (동일) | + **models.SeoMeta** | (동일) |
 | **v0.4.2** | (동일) | (동일) | (동일) | (동일) | + **검색 결과 페이지에 noindex,follow** | 없음 | (동일) | (동일) | (동일) | + **slug ↔ 카테고리 slug 충돌 차단** | **site.yaml 의 base_url 사용** | **balanced parser — nested parens + quoted `)` 정상 처리** | (동일) | (동일) | (동일) |
@@ -1734,6 +1743,66 @@ python build.py --clean
 | **v0.3** | "SSG" | 원본 + 글마다 스타일 오버라이드 가능 | (동일) | (동일) | (동일) | 없음 | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | + **`styles:`** | — | (동일) | (동일) | (동일) | _meta.yaml 슬러그 오버라이드 | 단일 build.py | Python 3 + (parsedown 시) PHP CLI |
 | **v0.2** | "SSG" | 원본 `lama_website-main` 와 동일 | (동일) | (동일) | 전역 noindex (원본 보존) | 없음 | (동일) | (동일) | — | (동일) | (동일) | imgBox/imgSlideBox | — | 단일 build.py | (동일) |
 | **v0.1** | "SSG" | v0.1 자체 디자인 | 원본 quirk: 항상 site.name | 자동 단일 갭+섹션 wrap | 전역 noindex | 없음 | Python stdlib 자체 파서 | slug, title, date, seo_* | — | slug 정규식, 날짜 형식, slug 중복 | 도메인 하드코딩 | — | — | 단일 build.py | Python 3 |
+
+### v0.4.6 (2026-05-14) — 페이지네이션 여백·FOUC 개선 + `Articles/meta.yaml` + `priority` + 설정 일원화
+
+v0.4.5 의 페이지네이션 UX, 카테고리 meta.yaml 스키마, 사이트 설정 표면을 다듬은 점진 버전. 다섯 갈래 변경 모두 *기존 콘텐츠의 출력 동작은 거의 그대로 유지하면서 사용성·유연성·설정 구조의 일관성을 보강* 하는 데 초점.
+
+| 개선 | 내용 |
+|---|---|
+| 페이지네이션 nav 여백 축소 | `.pagination-nav` 의 상단 padding 을 제거하고 음수 margin-top (-0.45em) 으로 위 section 과 더 가깝게 붙임. 하단 padding 도 `0.6em → 0.3em`. ([assets/common_template.css](assets/common_template.css)) |
+| SSR 시점의 첫 페이지 상태 정적 생성 (FOUC 제거) | v0.4.5 까지는 페이지 로드 직후 모든 항목이 잠깐 보였다가 JS 가 hide 하는 깜빡임이 있었습니다. v0.4.6 부터 빌더가 `data-per-page` 를 넘는 인덱스의 항목에 `style='display:none'` 을 inline 으로 부착해 초기 상태부터 페이지 1 만 보이도록 합니다. [assets/pagination.js](assets/pagination.js) 는 그 후에 클릭 핸들러를 부착 — 표면적 변동 없음. |
+| `Articles/meta.yaml` 신설 | 메인페이지 (사이트 루트) 의 카테고리-격 설정. 카테고리 폴더의 meta.yaml 과 동일 스키마. `per_page` 로 메인페이지 Recent posts 의 페이지당 글 수, `excludes_categories` 로 Recent posts 에서 제외할 톱레벨 카테고리 목록 (옛 `site.home_excludes_categories` 의 이전 위치) 을 지정. `preview_per_page` / `priority` 는 루트이므로 적용 대상이 없지만 스키마 일관성을 위해 받아들임. |
+| `priority` 필드 신설 | 모든 카테고리 meta.yaml 에 `priority: <0 이상 정수>` 를 둘 수 있습니다. **값이 클수록 먼저** (priority 100 → 1 → 0). 같은 값끼리는 폴더명 알파벳 순. 적용 위치: (a) 부모 카테고리의 인덱스 페이지에서 자식 카테고리들이 section 으로 나열될 때의 순서, (b) 메인페이지/카테고리 페이지 nav 의 톱레벨 카테고리 링크 순서 (About 은 그대로 최상단 고정). 기본값 0. |
+| 설정 일원화 (site.yaml ↔ meta.yaml) | site.yaml = 진짜 전역, meta.yaml = 각자 자기 페이지 설정. 옛 site.yaml 의 메인페이지 전용 키 3개 (`home_per_page` / `home_excludes_categories` / `home_sort`) 를 `Articles/meta.yaml` 로 이전 (`home_sort` 는 빌더가 사용한 적 없는 dead field 라 그대로 폐기). site.yaml 은 이제 사이트 메타·전역 lang·카테고리 디폴트·SEO 폴백·robots.txt 본문 등 "여러 페이지에 공통 적용되는 설정" 만 보유. |
+
+**예시 — Articles/meta.yaml** (메인페이지 = 홈 의 설정)
+
+```yaml
+# 메인페이지 Recent posts 의 페이지당 글 수.
+per_page: 5
+
+# Recent posts 에서 제외할 톱레벨 카테고리.
+# (v0.4.5 까지는 site.yaml 의 home_excludes_categories 였음.)
+excludes_categories: [About]
+
+layout: list
+# 루트는 상위가 없으므로 priority / preview_per_page 는 적용 대상 없음.
+```
+
+**예시 — 카테고리 priority 의 효과**
+
+`Articles/Blog/meta.yaml` 에 `priority: 100`, `Articles/Diary/meta.yaml` 에 `priority: 0` 을 두면 (둘 다 톱레벨 카테고리), 메인페이지 nav 는 `About | Blog | Diary` 가 되고 (About 은 고정, Blog 가 priority 큼 → 먼저). 같은 priority 끼리는 폴더명 알파벳 순.
+
+**설정의 책임 분리 (v0.4.6 의 규약):**
+
+| 어디에 설정 두는가 | 어떤 설정 |
+|---|---|
+| `site.yaml` | 사이트 전역 (도메인, name, copyright, lang 디폴트, default_og_image 등) / 여러 페이지에 공통 적용되는 디폴트 (category_per_page, category_preview_per_page) / robots.txt 본문 |
+| `Articles/meta.yaml` | 메인페이지 (홈) 전용 — per_page, excludes_categories, lang, layout, styles |
+| `Articles/<카테고리>/meta.yaml` | 그 카테고리 인덱스 페이지 전용 — per_page, preview_per_page, priority, lang, layout, styles |
+| `Articles/<카테고리>/<글>/meta.yaml` | 그 글 페이지 전용 — slug, title, date, updated, noindex, lang, seo:, styles |
+
+원칙: 페이지 한 종에만 적용되는 설정은 site.yaml 에 두지 않고 그 페이지의 meta.yaml 에 둡니다.
+
+**호환성 노트:**
+
+- v0.4.6 의 dist/ 와 v0.4.5 의 dist/ 는 거의 동일하지만 일부 줄이 다릅니다 (회귀 아님, 의도된 변경):
+  - 페이지네이션이 활성화된 section 의 두 번째 페이지 이후 `<div class='listup_module_div'>` 가 `style='display:none'` 을 inline 으로 부착.
+  - `.pagination-nav` 의 CSS 속성 (padding/margin) 변경 — 마크업은 동일.
+- **기존 글의 meta.yaml** — 변경 없이 그대로 빌드됩니다.
+- **기존 카테고리 meta.yaml** — `priority` 를 명시하지 않으면 모두 기본값 0 으로 처리. v0.4.5 의 폴더명 알파벳 순 정렬과 동일한 결과.
+- **graceful degradation** — JS 가 완전히 비활성화된 환경에서는 페이지 2 이후의 항목이 표시되지 않습니다 (이전 버전: 모두 표시됨, 페이지 컨트롤만 비기능). 현실적인 사용 환경에서 JS 비활성화는 매우 드물고 (`<noscript>` fallback 추가는 별도 의제), FOUC 제거의 이득이 더 크다는 판단.
+
+#### v0.4.5 → v0.4.6 마이그레이션 시 주의
+
+- **site.yaml 정리:** 옛 `home_per_page`, `home_excludes_categories`, `home_sort` 키는 site.yaml 에서 삭제하세요. 잔존해도 빌드는 진행되지만 무시되며 워닝이 출력됩니다. 같은 값은 `Articles/meta.yaml` 의 `per_page` / `excludes_categories` 에 옮겨 두세요 (`home_sort` 는 빌더에서 사용된 적이 없는 dead field 라 그대로 폐기).
+- `Articles/meta.yaml` 은 선택 사항입니다. 두지 않으면 빌더의 코드 디폴트 (`per_page=5`, `excludes_categories=[]`) 가 사용됩니다.
+- `priority` 는 정수만 허용합니다. 빈 문자열·문자열·소수는 빌드 실패 (`'priority' 는 정수여야 합니다`).
+- `excludes_categories` 는 리스트여야 합니다 (문자열·매핑은 빌드 실패).
+- 음수 priority 도 받아들여집니다 (예: priority: -5 는 priority: 0 보다 뒤). 보통은 0 이상 사용을 권장.
+
+---
 
 ### v0.4.5 (2026-05-14) — 페이지네이션 + 다국어 + 서브카테고리 인덱스 + 카테고리 meta.yaml
 

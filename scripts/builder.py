@@ -20,6 +20,19 @@
   [14] _build_search         — search-index.json + search.php (+ tokenize lib)
   [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리
 
+v0.4.6 변경:
+  - 페이지네이션 nav 의 상/하단 여백 축소 (assets/common_template.css).
+  - SSR 단계에서 페이지네이션 첫 페이지 상태를 정적으로 출력 — 비활성 페이지
+    항목은 inline `style='display:none'` 으로 미리 숨김 → FOUC 제거.
+    pagination.js 는 그 후에 첫 페이지 항목의 inline style 을 비워 정상 표시.
+  - Articles/meta.yaml 신설 (메인페이지 = 홈의 카테고리-격 설정).
+  - 모든 카테고리/홈 meta.yaml 에 priority 필드 (정수, 값이 클수록 먼저).
+  - **설정 일원화**: 홈 (메인페이지) 전용 설정은 site.yaml 에서 Articles/
+    meta.yaml 로 전부 이전. site.yaml 은 진짜 '전역' (카테고리류 디폴트, lang
+    디폴트, SEO 폴백 등) 만 보유. 옛 home_per_page / home_excludes_categories
+    는 각각 Articles/meta.yaml 의 per_page / excludes_categories 로 이동.
+    home_sort 는 빌더가 사용한 적 없는 dead field 라 폐기.
+
 v0.4.5 변경:
   - 카테고리 폴더의 meta.yaml 파싱 (CategoryMeta). per_page /
     preview_per_page / layout / styles / lang.
@@ -203,6 +216,9 @@ class Builder:
         self.slug_to_article: dict = {}
         self.categories: dict = {}      # path_tuple → Category
         self.rendered_bodies: dict = {} # slug → plain text body (검색용)
+        # v0.4.6: Articles/meta.yaml — 메인페이지 (루트) 의 카테고리-격 설정.
+        # 없으면 기본 CategoryMeta (모든 필드 None / 0).
+        self.home_meta: CategoryMeta = CategoryMeta()
 
     # ── [1] Config load ──────────────────────────────────────
 
@@ -230,17 +246,25 @@ class Builder:
             warn_on_underscore_ref=bool(get('warn_on_underscore_ref', True)),
             warn_on_missing_asset=bool(get('warn_on_missing_asset', True)),
             warn_on_stale_updated=bool(get('warn_on_stale_updated', True)),
-            home_excludes_categories=get('home_excludes_categories') or [],
-            home_sort=get('home_sort', 'date_desc'),
             description_truncate=int(get('description_truncate') or 150),
             robots_txt_main=get('robots_txt_main') or 'User-agent: *\nAllow: /\n',
             robots_txt_legacy=get('robots_txt_legacy') or 'User-agent: *\nAllow: /\n',
-            # v0.4.5: i18n + pagination 디폴트
+            # v0.4.5: i18n + 카테고리 페이지네이션 디폴트.
+            # v0.4.6: home_* 류 (home_per_page / home_excludes_categories /
+            # home_sort) 는 Articles/meta.yaml 로 이전됨 — 더 이상 site.yaml
+            # 에서 읽지 않는다. 옛 site.yaml 에 잔존하더라도 조용히 무시.
             lang=str(get('lang') or 'ko'),
-            home_per_page=int(get('home_per_page') or 5),
             category_per_page=int(get('category_per_page') or 20),
             category_preview_per_page=int(get('category_preview_per_page') or 5),
         )
+
+        # v0.4.6: 사용자가 옛 home_* 키를 site.yaml 에 그대로 두면 알아채지
+        # 못한 채 무시될 수 있으므로 한 번 경고 — 마이그레이션 가이드 역할.
+        for legacy_key in ('home_per_page', 'home_excludes_categories', 'home_sort'):
+            if legacy_key in raw:
+                warn(f"site.yaml: '{legacy_key}' 는 v0.4.6 부터 Articles/meta.yaml "
+                     f"로 이전되었습니다. site.yaml 에서 제거하고 Articles/meta.yaml "
+                     f"의 해당 필드를 사용하세요.")
 
         legacy_yaml = self.base / 'legacy-map.yaml'
         if legacy_yaml.exists():
@@ -396,6 +420,9 @@ class Builder:
 
         self.slug_to_article = {a.meta.slug: a for a in self.articles}
 
+        # v0.4.6: Articles/meta.yaml (메인페이지 카테고리-격 설정) 파싱.
+        self._load_home_meta()
+
         self._build_category_tree()
 
         # 글 slug ↔ 톱레벨 카테고리 slug 충돌 검증 (v0.4.2).
@@ -503,14 +530,18 @@ class Builder:
         per_page / preview_per_page 가 None 이면 사이트 디폴트가 적용됨.
         """
         cat_dir = self.articles_dir.joinpath(*path_tuple)
-        meta_file = cat_dir / 'meta.yaml'
+        return self._parse_category_meta_file(cat_dir / 'meta.yaml')
+
+    def _parse_category_meta_file(self, meta_file: Path) -> CategoryMeta:
+        """임의 경로의 meta.yaml 을 CategoryMeta 로 파싱 (v0.4.6 helper).
+
+        `Articles/meta.yaml` (루트 = 메인페이지) 와 카테고리 폴더의 meta.yaml
+        둘 다에 동일한 파싱 로직 적용. 글 폴더의 meta.yaml 과 헷갈리지 않도록
+        slug/title/date 가 있으면 카테고리 meta.yaml 로 취급하지 않는다.
+        """
         if not meta_file.exists():
             return CategoryMeta()
 
-        # 글 폴더의 meta.yaml 과 헷갈리지 않도록 — slug/title/date 가 있으면
-        # 글 meta.yaml 로 간주하므로 카테고리 meta.yaml 로 파싱하지 않는다.
-        # (실제 글 폴더는 그 자체로 article entry 가 되며 _scan_articles 가
-        # 처리한다. 여기서는 글 폴더가 아닌 카테고리 폴더만 다룬다.)
         try:
             raw = yaml_load(meta_file.read_text(encoding='utf-8'))
         except Exception as e:
@@ -531,6 +562,27 @@ class Builder:
         layout = raw.get('layout') or 'list'
         lang_val = raw.get('lang')
         styles_raw = raw.get('styles')
+        # v0.4.6: priority. 빈값/누락이면 0. 정수만 허용.
+        priority_raw = raw.get('priority')
+        if priority_raw is None:
+            priority = 0
+        else:
+            try:
+                priority = int(priority_raw)
+            except (TypeError, ValueError):
+                die(f"meta.yaml: 'priority' 는 정수여야 합니다 (받은 값: "
+                    f"{priority_raw!r})\n       at {meta_file}")
+
+        # v0.4.6: excludes_categories. 홈 (Articles/meta.yaml) 에서만 의미를
+        # 가진다 — 카테고리 meta.yaml 에 들어있어도 파싱만 되고 사용되지 않음.
+        excludes_raw = raw.get('excludes_categories')
+        if excludes_raw is None:
+            excludes = []
+        elif isinstance(excludes_raw, list):
+            excludes = [str(x) for x in excludes_raw]
+        else:
+            die(f"meta.yaml: 'excludes_categories' 는 리스트여야 합니다 (받은 값: "
+                f"{excludes_raw!r})\n       at {meta_file}")
 
         return CategoryMeta(
             per_page=int(per_page) if per_page is not None else None,
@@ -538,7 +590,34 @@ class Builder:
             layout=str(layout),
             lang=str(lang_val) if lang_val else None,
             styles=normalize_styles(styles_raw),
+            priority=priority,
+            excludes_categories=excludes,
         )
+
+    def _load_home_meta(self):
+        """v0.4.6: Articles/meta.yaml 파싱 (메인페이지의 카테고리-격 설정).
+
+        없으면 모든 필드가 기본값인 CategoryMeta. _build_category_tree 와
+        독립적으로 동작 — Articles/ 루트는 self.categories 의 path_tuple ()
+        로 들어가지 않는다 (루트는 카테고리가 아니라 사이트 자체).
+        """
+        self.home_meta = self._parse_category_meta_file(
+            self.articles_dir / 'meta.yaml'
+        )
+
+    # v0.4.6: Articles/meta.yaml 이 통째로 없거나 per_page 가 비어 있을 때
+    # 적용되는 코드 디폴트. site.yaml 에서 home_per_page 가 제거된 자리.
+    HOME_PER_PAGE_DEFAULT = 5
+
+    def _home_per_page(self) -> int:
+        """메인페이지 Recent posts 의 페이지당 글 수.
+
+        Articles/meta.yaml 의 per_page 가 있으면 그 값, 없으면 코드 디폴트
+        (Builder.HOME_PER_PAGE_DEFAULT).
+        """
+        if self.home_meta.per_page is not None:
+            return self.home_meta.per_page
+        return self.HOME_PER_PAGE_DEFAULT
 
     def _category_per_page(self, cat: Category) -> int:
         """카테고리 자기 인덱스 페이지의 페이지당 글 수."""
@@ -591,10 +670,18 @@ class Builder:
                 slug = cat.slug if cat else category_slug_from_name(child.name)
                 entries.append((child.name, slug, False))
 
+        # v0.4.6: About 은 그대로 최상단 고정. 나머지는 (priority desc,
+        # folder_name asc) 로 정렬. priority 는 카테고리 meta.yaml 에서 옴 —
+        # 글 항목은 priority 가 없으므로 0 으로 간주.
+        def _entry_priority(name: str) -> int:
+            key = (name,)
+            cat = self.categories.get(key)
+            return cat.meta.priority if cat else 0
+
         about = [e for e in entries if e[0] == 'About']
         others = sorted(
             (e for e in entries if e[0] != 'About'),
-            key=lambda e: e[0],
+            key=lambda e: (-_entry_priority(e[0]), e[0]),
         )
         return about + others
 
@@ -764,9 +851,17 @@ class Builder:
 
     # ── [7] Category indexes ──────────────────────────────────
 
-    def _listup_module_html(self, article: 'Article') -> str:
+    def _listup_module_html(self, article: 'Article', hidden: bool = False) -> str:
+        """글 한 줄의 listup HTML.
+
+        v0.4.6: hidden=True 면 `style='display:none'` 를 inline 으로 부착.
+        SSR 시점에 페이지네이션의 비활성 페이지 항목을 미리 숨겨 FOUC 를 방지.
+        pagination.js 는 그 후에 첫 페이지 항목의 inline style 을 비워
+        (`style.display=''`) 정상 표시한다.
+        """
         link_text = article.meta.title
-        return (f"<div class='listup_module_div'>"
+        style_attr = " style='display:none'" if hidden else ""
+        return (f"<div class='listup_module_div'{style_attr}>"
                 f"<span class='listup_module_title'>"
                 f"<a href='/{article.meta.slug}/'> "
                 f"{escape_html(link_text)} </a>"
@@ -774,6 +869,18 @@ class Builder:
                 f"<span class='listup_module_date'> &nbsp;&nbsp; "
                 f"{article.meta.date}</span>"
                 f"</div>")
+
+    def _listup_items_html(self, articles, per_page: int) -> str:
+        """v0.4.6: 페이지네이션이 부착된 항목 목록 HTML.
+
+        per_page 가 0 이하면 모든 항목을 그대로 출력. 그 외에는 per_page 초과
+        인덱스의 항목에 `style='display:none'` 을 미리 부착하여 FOUC 방지.
+        """
+        parts = []
+        for i, a in enumerate(articles):
+            hidden = per_page > 0 and i >= per_page
+            parts.append(self._listup_module_html(a, hidden=hidden))
+        return '\n'.join(parts)
 
     def _render_section(self, label: str, articles: list, group_key: str,
                         per_page: int, more_url: str = None) -> str:
@@ -789,7 +896,9 @@ class Builder:
             nav_html = ''
         else:
             attrs = _pagination_section_attrs(group_key, per_page)
-            inner = '\n'.join(self._listup_module_html(a) for a in articles)
+            # v0.4.6: per_page 를 넘는 항목은 SSR 단계에서 inline style 로
+            # 미리 숨겨 FOUC 를 방지.
+            inner = self._listup_items_html(articles, per_page)
             nav_html = _pagination_nav_html(group_key, len(articles), per_page)
 
         if more_url:
@@ -834,7 +943,12 @@ class Builder:
         url_prefix = '/' + '/'.join(cat.slug_path) + '/'
 
         sections = []
-        sorted_children = sorted(cat.children, key=lambda c: c.folder_name)
+        # v0.4.6: 자식 카테고리 정렬은 priority 내림차순 (큰 값 먼저), 같은
+        # priority 끼리는 folder_name 알파벳 오름차순.
+        sorted_children = sorted(
+            cat.children,
+            key=lambda c: (-c.meta.priority, c.folder_name),
+        )
 
         # 자식 서브카테고리가 있는 경우 — 자식별로 section 생성.
         # 톱레벨이면 "더 보기" 링크가 자식의 자기 페이지 (`/top/sub/`) 로.
@@ -948,7 +1062,8 @@ class Builder:
     def _build_home(self):
         tpl = _load_template(self.templates_dir, 'home.html')
 
-        exclude_top = set(self.site.home_excludes_categories)
+        # v0.4.6: 홈 전용 설정은 site.yaml 이 아니라 Articles/meta.yaml 에서.
+        exclude_top = set(self.home_meta.excludes_categories)
 
         home_articles = []
         for article in self.articles:
@@ -963,18 +1078,20 @@ class Builder:
 
         home_articles.sort(key=lambda a: a.meta.date, reverse=True)
 
-        article_items = '\n'.join(
-            self._listup_module_html(a) for a in home_articles
-        )
+        # v0.4.6: Articles/meta.yaml 의 per_page 가 site 디폴트를 오버라이드.
+        per_page = self._home_per_page()
+        # v0.4.6: per_page 초과 항목은 SSR 단계에서 미리 hide (FOUC 방지).
+        article_items = self._listup_items_html(home_articles, per_page)
 
+        # v0.4.6: 메인페이지 lang — Articles/meta.yaml 의 lang 우선, 없으면 site.lang.
+        page_lang = self.home_meta.lang or self.site.lang
         page_title = self.site.name
-        per_page = self.site.home_per_page
         pagination_nav = _pagination_nav_html(
             'home-recent', len(home_articles), per_page,
         )
 
         vars_ = {
-            'LANG': escape_html(self.site.lang),
+            'LANG': escape_html(page_lang),
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
@@ -1032,7 +1149,12 @@ class Builder:
     # ── [12] sitemap.xml ──────────────────────────────────────
 
     def _build_sitemap(self):
-        xml = build_sitemap(self.articles, self.categories, self.site)
+        # v0.4.6: home_excludes_categories 가 site.yaml 에서 Articles/meta.yaml
+        # 로 이전됨. sitemap.py 가 홈 lastmod 계산용으로 그 값을 필요로 하므로
+        # home_meta 를 함께 넘긴다.
+        xml = build_sitemap(
+            self.articles, self.categories, self.site, self.home_meta,
+        )
         self.dist.mkdir(parents=True, exist_ok=True)
         (self.dist / 'sitemap.xml').write_text(xml, encoding='utf-8')
 

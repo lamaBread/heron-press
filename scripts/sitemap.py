@@ -20,8 +20,13 @@ sitemaps.org 0.9 스키마. 클라이언트 측 처리 없는 정적 XML 파일.
 lastmod 결정 규칙:
   - 글: `updated` 가 있으면 그 값, 없으면 `date`.
   - 카테고리 (톱레벨 또는 서브): 그 서브트리의 (non-noindex) 글 lastmod 중 최댓값.
-  - 홈: 홈 페이지에 실제로 노출되는 글 (즉 home_excludes_categories 가 아닌
-        non-noindex 글) 의 lastmod 중 최댓값.
+  - 홈: 홈 페이지에 실제로 노출되는 글 (즉 Articles/meta.yaml 의
+        excludes_categories 에 들지 않은 non-noindex 글) 의 lastmod 중 최댓값.
+
+v0.4.6 변경:
+  - 홈 제외 카테고리 목록의 출처가 site.home_excludes_categories →
+    home_meta.excludes_categories (= Articles/meta.yaml) 로 이전.
+    build_sitemap 시그니처에 home_meta 매개변수 추가.
 
 `changefreq` / `priority` 는 일부러 비움 — Google 은 두 필드를 무시한다고
 공식적으로 밝혔고, 부정확한 priority 는 오히려 신뢰도를 떨어뜨림.
@@ -41,14 +46,15 @@ def _collect_indexable(cat) -> list:
     return result
 
 
-def build_sitemap(articles, categories, site) -> str:
+def build_sitemap(articles, categories, site, home_meta) -> str:
     """sitemap.xml 본문 문자열 (utf-8) 반환.
 
     매개변수는 builder.Builder 의 self.articles / self.categories / self.site
-    그대로 받는다.
+    / self.home_meta 를 그대로 받는다. v0.4.6 부터 home_meta 가 필수 인자
+    (홈 제외 카테고리 목록의 단일 진실 source).
     """
     base_url = site.base_url.rstrip('/')
-    exclude_top = set(site.home_excludes_categories)
+    exclude_top = set(home_meta.excludes_categories)
 
     indexable = [a for a in articles if not a.meta.noindex]
 

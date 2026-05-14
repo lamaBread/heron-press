@@ -1,4 +1,25 @@
-# siheonlee.com — 사이트 전역 설정 (v0.4.5)
+# siheonlee.com — 사이트 전역 설정 (v0.4.6)
+#
+# 이 파일에는 "진짜 전역 설정" 만 둡니다 — 사이트 메타(도메인/이름/저작권),
+# 모든 페이지에 공통 적용되는 폴백 (lang, default_title_prefix, default_og_image
+# 등), 카테고리류의 디폴트 (category_per_page / category_preview_per_page).
+#
+# 각 페이지 고유 설정은 그 페이지의 meta.yaml 에서 오버라이드:
+#   - 메인페이지 (홈) ........... Articles/meta.yaml
+#   - 카테고리 인덱스 페이지 .... Articles/<카테고리경로>/meta.yaml
+#   - 글 페이지 ................. Articles/<카테고리경로>/<글경로>/meta.yaml
+#
+# v0.4.6 변경 요약:
+#   - **홈 전용 설정 일원화**: 옛 `home_per_page` / `home_excludes_categories`
+#     / `home_sort` 를 site.yaml 에서 제거. `home_per_page` 와
+#     `home_excludes_categories` 는 각각 `Articles/meta.yaml` 의 `per_page` /
+#     `excludes_categories` 로 이전. `home_sort` 는 빌더가 사용한 적 없는
+#     dead field 였으므로 폐기. site.yaml 은 이제 페이지 한 종(홈)에 한정된
+#     설정을 가지지 않음 — "전역 설정" 의 의미를 엄격히 지킴.
+#   - 카테고리/홈 meta.yaml 에 `priority` 필드 (정수, 값이 클수록 먼저).
+#   - SSR 첫 페이지 정적화 — 페이지네이션 첫 진입 시 FOUC 제거.
+#     (assets/pagination.js 와 builder 의 _listup_items_html 협업)
+#   - 페이지네이션 nav 상/하단 여백 축소 (assets/common_template.css).
 #
 # v0.4.5 변경 요약:
 #   - 다국어 지원: `lang:` 전역 디폴트 도입 (기본 ko). 글 meta.yaml /
@@ -95,19 +116,16 @@ reserved_slugs:
 warn_on_underscore_ref: true
 warn_on_missing_asset: true
 warn_on_stale_updated: true
-home_excludes_categories: [About]
-home_sort: date_desc
 
-# v0.4.5: 페이지네이션 디폴트.
-#   home_per_page                — 메인페이지 Recent section 한 페이지 글 개수.
-#   category_per_page            — 카테고리 인덱스 페이지가 *자기 자신* 의 글
-#                                  목록을 표시할 때 한 페이지 글 개수 (소분류 등).
-#   category_preview_per_page    — 카테고리가 *상위 카테고리* 의 인덱스 페이지에
-#                                  section 으로 임베드될 때 한 페이지 글 개수.
-# 모두 카테고리 폴더의 meta.yaml 로 카테고리별 오버라이드 가능. 소분류의
-# `per_page` 는 그 소분류의 *자기 자신 페이지* 에서 사용되고, `preview_per_page`
-# 는 그 소분류가 톱레벨 페이지의 section 으로 임베드될 때 사용된다.
-home_per_page: 5
+# 카테고리 페이지네이션 디폴트 (v0.4.5; v0.4.6 에서 홈 설정 분리됨).
+#   category_per_page         — 카테고리 인덱스 페이지가 *자기 자신* 의 글
+#                                목록을 표시할 때 한 페이지 글 개수.
+#   category_preview_per_page — 카테고리가 *상위 카테고리* 의 인덱스 페이지에
+#                                section 으로 임베드될 때 한 페이지 글 개수.
+# 카테고리별 오버라이드는 그 카테고리 폴더의 meta.yaml. 소분류의 `per_page` 는
+# 그 소분류의 자기 페이지에서, `preview_per_page` 는 부모 페이지의 section 으로
+# 임베드될 때 사용된다.
+# (메인페이지의 페이지당 글 수는 Articles/meta.yaml 의 `per_page`.)
 category_per_page: 20
 category_preview_per_page: 5
 

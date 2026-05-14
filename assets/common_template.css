@@ -410,8 +410,10 @@ mark {
     justify-content: center;
     align-items: center;
     gap: 0.8em;
-    padding: 0.3em 1em 0.6em;
-    margin: 0;
+    /* v0.4.6: 상단 padding 제거 + 음수 margin-top 으로 위 section 과 더 가깝게.
+       하단 padding 도 약간 축소. */
+    padding: 0 1em 0.3em;
+    margin: -0.45em 0 0 0;
     font-family: Arial, sans-serif;
     font-size: 0.85em;
     user-select: none;
