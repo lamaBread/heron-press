@@ -1,4 +1,13 @@
-# siheonlee.com — 사이트 전역 설정 (v0.4.2)
+# siheonlee.com — 사이트 전역 설정 (v0.4.3)
+#
+# v0.4.3 변경 요약:
+#   - 글 페이지의 <title> 이 이제 글의 title 을 정상 사용
+#     (`{seo.title_prefix}{title}{seo.title_suffix}`). v0.3.x ~ v0.4.2 까지는
+#     항상 site.name 으로 덮어쓰던 quirk 가 있었음.
+#   - 마크다운 본문에 섹션 마커 문법 (===제목=== / ======).
+#   - meta.yaml 의 평면 seo_* 필드 → `seo:` 하위 블록으로 그룹화.
+#     site.yaml 의 default_title_prefix / default_title_suffix 는 그대로 유지
+#     (글에 seo.title_prefix / seo.title_suffix 가 없을 때 폴백).
 #
 # v0.4.2 변경 요약:
 #   - 빌드 검증 강화: 글 slug ↔ 톱레벨 카테고리 slug 충돌이 빌드 초입에서 차단.
@@ -28,14 +37,17 @@ domain: siheonlee.com
 base_url: https://siheonlee.com
 
 # 사이트 정보
-# name      — <title> 의 기본값. 원본은 페이지마다 "Lama" 또는 "Lama-About".
+# name      — og:site_name 과 카테고리/홈/404/search 페이지의 <title>.
+#              글 페이지의 <title> 은 v0.4.3 부터 글의 title 사용.
 # main_title — 모든 페이지 헤더 좌측 상단 큰 글씨. 원본 == "Lama".
 name: Lama
 main_title: Lama
 default_author: 이시헌
 default_og_image: /assets/default-og.png
 
-# <title> 서식 (원본은 prefix/suffix 없이 단순 title 만 사용)
+# 글 페이지 <title> 의 기본 prefix/suffix.
+# v0.4.3 부터 글 페이지의 <title> 은 `{prefix}{title}{suffix}` 형태.
+# meta.yaml 의 `seo.title_prefix` / `seo.title_suffix` 로 글마다 override 가능.
 default_title_prefix: ""
 default_title_suffix: ""
 

@@ -1,10 +1,20 @@
 """마크다운 렌더링 + 본문 후처리.
 
 파이프라인 (글 .md 한 편 기준):
-  1. preprocess_md_custom_syntax(text) — 사용자 정의 문법(imgBox 등) → raw HTML
+  1. preprocess_md_custom_syntax(text) — 사용자 정의 문법(imgBox, 섹션 마커)
+                                          → raw HTML / sentinel 주석
   2. Parsedown().text(text) → str — 순수 MD → HTML (parsedown.py)
   3. finalize_md_html(html, slug, dir) — asset path 재작성, PHP 함수 시뮬레이션,
                                          first paragraph / image 추출
+  4. resolve_section_markers(html, title) — sentinel 주석 → 실제 gap/section
+                                            마커, 본문을 자동 첫 갭+섹션으로
+                                            감싸기. (builder 가 호출)
+
+v0.4.3 변경:
+  - 섹션 마커 문법 추가 (마크다운 본문 안에서 사용):
+      ===제목===  라인 → 이전 섹션 닫고 + 새 갭(제목) + 새 섹션 열기
+      ======      라인 → 현재 섹션을 명시적으로 닫기 (다음 텍스트는 섹션 밖)
+    code block (``` ... ```) 안에서는 매칭 안 함.
 
 v0.4.1 변경:
   - PHP CLI 의존 제거. 마크다운 파서는 scripts/parsedown.py (Parsedown 1.7.4
@@ -32,12 +42,72 @@ _IMGBOX_LINE_RE = re.compile(
     re.MULTILINE,
 )
 
+# 섹션 마커. 라인 단위로 매칭한다. code fence 안은 별도 로직으로 회피.
+#   ===제목===  → 새 섹션 열기 (이전 섹션 자동 닫힘)
+#   ======      → 현재 섹션 닫기
+# = 가 정확히 3개로 시작/끝, 사이에 = 를 포함하지 않는 임의 텍스트.
+_SECTION_OPEN_RE = re.compile(r'^===([^=].*?[^=]|[^=])===\s*$')
+_SECTION_CLOSE_RE = re.compile(r'^======\s*$')
+
+# Parsedown 이 보존하는 HTML 주석을 sentinel 로 사용.
+_OPEN_SENTINEL = '<!--SBR-OPEN:{title}-->'
+_CLOSE_SENTINEL = '<!--SBR-CLOSE-->'
+
+
+def _preprocess_section_markers(md: str) -> str:
+    """ ===title===  / ====== 라인을 sentinel HTML 주석으로 치환.
+
+    code fence (``` ... ``` 또는 ~~~ ~~~ ) 안에서는 건들지 않는다.
+    sentinel 은 빈 줄로 separate 되어 Parsedown 에 HTML block 으로 전달된다.
+    """
+    out_lines = []
+    in_fence = False
+    fence_char = None
+    fence_re = re.compile(r'^(`{3,}|~{3,})')
+
+    for line in md.split('\n'):
+        stripped = line.lstrip()
+        m_fence = fence_re.match(stripped)
+        if m_fence:
+            fc = m_fence.group(1)[0]
+            if not in_fence:
+                in_fence = True
+                fence_char = fc
+            elif fence_char == fc:
+                in_fence = False
+                fence_char = None
+            out_lines.append(line)
+            continue
+
+        if in_fence:
+            out_lines.append(line)
+            continue
+
+        m_open = _SECTION_OPEN_RE.match(line)
+        if m_open:
+            title = m_open.group(1).strip()
+            out_lines.append('')
+            out_lines.append(_OPEN_SENTINEL.format(title=title))
+            out_lines.append('')
+            continue
+        if _SECTION_CLOSE_RE.match(line):
+            out_lines.append('')
+            out_lines.append(_CLOSE_SENTINEL)
+            out_lines.append('')
+            continue
+
+        out_lines.append(line)
+
+    return '\n'.join(out_lines)
+
 
 def preprocess_md_custom_syntax(md: str) -> str:
     """프로젝트 고유 마크다운 확장을 raw HTML 로 치환.
 
     현재 지원:
       ![[alt]](url) {desc}  → <div class="imgBox">…</div>
+      ===제목===            → 섹션 시작 (sentinel 주석)
+      ======                → 섹션 끝   (sentinel 주석)
     """
     def replace_imgbox(m: re.Match) -> str:
         alt = m.group(1) or ''
@@ -54,7 +124,66 @@ def preprocess_md_custom_syntax(md: str) -> str:
                 f'  <img src="{url}" alt="{alt_e}">\n'
                 f'</div>')
 
+    md = _preprocess_section_markers(md)
     return _IMGBOX_LINE_RE.sub(replace_imgbox, md)
+
+
+# ════════════════════════════════════════════════════════════════
+# Section marker resolution  (sentinel → gap/section HTML)
+# ════════════════════════════════════════════════════════════════
+
+# Parsedown 출력 후의 sentinel. 주변을 빈 줄로 감싸 두었으므로
+# Parsedown 은 보통 이 주석을 HTML block 으로 보존한다.
+_SENTINEL_SPLIT_RE = re.compile(r'<!--SBR-(OPEN:.+?|CLOSE)-->')
+
+
+def _gap_html(title: str) -> str:
+    return f"<div class='gap'>\n    <p>{escape_html(title)}</p>\n</div>\n"
+
+
+def resolve_section_markers(html: str, opening_title: str) -> str:
+    """sentinel 주석을 실제 gap/section HTML 로 치환한 뒤,
+    본문 전체를 자동 첫 갭+섹션으로 감싼다.
+
+    상태 머신:
+      시작:   자동으로 [gap(opening_title)] + <section>  (섹션 열림)
+      OPEN:t  섹션 열림이면 </section>, [gap(t)] + <section>  (섹션 열림 유지)
+      CLOSE   섹션 열림이면 </section>                       (섹션 닫힘)
+      종료:   섹션 열림이면 </section>
+
+    빈 갭 / 빈 섹션이 생기면 그대로 출력 — 사용자가 빈 마커 시퀀스를
+    의도적으로 적었을 수 있으니 builder 에서 정리하지 않는다.
+    """
+    parts = _SENTINEL_SPLIT_RE.split(html)
+    # parts: [text0, marker1, text1, marker2, ...]
+
+    out = [_gap_html(opening_title), '<section>\n']
+    section_open = True
+
+    out.append(parts[0])
+
+    for i in range(1, len(parts), 2):
+        marker = parts[i]
+        text_after = parts[i + 1] if i + 1 < len(parts) else ''
+
+        if marker == 'CLOSE':
+            if section_open:
+                out.append('\n</section>\n')
+                section_open = False
+        elif marker.startswith('OPEN:'):
+            title = marker[len('OPEN:'):].strip()
+            if section_open:
+                out.append('\n</section>\n')
+            out.append(_gap_html(title))
+            out.append('<section>\n')
+            section_open = True
+
+        out.append(text_after)
+
+    if section_open:
+        out.append('\n</section>')
+
+    return ''.join(out)
 
 
 # ════════════════════════════════════════════════════════════════

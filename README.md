@@ -1,11 +1,17 @@
-# siheonlee.com v0.4.2 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.4.3 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.4.2 의 위치:** v0.4.1 의 큰 구조 변경 (Parsedown Python 포팅, 빌드 PHP 의존 제거) 위에 v0.4.0 ~ v0.4.1 검토에서 드러난 여섯 가지 정합성 갭을 채운 점진 버전입니다. 글 산출물의 바이트 단위 출력은 v0.4.1 과 동일합니다 (회귀 0). 차이는 (a) slug ↔ 카테고리 slug 충돌의 명시 검증, (b) 레거시 redirect.php 의 도메인 하드코딩 제거, (c) search.php 의 noindex,follow, (d) imgBox/imgSlideBox 인자 파서의 nested parens 처리, (e) {{ROBOTS_META}} placeholder 들여쓰기 일반화, (f) README §15 하위 번호 보정입니다.
+> **v0.4.3 의 위치:** 글 페이지의 `<title>` 정상화 + 마크다운 본문의 섹션 분할 문법 + meta.yaml 의 SEO 필드 그룹화. 세 변경의 공통 동기는 *글의 의미 단위 표현* 을 일관되게 만드는 것입니다.
+>
+> 1. **`<title>` = 글 제목.** v0.3.x ~ v0.4.2 에선 글마다 `<title>` 이 항상 `Lama` 로 고정되어 있었습니다 (원본 lama.pe.kr 의 quirk 보존). v0.4.0 에서 전역 noindex 가 풀려 글이 실제로 검색 결과에 뜨기 시작하면서 이 quirk 가 부적합해졌고, v0.4.3 에서 `<title>` 이 `{seo.title_prefix}{title}{seo.title_suffix}` 형태로 출력되도록 정상화했습니다.
+> 2. **섹션 마커 문법.** 마크다운 본문 안에서 `===제목===` / `======` 라인으로 본문 구조를 명시적으로 나눌 수 있습니다. content.html (raw HTML) 로 글을 쓰면 `<div class='gap'><p>제목</p></div><section>...</section>` 패턴을 자유롭게 여러 번 둘 수 있는데, 마크다운에서는 그게 안 됐습니다 — 마크다운 글의 본문은 자동으로 한 번의 갭 + 한 번의 섹션으로만 wrap 되었기 때문입니다. v0.4.3 의 새 문법으로 이 비대칭이 해소됩니다.
+> 3. **SEO 필드 그룹화.** meta.yaml 의 `seo_title_prefix`, `seo_description`, `seo_og_title` 등 12 개 평면 필드를 `seo:` 하위 블록으로 묶었습니다 (`styles:` 필드와 동일한 구조). 키 이름이 짧아지고 (`seo.description`, `seo.og_title`) frontmatter 가 한눈에 들어옵니다.
+>
+> **v0.4.2 의 위치:** v0.4.1 검토에서 드러난 여섯 가지 정합성 갭을 채운 점진 버전. 글 산출물의 바이트 단위 출력은 v0.4.1 과 동일했습니다 (회귀 0). 차이는 (a) slug ↔ 카테고리 slug 충돌의 명시 검증, (b) 레거시 redirect.php 의 도메인 하드코딩 제거, (c) search.php 의 noindex,follow, (d) imgBox/imgSlideBox 인자 파서의 nested parens 처리, (e) {{ROBOTS_META}} placeholder 들여쓰기 일반화, (f) README §15 하위 번호 보정.
 >
 > **v0.4.1 의 위치:** v0.4.0 의 "PHP 기반" 캐치프레이즈가 정당화된 PHP 사용처는 (1) 마크다운 파서 (Parsedown), (2) 검색 엔드포인트 (search.php), (3) 구 도메인 리다이렉트 (redirect.php) 셋이었습니다. v0.4.1 에서 (1) 이 **순수 Python** 으로 바뀌었습니다 (Parsedown.php 를 [scripts/parsedown.py](scripts/parsedown.py) 로 충실 포팅). 빌드 머신에는 더 이상 PHP 가 필요하지 않습니다. 런타임 PHP 의존성 (검색·리다이렉트) 은 여전히 남아 있으므로 캐치프레이즈는 그대로 유지합니다.
 
@@ -250,20 +256,20 @@ updated: 2026-06-01
 # v0.4.0: 이 글만 검색엔진에서 빼고 싶을 때
 noindex: true
 
-seo_title_prefix:
-seo_title_suffix:
-
-seo_description:
-seo_author:
-seo_canonical:
-
-seo_og_title:
-seo_og_description:
-seo_og_image:
-seo_og_image_alt:
-seo_og_type: article
-seo_twitter_card: summary_large_image
-seo_twitter_image:
+# v0.4.3: SEO 관련 필드는 모두 `seo:` 하위 블록.
+seo:
+  title_prefix:
+  title_suffix:
+  description:
+  author:
+  canonical:
+  og_title:
+  og_description:
+  og_image:
+  og_image_alt:
+  og_type: article
+  twitter_card: summary_large_image
+  twitter_image:
 
 # 본문 태그의 CSS 속성을 이 글에서만 override (자세한 내용은 § 4-6)
 styles:
@@ -309,21 +315,32 @@ slug: search             ← 예약어 (site.yaml 의 reserved_slugs 참조)
 | 필드 | 필수 | 설명 | 예시 |
 |---|---|---|---|
 | `slug` | ✓ | URL 식별자. 사이트 전역 유일 | `mask-intake-3d-printing` |
-| `title` | ✓ | 글 제목. `<h1>` 태그에 들어감 | `마스크 흡기구 3D 프린팅` |
+| `title` | ✓ | 글 제목. 본문 상단 갭 박스 + `<title>` 태그 양쪽에 사용 (v0.4.3) | `마스크 흡기구 3D 프린팅` |
 | `date` | ✓ | 최초 발행일 (YYYY-MM-DD) | `2021-04-12` |
 | `updated` | — | 마지막 수정일 (YYYY-MM-DD). `date` 이후여야 함 | `2025-08-30` |
 | `noindex` (v0.4.0) | — | `true` 면 이 글 한 페이지만 `<meta robots noindex>` 부착 → 검색엔진 제외 | `true` |
-| `seo_title_prefix` | — | `<title>` 앞에 붙는 문자열 | `"[특집] "` |
-| `seo_title_suffix` | — | `<title>` 뒤에 붙는 문자열 | `" - 내 블로그"` |
-| `seo_description` | — | 검색엔진에 표시되는 설명. 비면 본문 첫 문단 자동 추출 | `"3D 프린터로 만든 기록"` |
-| `seo_author` | — | 저자명. 비면 site.yaml 의 `default_author` | `이시헌` |
-| `seo_canonical` | — | 표준 URL 강제 지정. 비면 자동 생성 | `https://siheonlee.com/my-slug/` |
-| `seo_og_image` | — | SNS 공유 시 표시되는 이미지. 비면 본문 첫 이미지 | `./imgs/thumb.jpg` |
-| `seo_og_type` | — | OG 타입. 기본값 `article` | `article` |
-| `seo_twitter_card` | — | 트위터 카드 타입 | `summary_large_image` |
+| `seo:` (v0.4.3) | — | SEO 관련 필드의 그룹. 모든 하위 키 선택 사항. 아래 표 참조 | (아래 참조) |
 | `styles` | — | 본문 태그의 CSS 속성을 이 글에서만 override (§ 4-6) | (아래 참조) |
 
-> **v0.3.x 까지 있던 `seo_keywords` 필드는 v0.4.0 에서 폐기되었습니다.** `<meta name="keywords">` 는 1990년대 이래 주요 검색엔진이 무시하는 태그이고, 가짜 키워드를 잔뜩 채워 넣는 스팸 때문에 가중치가 0 이 된 지 오래입니다. 기존 글의 `seo_keywords:` 줄은 그대로 둬도 무시될 뿐이지만, 정리해도 좋습니다.
+**`seo:` 하위 키 (v0.4.3 — 모두 선택 사항):**
+
+| 키 | 설명 | 예시 |
+|---|---|---|
+| `title_prefix` | `<title>` 앞에 붙는 문자열. 비면 site.yaml 의 `default_title_prefix` | `"[특집] "` |
+| `title_suffix` | `<title>` 뒤에 붙는 문자열. 비면 site.yaml 의 `default_title_suffix` | `" - 내 블로그"` |
+| `description` | 검색엔진에 표시되는 설명. 비면 본문 첫 문단 자동 추출 | `"3D 프린터로 만든 기록"` |
+| `author` | 저자명. 비면 site.yaml 의 `default_author` | `이시헌` |
+| `canonical` | 표준 URL 강제 지정. 비면 자동 생성 | `https://siheonlee.com/my-slug/` |
+| `og_title` / `og_description` | OG 태그 override. 비면 글의 title/description 사용 | — |
+| `og_image` | SNS 공유 시 표시되는 이미지. 비면 본문 첫 이미지 → site.default_og_image 폴백 | `./imgs/thumb.jpg` |
+| `og_image_alt` | og:image 의 alt. 비면 글 title | — |
+| `og_type` | OG 타입. 기본값 `article` | `article` |
+| `twitter_card` | 트위터 카드 타입 | `summary_large_image` |
+| `twitter_image` | 트위터 카드 이미지. 비면 og_image 사용 | — |
+
+> **v0.4.2 → v0.4.3 마이그레이션:** 기존 글의 `seo_*` 평면 필드 (예: `seo_description: ...`) 를 `seo:` 블록 하위로 옮기면 됩니다. 키 이름에서 `seo_` 접두만 제거 (`seo_description` → `seo.description`). v0.4.3 은 평면 필드 폴백을 제공하지 않으므로 (즉 backward compat 없음) meta.yaml 을 직접 갱신해야 합니다.
+>
+> **v0.3.x 까지 있던 `seo_keywords` 필드는 v0.4.0 에서 폐기되었습니다.** `<meta name="keywords">` 는 1990년대 이래 주요 검색엔진이 무시하는 태그입니다.
 
 ### 4-3. content.md 로 본문 쓰기
 
@@ -380,6 +397,46 @@ slug: search             ← 예약어 (site.yaml 의 reserved_slugs 참조)
 ![외부 이미지](https://example.com/image.jpg)  ← 변환 안 함
 ```
 
+#### 섹션 마커 (v0.4.3)
+
+마크다운 본문을 여러 *섹션* 으로 나누어 각 섹션에 부제목을 다는 문법입니다. 빌드 결과 HTML 의 `<div class='gap'><p>부제목</p></div><section>...</section>` 패턴에 직접 대응합니다.
+
+```markdown
+도입부 문단. 이 부분은 본문 시작에 자동으로 들어가는
+첫 갭 박스(글 제목) + 첫 섹션 안에 위치합니다.
+
+===소개글===
+
+이전 섹션이 자동으로 닫히고, 새 갭 박스("소개글") 와 새 섹션이 열립니다.
+
+소개글 섹션의 두 번째 문단.
+
+===주요 내용===
+
+다시 새 섹션. `===제목===` 라인 하나로 이전 섹션 닫기 + 새 섹션 열기가
+한 번에 일어납니다.
+
+======
+
+`======` (등호 정확히 6개) 라인은 현재 섹션을 명시적으로 닫습니다.
+이 줄 다음의 본문은 어느 섹션에도 속하지 않습니다.
+```
+
+**문법 규칙:**
+
+- `===텍스트===` (라인 단독): 이전 섹션 닫기 + 새 갭(텍스트) + 새 섹션 열기. 텍스트 안에 등호가 있으면 안 됨.
+- `======` (라인 단독, 등호 정확히 6개): 현재 섹션을 명시적으로 닫기. 그 뒤에 또 새 섹션을 열려면 다음 줄에 `===새 제목===` 을 두면 됩니다.
+- 코드 블록 (` ``` ` 또는 `~~~` 사이) 안에서는 매칭하지 않습니다 — 코드 예시 안에 `===` 가 등장해도 안전합니다.
+- 마크다운 본문 시작 부분에는 항상 자동 첫 갭 (글 `title`) + 첫 섹션이 들어갑니다. 본문 안에 마커가 없는 글도 동일합니다.
+
+**섹션 닫힘 — 짝맞춤은 빌더가 알아서 처리합니다:**
+
+- **다음 `===새 제목===` 이 오면 자동 닫힘.** 직전 섹션이 열려 있는 상태에서 새 OPEN 마커가 등장하면 빌더가 먼저 `</section>` 을 출력한 뒤 새 갭+섹션을 엽니다. → 즉 본문 중간에서 *섹션을 단순 전환만* 하고 싶다면 `======` 없이 곧장 다음 `===새 제목===` 만 적어도 충분합니다.
+- **본문 끝까지 안 닫혔으면 자동 닫힘.** 마지막 마커가 OPEN 이었거나 마커가 하나도 없었던 경우, 빌더가 본문 끝에 `</section>` 을 자동으로 붙입니다. → 닫힘 누락 걱정 없이 마크다운을 끝내도 됩니다.
+- **명시적 `======` 은 "이 다음 본문은 어느 섹션에도 속하지 않게 두고 싶을 때" 만 필요.** 그렇지 않으면 굳이 적을 필요가 없습니다. ([Section Markers Demo](Articles/Blog/Section%20Markers%20Demo/content.md) 글 마지막의 단락 ([결과 HTML](dist/section-markers-demo/index.html)) 이 그 케이스입니다 — `======` 다음 단락이 `<section>` 밖의 `<p>` 로 출력됨.)
+
+**왜 필요한가:** v0.4.2 까지는 마크다운 본문이 자동으로 단 한 번의 `<div gap><p>title</p></div><section>전체본문</section>` 으로만 wrap 되었습니다. `content.html` 로 작성된 글 (예: About 페이지) 은 갭+섹션 패턴을 본문 안에 여러 번 둘 수 있었지만, 마크다운에는 그 자유가 없었습니다. v0.4.3 의 마커는 이 비대칭을 해소합니다.
+
 ### 4-4. content.html 로 본문 쓰기
 
 마크다운 대신 HTML 파일로 본문을 작성할 수 있습니다. 기존 HTML 글을 마이그레이션할 때 주로 사용합니다.
@@ -387,17 +444,31 @@ slug: search             ← 예약어 (site.yaml 의 reserved_slugs 참조)
 `content.html` 은 `<html>`, `<head>`, `<body>` 없이 본문 HTML 조각만 씁니다:
 
 ```html
-<p>첫 문단입니다.</p>
-
-<div class="imgBox">
-  <img src="./imgs/photo.jpg" alt="사진">
-  <p class="caption">캡션 텍스트</p>
+<div class="gap">
+    <p>첫 섹션 제목</p>
 </div>
+<section>
+    <p>첫 문단입니다.</p>
 
-<p>두 번째 문단입니다.</p>
+    <div class="imgBox">
+      <img src="./imgs/photo.jpg" alt="사진">
+      <p class="caption">캡션 텍스트</p>
+    </div>
+</section>
+
+<div class="gap">
+    <p>다음 섹션 제목</p>
+</div>
+<section>
+    <p>두 번째 섹션의 본문.</p>
+</section>
 ```
 
-> **중요:** `content.md` 와 `content.html` 이 동시에 있으면 빌드가 중단됩니다. 둘 중 하나만 사용하세요. `content.html` 은 마크다운 파서를 거치지 않으므로 파서 선택의 영향을 받지 않습니다.
+> **중요 — 갭+섹션은 직접 작성해야 합니다.** `content.html` 은 작성한 HTML 이 본문에 **그대로** 들어갑니다. 마크다운 케이스에서 자동으로 박히던 `<div class='gap'><p>글 제목</p></div><section>...</section>` 의 자동 wrap 도, `===제목===` / `======` 섹션 마커도 작동하지 않습니다. 본문의 갭+섹션 패턴을 원하면 위 예시처럼 직접 적어야 합니다. meta.yaml 의 `title` 은 본문에는 사용되지 않고 `<title>` 태그·SEO 메타·검색 인덱스에만 사용됩니다.
+>
+> 실제 사용 예시: [Articles/About/content.html](Articles/About/content.html) — `About me` / `About this website` / `Contact` 세 갭+섹션이 모두 작성자가 직접 적은 것입니다.
+
+> **content.md / content.html 동시 존재 금지:** 둘 다 있으면 빌드가 중단됩니다. 둘 중 하나만 사용하세요. `content.html` 은 마크다운 파서를 거치지 않으므로 파서 선택의 영향도 받지 않습니다.
 
 #### PHP 함수 자동 변환
 
@@ -869,6 +940,34 @@ Setext 형식도 가능
 자동 링크: <https://example.com>
 ```
 
+### 섹션 마커 — 이 시스템 전용 문법 (v0.4.3)
+
+```markdown
+도입부.
+
+===섹션 제목===
+
+섹션 본문.
+
+===다음 섹션===
+
+다음 섹션의 본문. 새 마커가 등장할 때마다 이전 섹션이 자동으로 닫히고
+새 갭 박스 + 새 섹션이 열립니다.
+
+======
+
+현재 섹션을 명시적으로 닫습니다. 이 라인은 등호 6개로만 구성.
+다음 본문은 어느 섹션에도 속하지 않습니다.
+```
+
+매칭 규칙:
+
+- 시작 마커: `^===텍스트===$` (시작/끝 등호 3개, 텍스트 안에 등호 없음)
+- 종료 마커: `^======$` (등호 정확히 6개)
+- 코드 블록 (` ``` ` / `~~~`) 안의 같은 패턴은 무시.
+
+자세한 동작은 § 4-3 "섹션 마커" 항목 참조.
+
 ### 이미지 박스 (캡션 포함) — 이 시스템 전용 문법
 
 ```markdown
@@ -965,20 +1064,24 @@ def hello():
 
 | 출력 태그 | 1순위 | 2순위 | 3순위 |
 |---|---|---|---|
-| `<title>` | `{prefix}{title}{suffix}` | (원본 사이트는 페이지마다 단순 "Lama" 사용) | — |
-| `meta description` | `seo_description` | 본문 첫 문단 (최대 150자) | 출력 생략 |
-| `meta author` | `seo_author` | `site.yaml 의 default_author` | 출력 생략 |
-| `link canonical` | `seo_canonical` | 자동 생성 (`/{slug}/`) | — |
-| `og:title` | `seo_og_title` | `<title>` 결과 | — |
-| `og:description` | `seo_og_description` | `meta description` 결과 | 출력 생략 |
-| `og:image` | `seo_og_image` | 본문 첫 `<img>` | `default_og_image` |
-| `twitter:image` | `seo_twitter_image` | `og:image` 결과 | — |
+| `<title>` | `{seo.title_prefix}{title}{seo.title_suffix}` (v0.4.3) | site.name 폴백 (full_title 이 빈 문자열일 때만) | — |
+| `meta description` | `seo.description` | 본문 첫 문단 (최대 150자) | 출력 생략 |
+| `meta author` | `seo.author` | `site.yaml 의 default_author` | 출력 생략 |
+| `link canonical` | `seo.canonical` | 자동 생성 (`/{slug}/`) | — |
+| `og:title` | `seo.og_title` | `<title>` 결과 | — |
+| `og:description` | `seo.og_description` | `meta description` 결과 | 출력 생략 |
+| `og:image` | `seo.og_image` | 본문 첫 `<img>` | `default_og_image` |
+| `twitter:image` | `seo.twitter_image` | `og:image` 결과 | — |
 
 **폴백 결과가 빈 문자열이면 해당 태그 자체를 출력하지 않습니다.** `<meta name="description" content="">` 같은 빈 태그는 절대 생성되지 않습니다.
 
 > **v0.4.0 색인 정책:** 사이트 전체 페이지는 검색엔진 색인이 **기본 허용** 입니다. 글마다 `meta.yaml` 에 `noindex: true` 를 추가하면 그 한 페이지의 `<head>` 에만 `<meta name='robots' content='noindex'>` 가 들어가 검색엔진에서 빠집니다. 홈/카테고리/404/search 같은 전역 페이지에는 noindex 가 없습니다.
 >
 > v0.3.x 까지는 모든 페이지에 noindex 가 박혀 있어 위 SEO 폴백 체인이 출력만 되고 실효는 없는 dead code 였습니다. v0.4.0 부터는 실제로 검색 노출에 영향을 줍니다.
+>
+> **v0.4.3 변경:** 글 페이지의 `<title>` 이 이제 글의 `title` 을 정상 사용합니다. v0.3.x ~ v0.4.2 까지는 `<title>` 이 항상 site.name (`Lama`) 으로 고정되어 있었습니다 (원본 lama.pe.kr 보존 quirk). v0.4.0 에서 noindex 가 풀려 글이 검색 결과에 뜨기 시작하면서 이 quirk 가 부적합해졌고, v0.4.3 에서 정상화되었습니다.
+>
+> **v0.4.3 변경:** SEO 필드들이 `seo:` 하위 블록으로 그룹화되었습니다 (예: `seo_description` → `seo.description`). meta.yaml frontmatter 가 한눈에 보입니다.
 >
 > `<meta name="keywords">` 는 v0.4.0 에서 제거되었습니다 — 주요 검색엔진이 무시하는 태그입니다.
 
@@ -1520,7 +1623,7 @@ python build.py --clean
 
 9. **단일 진실원의 토크나이저 (v0.4.0)** — Python/PHP 양쪽 토크나이저의 동등성을 빌드마다 fixture 패리티 테스트로 자동 검증.
 
-### 현재 버전(v0.4.2) 의 한계
+### 현재 버전(v0.4.3) 의 한계
 
 | 한계 | 내용 |
 |---|---|
@@ -1542,22 +1645,42 @@ python build.py --clean
 
 ## 18. 업데이트 로그
 
-여덟 버전의 차이를 한눈에:
+아홉 버전의 차이를 한눈에:
 
-| 영역 | v0.1 | v0.2 | v0.3 | v0.3.1 | v0.3.2 | v0.4.0 | v0.4.1 | v0.4.2 (현재) |
-|---|---|---|---|---|---|---|---|---|
-| 시스템 정체성 | "SSG" | "SSG" | "SSG" | "SSG (런타임 PHP 검색 포함)" | (동일) | **"PHP 기반 경량 웹 사이트 생성기"** | (동일 — 빌드 PHP 의존만 사라짐) | (동일) |
-| 출력 UI/UX | v0.1 자체 디자인 | 원본 `lama_website-main` 와 동일 | 원본 + 글마다 스타일 오버라이드 가능 | (동일) + 모든 페이지 nav 우측 검색창 + Recent posts 위 inline 폼 | (동일) — nav-search 만 (홈/카테고리 인덱스 한정), 카테고리별 스코프 검색 | (동일) — nav-search 의 italic placeholder 제거, padding 좌우 동일로 정리 | (동일) | (동일) |
-| 색인 정책 | 전역 noindex | 전역 noindex (원본 보존) | (동일) | (동일) | (동일) | **전역 noindex 제거. 글마다 `noindex: true` 로 개별 차단** | (동일) | + **검색 결과 페이지에 noindex,follow** (전역 정책의 thin-content 예외) |
-| 마크다운 파서 | Python stdlib 자체 파서 | (동일) | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | (동일) | (동일) | (동일) | **scripts/parsedown.py — Parsedown 1.7.4 Python 포팅 (단일)** | (동일) |
-| meta.yaml 필드 | slug, title, date, seo_* | (동일) | + **`styles:`** | (동일) | (동일) | + **`noindex:`** / − **`seo_keywords:` 폐기** | (동일) | (동일) |
-| 검색 토크나이저 | — | — | — | 1글자 한국어 그대로 인덱싱 | (동일) | **1글자 한국어 제외 (bigram 만). 본문 길이 절단 폐지. Py↔PHP 패리티 자동 검증** | (동일 — PHP 없으면 워닝 후 건너뜀) | (동일) |
-| 빌드 검증 | slug 정규식, 날짜 형식, slug 중복 | (동일) | (동일) | (동일) | (동일) | + 토크나이저 패리티 | (동일) | + **slug ↔ 카테고리 slug 충돌 차단** |
-| 레거시 dispatcher | 도메인 하드코딩 | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **site.yaml 의 base_url 사용** |
-| PHP 함수 시뮬레이션 | — | imgBox/imgSlideBox | (동일) | (동일) | (동일) | (동일) | (동일) — 단순 정규식 (`[^)]*`) | **balanced parser — nested parens + quoted `)` 정상 처리** |
-| 카테고리 한국어 폴더 | — | — | _meta.yaml 슬러그 오버라이드 | (동일) | (동일) | **_meta.yaml 오버라이드 폐기. hex 코드포인트 자동 변환 + 워닝** | (동일) | (동일) |
-| 빌드 모듈 구조 | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py (2085줄) | **build.py + scripts/ 패키지** | + scripts/parsedown.py | (동일) |
-| 외부 의존성 | Python 3 | (동일) | Python 3 + (parsedown 시) PHP CLI | Python 3 + PHP CLI (빌드) + PHP runtime (검색) | (동일) | (동일, 다만 캐치프레이즈로 솔직 표기) | **Python 3 만 (빌드). PHP runtime 은 검색·리다이렉트용으로 여전 필요.** | (동일) |
+| 영역 | v0.1 | v0.2 | v0.3 | v0.3.1 | v0.3.2 | v0.4.0 | v0.4.1 | v0.4.2 | v0.4.3 (현재) |
+|---|---|---|---|---|---|---|---|---|---|
+| 시스템 정체성 | "SSG" | "SSG" | "SSG" | "SSG (런타임 PHP 검색 포함)" | (동일) | **"PHP 기반 경량 웹 사이트 생성기"** | (동일 — 빌드 PHP 의존만 사라짐) | (동일) | (동일) |
+| 출력 UI/UX | v0.1 자체 디자인 | 원본 `lama_website-main` 와 동일 | 원본 + 글마다 스타일 오버라이드 가능 | (동일) + 모든 페이지 nav 우측 검색창 + Recent posts 위 inline 폼 | (동일) — nav-search 만, 카테고리별 스코프 검색 | (동일) — nav-search 의 italic placeholder 제거 | (동일) | (동일) | (동일) |
+| 글 `<title>` | 원본 quirk: 항상 site.name | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **`{seo.title_prefix}{title}{seo.title_suffix}` 로 정상화** |
+| 마크다운 본문 구조 | 자동 단일 갭+섹션 wrap | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | + **섹션 마커 `===제목===` / `======`** |
+| 색인 정책 | 전역 noindex | 전역 noindex (원본 보존) | (동일) | (동일) | (동일) | **전역 noindex 제거. 글마다 `noindex: true` 로 개별 차단** | (동일) | + **검색 결과 페이지에 noindex,follow** | (동일) |
+| 마크다운 파서 | Python stdlib 자체 파서 | (동일) | **Parsedown.php (PHP CLI)** — 자체 파서는 fallback | (동일) | (동일) | (동일) | **scripts/parsedown.py — Parsedown 1.7.4 Python 포팅 (단일)** | (동일) | (동일) |
+| meta.yaml 필드 | slug, title, date, seo_* | (동일) | + **`styles:`** | (동일) | (동일) | + **`noindex:`** / − **`seo_keywords:` 폐기** | (동일) | (동일) | **seo_* 평면 필드 → `seo:` 블록 그룹화** |
+| 검색 토크나이저 | — | — | — | 1글자 한국어 그대로 인덱싱 | (동일) | **1글자 한국어 제외 (bigram 만). 본문 길이 절단 폐지. Py↔PHP 패리티 자동 검증** | (동일 — PHP 없으면 워닝 후 건너뜀) | (동일) | (동일) |
+| 빌드 검증 | slug 정규식, 날짜 형식, slug 중복 | (동일) | (동일) | (동일) | (동일) | + 토크나이저 패리티 | (동일) | + **slug ↔ 카테고리 slug 충돌 차단** | (동일) |
+| 레거시 dispatcher | 도메인 하드코딩 | (동일) | (동일) | (동일) | (동일) | (동일) | (동일) | **site.yaml 의 base_url 사용** | (동일) |
+| PHP 함수 시뮬레이션 | — | imgBox/imgSlideBox | (동일) | (동일) | (동일) | (동일) | (동일) — 단순 정규식 (`[^)]*`) | **balanced parser — nested parens + quoted `)` 정상 처리** | (동일) |
+| 카테고리 한국어 폴더 | — | — | _meta.yaml 슬러그 오버라이드 | (동일) | (동일) | **_meta.yaml 오버라이드 폐기. hex 코드포인트 자동 변환 + 워닝** | (동일) | (동일) | (동일) |
+| 빌드 모듈 구조 | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py | 단일 build.py (2085줄) | **build.py + scripts/ 패키지** | + scripts/parsedown.py | (동일) | + **models.SeoMeta** |
+| 외부 의존성 | Python 3 | (동일) | Python 3 + (parsedown 시) PHP CLI | Python 3 + PHP CLI (빌드) + PHP runtime (검색) | (동일) | (동일, 다만 캐치프레이즈로 솔직 표기) | **Python 3 만 (빌드). PHP runtime 은 검색·리다이렉트용으로 여전 필요.** | (동일) | (동일) |
+
+### v0.4.3 (2026-05-14) — `<title>` 정상화 + 마크다운 섹션 마커 + SEO 그룹화
+
+세 변경의 공통 동기는 *글의 의미 단위 표현* 을 일관되게 만드는 것. 출력은 v0.4.2 와 달라지지만, 모두 의도된 개선.
+
+| 개선 | 내용 |
+|---|---|
+| 글 `<title>` 의 글 제목 사용 | [scripts/builder.py](scripts/builder.py) 의 `_render_articles` 가 이제 `build_meta_tags` 가 반환하던 `full_title` (`{seo.title_prefix}{title}{seo.title_suffix}`) 을 `<title>` 에 사용. v0.4.2 까지는 `page_title = self.site.name` 한 줄로 항상 `Lama` 로 덮어쓰던 quirk (`_full_title` 로 밑줄 접두 → 의도적 미사용 표시) 가 있었음. v0.4.0 에서 noindex 가 풀려 글이 검색 결과에 뜨기 시작하면서 이 quirk 가 부적합해진 상황을 해소. |
+| 마크다운 본문의 섹션 마커 문법 | 마크다운 본문 안에서 `===제목===` (라인 단독, 시작/끝 등호 3개) / `======` (라인 단독, 등호 정확히 6개) 로 섹션을 명시적으로 나눌 수 있음. 빌더는 본문 시작에 자동으로 첫 갭 (`title`) + 첫 `<section>` 을 두고, 마커 만나면 state machine 으로 닫고 열기. 코드 펜스 (` ``` `, `~~~`) 안의 같은 패턴은 무시 (코드 예시 안전성). 구현은 [scripts/markdown.py](scripts/markdown.py) 의 `_preprocess_section_markers` (raw markdown → sentinel HTML 주석) + `resolve_section_markers` (Parsedown 출력 + sentinel → 실제 gap/section). |
+| meta.yaml 의 SEO 필드 그룹화 | 평면 12 개 필드 (`seo_title_prefix`, `seo_description`, `seo_og_title` 등) → `seo:` 하위 블록. 키 이름에서 `seo_` 접두 제거 (`seo_description` → `seo.description`). [scripts/models.py](scripts/models.py) 에 `SeoMeta` dataclass 신설. backward compat 폴백 없음 — 기존 글의 meta.yaml 을 직접 마이그레이션해야 함. |
+
+**호환성 노트:** v0.4.2 의 dist/ 와 v0.4.3 의 dist/ 는 바이트 단위로 다릅니다 (회귀 아님, 의도된 변경):
+
+1. 모든 글 페이지의 `<title>` 이 글 제목으로 변경.
+2. `og:title` 의 폴백이 `<title>` 결과를 받기 때문에 사실상 동일 (이전엔 우연히 같은 값이 들어가던 부분이 이제 같은 코드 경로로 들어감).
+3. 기존 글의 meta.yaml 에 `seo_*` 평면 필드를 그대로 둔 채 빌드를 돌리면 그 필드들은 모두 무시되고 기본값 (또는 site.yaml 폴백) 으로 빌드됩니다. 새 `seo:` 블록으로 옮겨주세요.
+
+**미수용 로드맵 항목:** v0.4.2 로드맵 의 B-5 (description 폴백의 추출 범위 제한) 와 B-6 (description_truncate 단어 경계) 는 본 버전 범위 밖. 사용자가 요청한 세 항목에만 집중. v0.4.4 로 미룸.
 
 ### v0.4.2 (2026-05-14) — 정합성 갭 정리 (회귀 0, 출력 동등)
 

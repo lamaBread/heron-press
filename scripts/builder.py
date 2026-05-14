@@ -1,11 +1,12 @@
 """빌드 파이프라인 (Builder 클래스).
 
-14단계 파이프라인 (v0.4.0):
+14단계 파이프라인:
   [1] _load_config           — site.yaml + legacy-map.yaml + 토크나이저 패리티 검증
   [2] _scan_articles         — Articles/ 트리 순회, _ 접두 제외
-  [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움
+  [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움 (seo: 블록 포함)
   [4] _validate              — slug 검증, 카테고리 트리 구축 (한글 폴더 워닝)
-  [5] _render_articles       — 본문 렌더 + nav/SEO/styles 적용 → dist/{slug}/
+  [5] _render_articles       — 본문 렌더 + 섹션 마커 처리 + nav/SEO/styles
+                                → dist/{slug}/
   [6] _sync_assets           — 본문 외 자원 → dist/src/{slug}/
   [7] _build_categories      — 톱레벨 카테고리 인덱스 페이지
   [8] _build_home            — 루트 페이지
@@ -15,6 +16,13 @@
   [12] _build_dispatcher     — dist-legacy/redirect.php (301 매핑)
   [13] _build_search         — search-index.json + search.php (+ tokenize lib)
   [14] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리
+
+v0.4.3 변경:
+  - <title> 에 글 제목 사용 (이전엔 항상 site.name 으로 덮어쓰던 quirk 제거).
+    `{seo.title_prefix}{title}{seo.title_suffix}` 형태.
+  - meta.yaml 의 평면 seo_* 필드 → `seo:` 하위 블록 (SeoMeta 로 파싱).
+  - 마크다운 본문 안에서 섹션 마커 (===제목===, ======) 사용 가능.
+    body 조립을 markdown.resolve_section_markers 에 위임.
 
 v0.4.0 변경:
   - _meta.yaml 슬러그 오버라이드 코드 경로 완전 제거.
@@ -33,7 +41,7 @@ from datetime import date as Date
 from pathlib import Path
 
 from .yaml_parser import yaml_load
-from .models import SiteConfig, ArticleMeta, Article, Category
+from .models import SiteConfig, ArticleMeta, SeoMeta, Article, Category
 from .slugs import category_slug_from_name, is_underscore_path, has_non_ascii
 from .markdown import (
     escape_html,
@@ -42,6 +50,7 @@ from .markdown import (
     normalize_styles,
     process_html,
     has_live_php,
+    resolve_section_markers,
 )
 from .seo import build_meta_tags
 from .search import (
@@ -233,24 +242,36 @@ class Builder:
             noindex_raw = raw.get('noindex')
             noindex = bool(noindex_raw) if noindex_raw is not None else False
 
+            seo_raw = raw.get('seo') or {}
+            if not isinstance(seo_raw, dict):
+                die(f"meta.yaml: 'seo' 는 매핑이어야 합니다\n       at {meta_file}")
+
+            def _seo_str(key):
+                v = seo_raw.get(key)
+                return v if v else None
+
+            seo = SeoMeta(
+                title_prefix=seo_raw.get('title_prefix'),
+                title_suffix=seo_raw.get('title_suffix'),
+                description=_seo_str('description'),
+                author=_seo_str('author'),
+                canonical=_seo_str('canonical'),
+                og_title=_seo_str('og_title'),
+                og_description=_seo_str('og_description'),
+                og_image=_seo_str('og_image'),
+                og_image_alt=_seo_str('og_image_alt'),
+                og_type=seo_raw.get('og_type') or 'article',
+                twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
+                twitter_image=_seo_str('twitter_image'),
+            )
+
             article.meta = ArticleMeta(
                 slug=slug,
                 title=title,
                 date=date_str,
                 updated=updated,
                 noindex=noindex,
-                seo_title_prefix=raw.get('seo_title_prefix'),
-                seo_title_suffix=raw.get('seo_title_suffix'),
-                seo_description=raw.get('seo_description') or None,
-                seo_author=raw.get('seo_author') or None,
-                seo_canonical=raw.get('seo_canonical') or None,
-                seo_og_title=raw.get('seo_og_title') or None,
-                seo_og_description=raw.get('seo_og_description') or None,
-                seo_og_image=raw.get('seo_og_image') or None,
-                seo_og_image_alt=raw.get('seo_og_image_alt') or None,
-                seo_og_type=raw.get('seo_og_type') or 'article',
-                seo_twitter_card=raw.get('seo_twitter_card') or 'summary_large_image',
-                seo_twitter_image=raw.get('seo_twitter_image') or None,
+                seo=seo,
                 styles=normalize_styles(raw.get('styles')),
             )
 
@@ -474,10 +495,8 @@ class Builder:
                 rr = render_article_md(
                     content_text, m.slug, article.source_dir,
                 )
-                body_html = (f"<div class='gap'>\n"
-                             f"    <p>{escape_html(m.title)}</p>\n"
-                             f"</div>\n"
-                             f"<section>\n{rr.html}\n</section>")
+                # v0.4.3: 본문 자동 첫 갭 + 섹션 마커 (===제목===, ======) 처리.
+                body_html = resolve_section_markers(rr.html, m.title)
             else:
                 rr = process_html(content_text, m.slug, article.source_dir)
                 body_html = rr.html
@@ -493,7 +512,7 @@ class Builder:
                         if '/_' in ref or ref.startswith('_'):
                             warn(f'{m.slug}: referenced excluded asset {ref}')
 
-            meta_tags, _full_title = build_meta_tags(article, rr, self.site)
+            meta_tags, full_title = build_meta_tags(article, rr, self.site)
 
             crumb_parts = []
             top_cat = self._top_category_for_article(article)
@@ -523,7 +542,9 @@ class Builder:
                     flags=re.MULTILINE,
                 )
 
-            page_title = self.site.name
+            # v0.4.3: <title> 에 글 제목 사용. full_title 은
+            # build_meta_tags 가 만든 `{prefix}{title}{suffix}` 문자열.
+            page_title = full_title or self.site.name
 
             vars_ = {
                 'META_TAGS': meta_tags,

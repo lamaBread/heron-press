@@ -1,5 +1,10 @@
 """SEO meta 태그 빌더 (§ 5).
 
+v0.4.3 변경:
+  - meta.yaml 의 평면 seo_* 필드 → SeoMeta dataclass (`m.seo.*`).
+  - <title> 에 들어가는 full_title 을 builder 가 정상 사용 (이전엔
+    site.name 으로 덮어쓰던 quirk 제거).
+
 v0.4.0 변경:
   - seo_keywords 필드 제거. <meta name="keywords"> 는 검색엔진 가중치에
     실효가 없어 1990년대 흔적이라 판단.
@@ -18,38 +23,39 @@ def _truncate(s: str, max_len: int) -> str:
 def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:
     """Returns (meta_tags_html, full_title_str)."""
     m = article.meta
+    s = m.seo
 
-    prefix = m.seo_title_prefix if m.seo_title_prefix is not None else site.default_title_prefix
-    suffix = m.seo_title_suffix if m.seo_title_suffix is not None else site.default_title_suffix
+    prefix = s.title_prefix if s.title_prefix is not None else site.default_title_prefix
+    suffix = s.title_suffix if s.title_suffix is not None else site.default_title_suffix
     full_title = f'{prefix}{m.title}{suffix}'
 
-    desc = m.seo_description
+    desc = s.description
     if not desc and rr.first_paragraph:
         desc = _truncate(rr.first_paragraph, site.description_truncate)
 
-    canonical = m.seo_canonical or f'{site.base_url}/{m.slug}/'
+    canonical = s.canonical or f'{site.base_url}/{m.slug}/'
 
-    og_image_raw = m.seo_og_image
+    og_image_raw = s.og_image
     if not og_image_raw and rr.first_image:
         og_image_raw = rr.first_image
     og_image = og_image_raw or site.default_og_image
     if og_image and not og_image.startswith('http'):
         og_image = site.base_url + og_image
 
-    og_title = m.seo_og_title or full_title
-    og_desc = m.seo_og_description or desc or ''
-    og_image_alt = m.seo_og_image_alt or m.title
-    tw_image = m.seo_twitter_image or og_image
+    og_title = s.og_title or full_title
+    og_desc = s.og_description or desc or ''
+    og_image_alt = s.og_image_alt or m.title
+    tw_image = s.twitter_image or og_image
 
-    def e(s):
-        return (s or '').replace('&', '&amp;').replace('"', '&quot;')
+    def e(val):
+        return (val or '').replace('&', '&amp;').replace('"', '&quot;')
 
     tags = []
 
     if desc:
         tags.append(f'<meta name="description" content="{e(desc)}">')
 
-    author = m.seo_author or site.default_author
+    author = s.author or site.default_author
     if author:
         tags.append(f'<meta name="author" content="{e(author)}">')
 
@@ -61,7 +67,7 @@ def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:
     if og_image:
         tags.append(f'<meta property="og:image" content="{e(og_image)}">')
         tags.append(f'<meta property="og:image:alt" content="{e(og_image_alt)}">')
-    og_type = m.seo_og_type or 'article'
+    og_type = s.og_type or 'article'
     tags.append(f'<meta property="og:type" content="{e(og_type)}">')
     tags.append(f'<meta property="og:url" content="{e(canonical)}">')
     tags.append(f'<meta property="og:site_name" content="{e(site.name)}">')
@@ -69,7 +75,7 @@ def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:
     modified = m.updated or m.date
     tags.append(f'<meta property="article:modified_time" content="{e(modified)}">')
 
-    tw_card = m.seo_twitter_card or 'summary_large_image'
+    tw_card = s.twitter_card or 'summary_large_image'
     tags.append(f'<meta name="twitter:card" content="{e(tw_card)}">')
     tags.append(f'<meta name="twitter:title" content="{e(og_title)}">')
     if og_desc:
