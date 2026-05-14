@@ -6,6 +6,21 @@
   명시적으로 작성한 값에서만 가져온다. v0.5.4 까지 있었던 "본문 첫 `<p>` 를
   description 으로 / 본문 첫 `<img src>` 를 og_image 로" 류의 폴백은 모두 제거.
 
+페이지 종류 일반화 (v0.6.2):
+  글 / 홈 / 카테고리가 같은 함수 `build_meta_tags` 를 사용한다. v0.5.4 까지
+  글 페이지에만 출력되던 description / og_* / twitter_* 메타 태그가 홈과
+  카테고리 페이지에도 동일한 폴백 규칙으로 출력된다. v0.5.4 의 한계 표
+  "홈/카테고리 페이지의 SEO 메타 태그 출력" 항목을 해소.
+
+  시그니처는 keyword-only — `title`, `seo`, `site`, `canonical_path`,
+  `page_kind` 다섯이 필수, `published`/`updated` 는 글에만 의미가 있어 옵션.
+
+  페이지 종류별 차이는 두 군데뿐:
+  - `og:type` 디폴트: 글=`article` / 홈·카테고리=`website` (OGP 표준 권장).
+    seo.og_type 으로 명시 override 가능.
+  - `article:published_time` / `article:modified_time`: 글일 때만 (= published
+    인자가 전달됐을 때만) 출력. 홈/카테고리는 두 인자 모두 None 이라 누락.
+
 필드 상태 처리 (모든 Optional[str] 필드 공통):
   - None      = 키 부재 또는 값 부재 → 해당 메타 태그를 출력하지 않는다.
   - ''        = 빈 문자열 → 메타 태그 미출력 + Builder 가 BuildReport 에 기록.
@@ -17,14 +32,16 @@
   - description: author 가 직접 쓴 값만. 본문 폴백 없음.
   - og_description / twitter_description: 부재 시 description 폴백 (author 가
     직접 쓴 값을 재사용하므로 본문 추출이 아니다 — author-authored fallback).
-  - og_image: meta.seo.og_image > site.default_og_image. 본문 폴백 없음.
+  - og_image: seo.og_image > site.default_og_image. 본문 폴백 없음.
               SNS / 메신저 미리보기가 og:image 없을 때 본문 첫 이미지를
               임의로 긁어가는 행동을 SSG 가 빌드 시점에 자동화하는 건 동일
               하게 무례한 일이라는 판단.
-  - twitter_image: meta.seo.twitter_image > og_image (동일 규칙).
-  - og_title: meta.seo.og_title > full_title.
-  - og_image_alt: meta.seo.og_image_alt > meta.title.
-  - author: meta.seo.author > site.default_author.
+  - twitter_image: seo.twitter_image > og_image (동일 규칙).
+  - og_title: seo.og_title > full_title.
+  - og_image_alt: seo.og_image_alt > title (페이지 본문 title — 글 제목 /
+                  홈 home_meta.title or site.name / 카테고리 cat.meta.title
+                  or folder_name).
+  - author: seo.author > site.default_author.
 
 빈 태그 정책:
   속성 값이 비어 있으면 (`<meta name="description" content="">` 같이) 태그
@@ -37,8 +54,9 @@ v0.5.4 잔존 기능:
     이므로 영향 없음 (Latin 단어 검사를 통과 못한다).
 """
 import re
+from typing import Optional
 
-from .models import RenderResult, SiteConfig
+from .models import SeoMeta, SiteConfig
 
 
 def _is_latin_word_char(c: str) -> bool:
@@ -75,45 +93,80 @@ def _present(val) -> bool:
     return val is not None and val != ''
 
 
-def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:
-    """글의 `<head>` 에 들어갈 메타 태그 HTML 과 full_title 을 반환.
+def build_meta_tags(
+    *,
+    title: str,
+    seo: SeoMeta,
+    site: SiteConfig,
+    canonical_path: str,
+    page_kind: str,
+    published: Optional[str] = None,
+    updated: Optional[str] = None,
+) -> tuple:
+    """페이지의 `<head>` 에 들어갈 메타 태그 HTML 과 full_title 을 반환.
 
     Returns (meta_tags_html, full_title_str).
 
-    v0.5.5: 본문 폴백 모두 제거. author-authored 값만 사용.
-      - description: m.seo.description (없거나 빈 문자열이면 태그 누락).
-      - og_description / twitter_description: 자기 필드 > description.
-      - og_image: m.seo.og_image > site.default_og_image (둘 다 비면 태그 누락).
-      - og_title: m.seo.og_title > full_title.
-      - twitter_image: m.seo.twitter_image > og_image.
-    """
-    m = article.meta
-    s = m.seo
+    v0.6.2: 글/홈/카테고리 공용. 페이지 종류별 차이는 og:type 디폴트 + article:*
+    time 태그 출력 여부 두 군데.
 
-    prefix = s.title_prefix if s.title_prefix is not None else site.default_title_prefix
-    suffix = s.title_suffix if s.title_suffix is not None else site.default_title_suffix
-    full_title = f'{prefix}{m.title}{suffix}'
+    인자 (모두 keyword-only):
+      title          — 페이지의 본문 title. 글=m.title / 홈=home_meta.title or
+                       site.name / 카테고리=cat.meta.title or cat.folder_name.
+                       `{prefix}{title}{suffix}` 로 감싸 full_title 을 만든다.
+      seo            — 페이지의 SeoMeta. title_prefix/suffix/description/og_*/
+                       twitter_*/author/canonical/og_type 등.
+      site           — SiteConfig. default_title_prefix/suffix, default_og_image,
+                       default_author, base_url, name 등의 폴백 소스.
+      canonical_path — canonical URL 의 경로 부분. 글='/{slug}/' / 홈='/' /
+                       카테고리='/{top}/{sub}/'. seo.canonical 이 있으면 무시
+                       되고 그 값이 우선.
+      page_kind      — 'article' | 'home' | 'category'. og:type 디폴트 결정에
+                       사용 (article→article, home/category→website). 다른 값이
+                       오면 'website' 로 폴백.
+      published      — 글의 date (ISO 8601). 홈/카테고리는 None. 값이 있을
+                       때만 article:published_time 태그 출력.
+      updated        — 글의 updated or date. 홈/카테고리는 None. 값이 있을
+                       때만 article:modified_time 태그 출력.
+    """
+    prefix = seo.title_prefix if seo.title_prefix is not None else site.default_title_prefix
+    suffix = seo.title_suffix if seo.title_suffix is not None else site.default_title_suffix
+    full_title = f'{prefix}{title}{suffix}'
 
     # description — 본문 폴백 없음. None/빈 문자열이면 태그 누락.
-    desc = s.description if _present(s.description) else None
+    desc = seo.description if _present(seo.description) else None
 
-    canonical = s.canonical if _present(s.canonical) else f'{site.base_url}/{m.slug}/'
+    canonical = (
+        seo.canonical if _present(seo.canonical)
+        else f'{site.base_url}{canonical_path}'
+    )
 
     # og_image — 본문 폴백 없음. seo.og_image > site.default_og_image.
-    og_image = s.og_image if _present(s.og_image) else None
+    og_image = seo.og_image if _present(seo.og_image) else None
     if og_image is None and _present(site.default_og_image):
         og_image = site.default_og_image
     if og_image and not og_image.startswith('http'):
         og_image = site.base_url + og_image
 
-    og_title = s.og_title if _present(s.og_title) else full_title
+    og_title = seo.og_title if _present(seo.og_title) else full_title
 
     # og_desc — seo.og_description > seo.description. 둘 다 부재면 태그 누락.
-    og_desc = s.og_description if _present(s.og_description) else desc
+    og_desc = seo.og_description if _present(seo.og_description) else desc
 
-    og_image_alt = s.og_image_alt if _present(s.og_image_alt) else m.title
+    og_image_alt = seo.og_image_alt if _present(seo.og_image_alt) else title
 
-    tw_image = s.twitter_image if _present(s.twitter_image) else og_image
+    tw_image = seo.twitter_image if _present(seo.twitter_image) else og_image
+
+    # og:type 디폴트는 page_kind 따라. seo.og_type 으로 명시 override 가능.
+    # v0.6.1 까지 SeoMeta.og_type 의 default 가 'article' 이었으나, 홈/카테고리에
+    # 그대로 적용되면 OGP 표준상 부정확. v0.6.2 부터 SeoMeta.og_type 은 None
+    # 이 디폴트이고 (= "author 가 명시하지 않음"), 빌더가 page_kind 로 결정.
+    if _present(seo.og_type):
+        og_type = seo.og_type
+    elif page_kind == 'article':
+        og_type = 'article'
+    else:
+        og_type = 'website'
 
     def e(val):
         return (val or '').replace('&', '&amp;').replace('"', '&quot;')
@@ -123,7 +176,7 @@ def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:
     if _present(desc):
         tags.append(f'<meta name="description" content="{e(desc)}">')
 
-    author = s.author if _present(s.author) else site.default_author
+    author = seo.author if _present(seo.author) else site.default_author
     if _present(author):
         tags.append(f'<meta name="author" content="{e(author)}">')
 
@@ -135,15 +188,17 @@ def build_meta_tags(article, rr: RenderResult, site: SiteConfig) -> tuple:
     if _present(og_image):
         tags.append(f'<meta property="og:image" content="{e(og_image)}">')
         tags.append(f'<meta property="og:image:alt" content="{e(og_image_alt)}">')
-    og_type = s.og_type or 'article'
     tags.append(f'<meta property="og:type" content="{e(og_type)}">')
     tags.append(f'<meta property="og:url" content="{e(canonical)}">')
     tags.append(f'<meta property="og:site_name" content="{e(site.name)}">')
-    tags.append(f'<meta property="article:published_time" content="{e(m.date)}">')
-    modified = m.updated or m.date
-    tags.append(f'<meta property="article:modified_time" content="{e(modified)}">')
+    # article:* 시간 태그는 글일 때만 (= published 인자가 전달됐을 때만).
+    # 홈/카테고리는 두 인자 모두 None 으로 호출되어 자동 누락.
+    if _present(published):
+        tags.append(f'<meta property="article:published_time" content="{e(published)}">')
+    if _present(updated):
+        tags.append(f'<meta property="article:modified_time" content="{e(updated)}">')
 
-    tw_card = s.twitter_card or 'summary_large_image'
+    tw_card = seo.twitter_card or 'summary_large_image'
     tags.append(f'<meta name="twitter:card" content="{e(tw_card)}">')
     tags.append(f'<meta name="twitter:title" content="{e(og_title)}">')
     if _present(og_desc):

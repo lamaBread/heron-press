@@ -136,7 +136,12 @@ class SeoMeta:
     og_description: Optional[str] = None
     og_image: Optional[str] = None
     og_image_alt: Optional[str] = None
-    og_type: str = 'article'
+    # v0.6.2: 디폴트를 'article' → None 으로. 글/홈/카테고리가 같은 SeoMeta
+    # 모델을 쓰므로, og_type 디폴트는 페이지 종류별로 다른 게 자연스럽다
+    # (글=article, 홈/카테고리=website). 빌더가 build_meta_tags 호출 시
+    # page_kind 인자로 그 분기를 처리하고, author 가 seo.og_type 을 직접
+    # 명시하면 그 값이 우선.
+    og_type: Optional[str] = None
     twitter_card: str = 'summary_large_image'
     twitter_image: Optional[str] = None
 

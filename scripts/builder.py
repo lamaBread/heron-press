@@ -1,5 +1,30 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.6.2 변경 — 홈/카테고리 페이지 SEO 메타 태그 출력:
+  - v0.5.4 의 한계 표 "홈/카테고리 페이지의 SEO 메타 태그 출력 (description /
+    og_* / twitter_*)" 항목 해소. `_build_home` 과 `_build_category_page` 가
+    `build_meta_tags()` 를 호출해 글과 동일한 메타 태그 묶음을 생성하고,
+    home.html / category.html 의 새 `{{META_TAGS}}` placeholder 자리에
+    렌더한다. 글 페이지 산출물 (dist/{slug}/index.html) 은 v0.6.1 과 바이트
+    동일 (회귀 가드).
+  - **`build_meta_tags()` 시그니처 일반화** — keyword-only 인자 `title`, `seo`,
+    `site`, `canonical_path`, `page_kind` (+옵션 `published` / `updated`) 로
+    변경. 글의 `_render_articles` 도 새 시그니처로 호출 (`page_kind='article'`,
+    `published=m.date`, `updated=m.updated or m.date`). 페이지 종류별 차이는
+    seo.py 안에 두 군데 — og:type 디폴트와 article:* 시간 태그의 출력 여부.
+  - **`SeoMeta.og_type` 디폴트 변경** — `'article'` → `None`. 글/홈/카테고리가
+    같은 SeoMeta 모델을 쓰기 때문에 페이지 종류 별 디폴트가 필요. None 이면
+    `build_meta_tags` 가 page_kind 로 결정 (글=article, 홈/카테고리=website).
+  - **description 필수화 정책의 홈/카테고리 확장** — 새 헬퍼
+    `_check_page_description(seo, page_kind, location, slug='')` 가 글과
+    동일한 누락/빈 문자열 검사를 페이지 종류 별로 일반화. issue 의 scope 가
+    'home' / 'category' / 'article' 셋 중 하나.
+  - `_wrap_page_title` 의 사용처가 404 / search 두 곳으로 축소 (글/홈/카테고리는
+    모두 build_meta_tags 의 full_title 을 직접 사용 — `<title>` 폴백 체인이
+    한 함수로 통일).
+  - 색인 정책 변경 없음 — 홈 / 톱레벨 카테고리 / 서브카테고리 모두 색인 허용
+    그대로. robots meta 출력 안 함. sitemap.xml 도 v0.4.4 ~ v0.6.1 정책 그대로.
+
 v0.6.1 변경 — 문서·주석·산출물 가독성 안정화 3회차 (코드 동작 변경 0):
   - templates/search.php 헤더 주석의 placeholder 누수 결함 해소. `(d) {{LANG}}
     / {{PAGE_TITLE}} / ...` 같이 안내 자체에 placeholder 토큰을 박아 두면
@@ -1199,6 +1224,12 @@ class Builder:
 
         seo_override 가 있고 title_prefix / title_suffix 가 None 이 아니면
         site 디폴트 대신 그 값을 사용. 글의 build_meta_tags 와 동일한 규칙.
+
+        v0.6.2 변경: 글/홈/카테고리는 모두 build_meta_tags 가 반환하는
+        full_title 을 직접 사용한다. 이 헬퍼는 meta.yaml 이 없는 시스템
+        페이지 (404 / search) 에서만 쓰인다 — 그 두 페이지는 description /
+        og_* 등의 메타 태그를 출력하지 않으므로 build_meta_tags 를 호출하지
+        않고 prefix/suffix 폴백 체인만 적용하면 충분.
         """
         prefix = self.site.default_title_prefix
         suffix = self.site.default_title_suffix
@@ -1208,6 +1239,43 @@ class Builder:
             if seo_override.title_suffix is not None:
                 suffix = seo_override.title_suffix
         return f'{prefix}{body}{suffix}'
+
+    def _check_page_description(
+        self,
+        *,
+        seo: SeoMeta,
+        page_kind: str,
+        location,
+        slug: str = '',
+    ):
+        """페이지의 seo.description 누락/빈 문자열 검사 (v0.6.2).
+
+        글의 _render_articles 에서 적용하던 description 필수화 정책을 홈/
+        카테고리 페이지에도 동일하게 적용. 누락(None) 또는 빈 문자열('') 이면
+        BuildReport 의 issue 에 기록 (빌드는 통과 + meta 태그 누락).
+
+        page_kind 는 issue scope 로 그대로 사용된다 ('home' / 'category').
+        location 은 그 페이지의 meta.yaml 경로 (홈은 Articles/meta.yaml,
+        카테고리는 Articles/<path>/meta.yaml).
+        """
+        desc_val = seo.description
+        if desc_val is None:
+            issue(
+                page_kind, slug,
+                "meta.yaml: 'seo.description' 필드가 없습니다 "
+                "— 외부 노출용 한 줄 설명을 작성해주세요. "
+                "(description / og:description / twitter:description 메타 "
+                "태그가 누락됩니다.)",
+                location,
+            )
+        elif desc_val == '':
+            issue(
+                page_kind, slug,
+                "meta.yaml: 'seo.description' 이 빈 문자열입니다 "
+                "— 외부 노출용 한 줄 설명을 작성해주세요. "
+                "(description 메타 태그가 누락됩니다.)",
+                location,
+            )
 
     def _top_level_entries(self) -> list:
         """Articles/ 직속 항목을 [(folder_name, slug, is_article), ...] 로 반환.
@@ -1377,7 +1445,16 @@ class Builder:
                                 article.source_dir,
                             )
 
-            meta_tags, full_title = build_meta_tags(article, rr, self.site)
+            # v0.6.2: build_meta_tags 시그니처 일반화 — 글/홈/카테고리 공용.
+            meta_tags, full_title = build_meta_tags(
+                title=m.title,
+                seo=m.seo,
+                site=self.site,
+                canonical_path=f'/{m.slug}/',
+                page_kind='article',
+                published=m.date,
+                updated=m.updated or m.date,
+            )
 
             crumb_parts = []
             top_cat = self._top_category_for_article(article)
@@ -1814,11 +1891,32 @@ class Builder:
             crumb_parts.append((cat.folder_name, None))
         nav_tracker = self._nav_tracker_for_path(crumb_parts)
 
-        # v0.5.4: 카테고리 <title> 폴백 체인.
+        # v0.6.2: 카테고리에도 글과 동일한 description 필수화 정책.
+        # 누락/빈 문자열이면 BuildReport 의 issue 에 기록 (빌드는 통과).
+        cat_meta_path = (
+            self.articles_dir.joinpath(*cat.path) / 'meta.yaml'
+        )
+        self._check_page_description(
+            seo=cat.meta.seo,
+            page_kind='category',
+            location=cat_meta_path,
+            slug='/'.join(cat.slug_path),
+        )
+
+        # v0.5.4 → v0.6.2: 카테고리 페이지의 SEO 메타 태그 출력.
         # 본문 = cat.meta.title (override) > cat.folder_name (폴백).
         # 양옆 = cat.meta.seo.title_prefix/suffix > site.default_title_prefix/suffix.
+        # build_meta_tags 가 두 폴백 체인을 적용하고 description / og_* /
+        # twitter_* 도 함께 만든다 (글과 동일 — v0.5.4 한계 표 해소).
         title_body = cat.meta.title or cat.folder_name
-        page_title = self._wrap_page_title(title_body, cat.meta.seo)
+        meta_tags, full_title = build_meta_tags(
+            title=title_body,
+            seo=cat.meta.seo,
+            site=self.site,
+            canonical_path=url_prefix,
+            page_kind='category',
+        )
+        page_title = full_title
         page_lang = cat.meta.lang or self.site.lang
 
         # 검색 스코프: 톱레벨이면 자기 slug, 서브이면 톱레벨 slug 로 한정.
@@ -1827,6 +1925,7 @@ class Builder:
 
         vars_ = {
             'LANG': escape_html(page_lang),
+            'META_TAGS': meta_tags,
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_TRACKER': nav_tracker,
@@ -1889,11 +1988,29 @@ class Builder:
 
         # v0.4.6: 메인페이지 lang — Articles/meta.yaml 의 lang 우선, 없으면 site.lang.
         page_lang = self.home_meta.lang or self.site.lang
-        # v0.5.4: 홈 <title> 폴백 체인.
+
+        # v0.6.2: 홈에도 글과 동일한 description 필수화 정책.
+        # 누락/빈 문자열이면 BuildReport 의 issue 에 기록 (빌드는 통과).
+        self._check_page_description(
+            seo=self.home_meta.seo,
+            page_kind='home',
+            location=self.articles_dir / 'meta.yaml',
+        )
+
+        # v0.5.4 → v0.6.2: 홈 페이지의 SEO 메타 태그 출력.
         # 본문 = home_meta.title (override) > site.name (폴백).
         # 양옆 = home_meta.seo.title_prefix/suffix > site.default_title_prefix/suffix.
+        # build_meta_tags 가 두 폴백 체인을 적용하고 description / og_* /
+        # twitter_* 도 함께 만든다 (글과 동일 — v0.5.4 한계 표 해소).
         title_body = self.home_meta.title or self.site.name
-        page_title = self._wrap_page_title(title_body, self.home_meta.seo)
+        meta_tags, full_title = build_meta_tags(
+            title=title_body,
+            seo=self.home_meta.seo,
+            site=self.site,
+            canonical_path='/',
+            page_kind='home',
+        )
+        page_title = full_title
         pagination_nav = _pagination_nav_html(
             'home-recent', len(home_articles), per_page,
         )
@@ -1902,6 +2019,7 @@ class Builder:
 
         vars_ = {
             'LANG': escape_html(page_lang),
+            'META_TAGS': meta_tags,
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),

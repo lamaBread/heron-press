@@ -1,4 +1,4 @@
-"""siheonlee.com v0.6.1 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v0.6.2 — 빌더 내부 모듈 묶음.
 
 루트의 build.py 가 이 패키지를 import 한다.
 모듈:
@@ -21,4 +21,4 @@ __version__:
   버전을 표기하는 모든 산출물이 이 값을 참조한다.
 """
 
-__version__ = '0.6.1'
+__version__ = '0.6.2'

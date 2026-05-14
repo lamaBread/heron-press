@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.6.1 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.6.2 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다. 사이트 전역 버전 문자열은
@@ -9,13 +9,50 @@ source of truth — 피드 generator 등이 이 값을 참조.
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
-    python -m unittest discover -s tests   # 단위 테스트 (v0.6.1: 179개)
+    python -m unittest discover -s tests   # 단위 테스트 (v0.6.2: 187개)
     python tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
-빌드 의존성 (v0.6.1):
+빌드 의존성 (v0.6.2):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.6.2 변경 사항 (vs v0.6.1) — 홈/카테고리 페이지 SEO 메타 태그 출력:
+  - v0.5.4 의 한계 표 "홈/카테고리 페이지의 SEO 메타 태그 출력 (description /
+    og_* / twitter_*)" 항목 해소. 글에만 출력되던 description / og_title /
+    og_description / og_image / og:image:alt / og:type / og:url / og:site_name /
+    twitter:card / twitter:title / twitter:description / twitter:image / link
+    canonical 메타 태그가 홈 / 톱레벨 카테고리 / 서브카테고리 페이지에도
+    동일한 폴백 규칙으로 출력된다.
+  - **`build_meta_tags()` 시그니처 일반화** — 글 전용 `article` 객체 대신
+    `title`, `seo`, `site`, `canonical_path`, `page_kind`, `published`,
+    `updated` 키워드 인자. 글/홈/카테고리 세 호출자 모두 같은 함수를 사용.
+    `og:type` 디폴트는 page_kind 에 따라 자동 결정 (글=article, 홈/카테고리
+    =website — OGP 표준 권장). `article:published_time` / `modified_time` 은
+    published 인자가 전달됐을 때만 (= 글일 때만) 출력.
+  - **`SeoMeta.og_type` 디폴트 변경** — `'article'` → `None`. 글/홈/카테고리가
+    같은 SeoMeta 모델을 쓰기 때문에 디폴트는 페이지 종류 별로 달라야
+    자연스럽다. author 가 meta.yaml 의 `seo.og_type` 으로 명시 override 하면
+    그 값이 우선. 글 페이지의 dist 산출물은 변경 0 (None → page_kind='article'
+    → 'article').
+  - **description 필수화 정책의 홈/카테고리 확장** — v0.5.5 의 본문 ↔
+    메타데이터 분리 원칙에 따라 글에만 적용되던 `seo.description` 누락/빈
+    문자열 issue 가 홈/카테고리에도 동일 적용. `Articles/meta.yaml` /
+    `Articles/<카테고리>/meta.yaml` 에 description 이 없거나 빈 문자열이면
+    BuildReport 의 issue 에 기록 (빌드는 통과).
+  - **색인 정책 유지** — 홈 / 톱레벨 카테고리 / 서브카테고리 모두 *색인
+    허용* 그대로. robots meta 는 글 단위 noindex 와 search.php 외에는 출력
+    되지 않으며, sitemap.xml 도 홈/카테고리 URL 을 포함하는 v0.4.4 ~ v0.6.1
+    정책 그대로.
+  - 템플릿: `templates/home.html` + `templates/category.html` 의 `<head>` 에
+    `{{META_TAGS}}` placeholder 추가 (article.html 과 같은 위치).
+  - 빌더: `_render_articles` / `_build_home` / `_build_category_page` 세 곳이
+    같은 `build_meta_tags` 호출 패턴으로 정돈. 새 헬퍼 `_check_page_description`
+    이 description 누락 검사를 페이지 종류 별로 일반화.
+  - 단위 테스트: 179 → 187 (test_seo.py 의 홈/카테고리 메타 태그 케이스 +
+    og:type 페이지 종류별 디폴트 + test_builder.py 의 메타 태그 출력 확인).
+  - 글 페이지 dist 산출물은 v0.6.1 과 *바이트 동일* (회귀 가드). 새 메타
+    태그가 추가되는 곳은 홈 / 톱레벨 카테고리 / 서브카테고리 인덱스 페이지뿐.
 
 v0.6.1 변경 사항 (vs v0.6.0) — 문서·주석·산출물 가독성 안정화 3회차:
   - 콘텐츠 측 meta.yaml 의 폐기된 동작 안내 정리. Articles/Blog/Hello

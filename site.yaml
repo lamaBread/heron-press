@@ -1,316 +1,86 @@
-# siheonlee.com — 사이트 전역 설정 (v0.6.1)
+# siheonlee.com — 사이트 전역 설정.
 #
-# v0.6.1 변경 요약 — 문서·주석·산출물 가독성 안정화 3회차 (site.yaml 직접 영향 없음):
-#   - 콘텐츠 측 meta.yaml + 카테고리 meta.yaml + scripts/models.py 의 노후
-#     주석들이 v0.5.3 / v0.5.5 / v0.6.0 변경 사실과 어긋나던 부분 일괄 정리.
-#     예: 글의 tags 가 "미사용" 으로 굳어 있던 주석을 BM25 색인 합류 사실로
-#     갱신, layout=gallery 가 "미구현" 으로 굳어 있던 자매 카테고리 메타를
-#     정정.
-#   - templates/search_tokenize.php 의 require_once 안내가 v0.6.0 인라인
-#     흐름에 어긋나던 부분 갱신. templates/search.php 헤더 주석의 placeholder
-#     누수 결함 해소 — 빌더의 두 겹 중괄호 치환이 주석 안에서도 동작해 dist
-#     의 헤더가 자기 결과를 인용하는 메타-광경을 피하도록 안내 줄을 plain
-#     변수명으로 표기.
-#   - README §12 의 마크다운 파이프라인 도식이 v0.5.5 폐기된 first_paragraph
-#     / first_image 를 여전히 표시 + §13 의 토크나이저 require_once 흐름 +
-#     파일 트리에서 search_tokenize.php 의 인라인 사실 누락 등 본문 절의 잔존
-#     drift 일괄 정정 (§18 release notes 의 v0.x.x 검증 노트는 역사 기록).
-#   - **빌더 로직·산출물 동작 변경 0**. dist/search.php 의 헤더 주석 텍스트만
-#     placeholder 누수 정정 차원에서 달라짐.
-#
-# v0.6.0 변경 요약 — 검색 인덱스 재설계 (site.yaml 직접 영향 없음):
-#   - 검색 인덱스가 메타데이터 3-필드 (title / description / tags) 만 색인하는
-#     방식으로 바뀌었고, 산출물도 search-index.json 폐기 + dist/search.php 한
-#     파일 인라인으로 전환됨. **이 site.yaml 의 키나 값에는 영향 없음.**
-#   - 사이트 버전 문자열의 단일 source of truth 는 scripts/__init__.py 의
-#     `__version__`. 피드 generator 문자열 등이 이 값을 참조 — site.yaml 에
-#     별도 버전 필드는 없다.
-#
-# v0.5.5 변경 요약 — 본문 ↔ 메타데이터 분리 + 빌드 리포트 일원화:
-#   - **`seo.description` 이 필수 필드로 격상**. 비어 있으면 `description` /
-#     `og:description` / `twitter:description` / 피드 summary / 갤러리 description
-#     이 모두 누락된 채 산출물이 만들어지고, 빌드 리포트에 보완 필요 항목으로
-#     기록됨. 빌드는 끝까지 진행. **site.yaml 의 `description_truncate` 는**
-#     **이제 본문 폴백용이 아니라** 피드 summary / 갤러리 description 의 한도로만
-#     쓰임 (아래 해당 키 주석 참조).
-#   - og_image 의 본문 폴백 제거. `seo.og_image` > `site.default_og_image`.
-#     둘 다 부재하면 og:image 태그 자체를 출력하지 않음.
-#   - meta.yaml 필드 부족/형식 오류로 빌드를 abort 하던 동작 폐기. 글 단위
-#     issue 로 기록하고 빌드는 계속. 시스템 결함 (템플릿 누락 등) 만 abort.
-#
-# v0.5.4 변경 요약 — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + nav_priority:
-#   - 글에만 적용되던 `<title>` 폴백 체인 (`{prefix}{title}{suffix}`) 이
-#     홈/카테고리/404/search 에도 동일하게 적용됨.
-#       * 홈     — Articles/meta.yaml 의 `title` (없으면 site.name) +
-#                  `seo.title_prefix` / `seo.title_suffix` 가 site 디폴트
-#                  를 오버라이드.
-#       * 카테고리 — `Articles/<카테고리>/meta.yaml` 의 `title` (없으면
-#                    folder_name) + 같은 seo 오버라이드.
-#       * 404 / search — meta.yaml 이 없는 시스템 페이지. site.yaml 의
-#                        `error_404_title` / `search_title` 필드로만 설정 (아래
-#                        참조). default_title_prefix / suffix 는 동일하게 적용.
-#   - description_truncate 가 영문 단어 한가운데를 자르지 않음. 절단 지점이
-#     ASCII 영문/숫자/하이픈/언더스코어 시퀀스 한가운데이면 직전 공백까지
-#     backup. 한국어 등 CJK 글자는 글자 단위가 의미 단위라 그대로 절단 가능
-#     (영향 없음). `seo.description` 폴백 + gallery / feed 의 summary 모두 같은
-#     함수 (`seo.truncate_description`) 를 거치므로 일관적.
-#   - 톱레벨 nav 항목 정렬에 `nav_priority` 도입. ArticleMeta + CategoryMeta
-#     양쪽에 정수 필드 (기본 0). 값이 클수록 먼저, 같은 값끼리는 폴더명
-#     알파벳 순. v0.4.6 까지의 'About 최상단 하드코딩' 폐기 — About 을 nav 상단
-#     으로 유지하려면 Articles/About/meta.yaml 에 `nav_priority: <큰 값>` 명시.
-#     `priority` (부모 카테고리 페이지의 sibling section 정렬) 와는 별개 축.
-#
-# v0.5.3 변경 요약 — `tags` 필드 + `layout: gallery` + RSS/Atom 피드:
-#   - 글 meta.yaml 에 `tags` 필드 (리스트, 선택). 작성자가 직접 적는 주제어.
-#     site.yaml 변경 의무 없음 — 글 측에만 영향.
-#   - 카테고리/홈 meta.yaml 의 `layout: gallery` 가 새로 구현됨. 그 카테고리
-#     색인 페이지가 이미지 타일 그리드로 렌더. 썸네일은 seo.og_image > 본문
-#     첫 이미지 > 그라데이션 플레이스홀더. site.yaml 변경 의무 없음.
-#   - dist/feed.atom (Atom 1.0) + dist/feed.rss (RSS 2.0) 자동 생성. 두 파일이
-#     같은 entry 목록을 공유 (scripts/feed.py 의 추상 모델). site.yaml 의 변경
-#     의무 없음 — site.name / base_url / default_author / lang 가 그대로 사용됨.
-#     비활성화는 builder.build() 의 `_build_feeds()` 호출 주석 처리.
-#
-# v0.5.2 변경 요약 — 자산 경로 일원화 (글 자산은 글 폴더 안으로):
-#   - 글 자산이 옛 `dist/src/{slug}/` 대신 `dist/{slug}/` (= 글의 index.html 과
-#     같은 폴더) 에 떨어진다. URL 도 `/src/{slug}/foo.jpg` → `/{slug}/foo.jpg`.
-#     글 폴더 안에서 자료를 둔다는 글 소스 측 원칙과 dist 출력 구조가 일관됨.
-#   - `reserved_slugs` 에서 `src` 항목 제거 (이제 충돌 가능 디렉터리가 아님).
-#     `assets`, `search` 두 항목만 남음.
-#   - `assets/` 의 역할이 README §3 / §4-5 에 "사이트 어디서든 로드 가능한
-#     전역 자산 보관 장소" 로 명시화 (글 단위 자산은 글 폴더 안, 사이트 공통
-#     자산은 assets/ 라는 이분법).
-#   - 옛 빌드의 `dist/src/` 트리는 `_prune_orphans` 가 다음 빌드에서 통째로
-#     정리. 재현성 확보가 필요하면 `--clean` 권장.
-#   - 비-이미지·검색·sitemap·robots·redirect 산출물은 v0.5.1 과 동등 (자산
-#     URL 만 다름).
-#
-# v0.5.1 변경 요약 — 빌드 시 이미지 자동 최적화 + lazy loading 도입:
-#   - 새 외부 의존성: Pillow (PIL fork). v0.4.1 의 "빌드 PHP 의존 제거"
-#     와 같은 보수적 의존성 정책에도 불구하고, WebP 인코딩 + 정확한
-#     리샘플링은 stdlib 만으로 현실적으로 구현 불가. WebP / responsive
-#     srcset 부재는 Google PageSpeed Insights 및 모바일 검색 랭킹에
-#     직접 감점이라 "SEO 직접 영향" 예외로 허용.
-#   - 새 설정 블록 `images:` (이 파일의 아래쪽). 기본값으로 켜져 있음.
-#     enabled=false 로 두면 Pillow 가 설치되어 있지 않아도 빌드가 통과 —
-#     v0.5.0 과 바이트 동일 동작.
-#   - raster 이미지 (.jpg .jpeg .png .gif) 는 원본 대신 `{stem}-{w}.webp`
-#     변종으로 dist 에 떨어짐. HTML 의 <img> 는 후처리에서 WebP src +
-#     srcset (다중 해상도) + sizes + loading="lazy" 로 치환.
-#   - SVG / 이미 webp 인 파일은 그대로 복사 + loading="lazy" 부착만.
-#   - 외부 URL (http://, https://, //) 의 <img> 도 loading="lazy" 부착만.
-#   - 빌드 파이프라인 단계 순서 변경 — asset 동기화 단계 ([5], [6]) 가
-#     article render ([7]) 보다 먼저. 자세한 의미는 scripts/builder.py
-#     의 모듈 docstring 참조.
-#
-# v0.5.0 변경 요약 — BM25 기반 검색 시스템으로 전환:
-#   - 검색 인덱스 포맷 v3 (필드별 df / dl / avgdl). scripts/search.py 가
-#     Okapi BM25 인덱스를 빌드.
-#   - 런타임 점수 계산이 templates/search_bm25.php (신설) 로 분리. 매직
-#     ×5 제목 부스트, 단순 TF 합산, 흔한 한글 bigram 의 과대 영향, 긴
-#     글의 부당한 가산점 등 v0.4.x 결함 일괄 해소.
-#   - 추가 신호: phrase 부스트 (원본 쿼리 substring 매치 시 곱셈),
-#     매치 밀도 기반 스니펫 (토큰 매치가 밀집된 80자 윈도우).
-#   - tests/ 디렉터리 신설 — BM25 핵심 회귀 차단 (v0.4.2 로드맵 B-1).
-# site.yaml 의 키/값은 v0.4.7 과 동일 (BM25 하이퍼파라미터는 인덱스 안에).
-#
-# v0.4.7 변경 요약: 문서·코드 정합성 회복만 (회귀 0). site.yaml 의 키/값은
-# v0.4.6 과 바이트 단위로 동일. 변경된 곳은 README §1·§3·§11·§17·§18,
-# build.py / scripts/ docstring 의 버전 표기, builder._build_home 의 dead
-# branch 정리뿐.
-#
-# 이 파일에는 "진짜 전역 설정" 만 둡니다 — 사이트 메타(도메인/이름/저작권),
-# 모든 페이지에 공통 적용되는 폴백 (lang, default_title_prefix, default_og_image
-# 등), 카테고리류의 디폴트 (category_per_page / category_preview_per_page).
-#
-# 각 페이지 고유 설정은 그 페이지의 meta.yaml 에서 오버라이드:
-#   - 메인페이지 (홈) ........... Articles/meta.yaml
-#   - 카테고리 인덱스 페이지 .... Articles/<카테고리경로>/meta.yaml
-#   - 글 페이지 ................. Articles/<카테고리경로>/<글경로>/meta.yaml
-#
-# v0.4.6 변경 요약:
-#   - **홈 전용 설정 일원화**: 옛 `home_per_page` / `home_excludes_categories`
-#     / `home_sort` 를 site.yaml 에서 제거. `home_per_page` 와
-#     `home_excludes_categories` 는 각각 `Articles/meta.yaml` 의 `per_page` /
-#     `excludes_categories` 로 이전. `home_sort` 는 빌더가 사용한 적 없는
-#     dead field 였으므로 폐기. site.yaml 은 이제 페이지 한 종(홈)에 한정된
-#     설정을 가지지 않음 — "전역 설정" 의 의미를 엄격히 지킴.
-#   - 카테고리/홈 meta.yaml 에 `priority` 필드 (정수, 값이 클수록 먼저).
-#   - SSR 첫 페이지 정적화 — 페이지네이션 첫 진입 시 FOUC 제거.
-#     (assets/pagination.js 와 builder 의 _listup_items_html 협업)
-#   - 페이지네이션 nav 상/하단 여백 축소 (assets/common_template.css).
-#
-# v0.4.5 변경 요약:
-#   - 다국어 지원: `lang:` 전역 디폴트 도입 (기본 ko). 글 meta.yaml /
-#     카테고리 meta.yaml 의 `lang:` 으로 페이지마다 오버라이드 가능.
-#     템플릿의 `<html lang='...'>` 가 더 이상 'ko' 로 하드코딩되어 있지 않음.
-#   - 페이지네이션: 메인페이지 Recent / 카테고리 인덱스 (대분류·소분류) /
-#     상위 인덱스의 서브카테고리 section 마다 독립적인 페이지 컨트롤.
-#     JS 기반 DOM hide/show — 모든 항목은 SSR 되므로 SEO 영향 없음.
-#     `home_per_page` / `category_per_page` / `category_preview_per_page` 가
-#     사이트 전역 디폴트, 카테고리 폴더의 meta.yaml 로 카테고리별 오버라이드.
-#   - 카테고리 meta.yaml 신설: per_page / preview_per_page / layout / styles /
-#     lang. `Articles/<카테고리경로>/meta.yaml` 에 두면 그 카테고리에만 적용.
-#   - 서브카테고리 인덱스 페이지 신설: 톱레벨 외에 서브카테고리도 자기
-#     자신의 인덱스 페이지를 갖는다. URL = `/{top-slug}/{sub-slug}/`.
-#     v0.4.4 까지는 원본 lama.pe.kr quirk 때문에 톱레벨만 인덱스가 있었음.
-#   - sitemap.xml 에 서브카테고리 인덱스 URL 도 포함.
-#
-# v0.4.4 변경 요약:
-#   - sitemap.xml 자동 생성. scripts/sitemap.py 가 글·톱레벨 카테고리·홈
-#     URL 을 sitemaps.org 0.9 스키마로 빌드. meta.yaml 의 `noindex: true`
-#     글과 서브카테고리 (인덱스 페이지 없음) 는 제외. lastmod 는
-#     글의 `updated` 우선, 없으면 `date`.
-#   - robots.txt 의 `Sitemap:` 디렉티브 주석 해제.
-#
-# v0.4.3 변경 요약:
-#   - 글 페이지의 <title> 이 이제 글의 title 을 정상 사용
-#     (`{seo.title_prefix}{title}{seo.title_suffix}`). v0.3.x ~ v0.4.2 까지는
-#     항상 site.name 으로 덮어쓰던 quirk 가 있었음.
-#   - 마크다운 본문에 섹션 마커 문법 (===제목=== / ======).
-#   - meta.yaml 의 평면 seo_* 필드 → `seo:` 하위 블록으로 그룹화.
-#     site.yaml 의 default_title_prefix / default_title_suffix 는 그대로 유지
-#     (글에 seo.title_prefix / seo.title_suffix 가 없을 때 폴백).
-#
-# v0.4.2 변경 요약:
-#   - 빌드 검증 강화: 글 slug ↔ 톱레벨 카테고리 slug 충돌이 빌드 초입에서 차단.
-#   - 레거시 redirect.php 가 도메인 하드코딩 대신 이 파일의 base_url 을 사용.
-#   - search.php 결과 페이지에 noindex,follow 메타 태그.
-#   - imgBox/imgSlideBox 인자 파싱이 nested parens 와 quoted `)` 정상 처리.
-#   - article.html 의 {{ROBOTS_META}} placeholder 가 들여쓰기와 무관.
-#
-# v0.4.1 변경 요약:
-#   - 마크다운 빌드용 PHP CLI 의존성 제거. Parsedown.php 를 scripts/parsedown.py
-#     로 완전히 옮겨 빌드 머신에 PHP 가 없어도 마크다운이 동작.
-#   - site.yaml 의 `markdown_parser:` 설정 폐기 (단일 파서).
-#   - parsers/ 디렉터리 삭제.
-#
-# v0.4.0 변경 요약:
-#   - 시스템 캐치프레이즈: SSG → PHP 기반 경량 웹 사이트 생성기.
-#   - 전역 noindex 정책 폐기. 글마다 meta.yaml 의 `noindex: true` 로 개별 차단.
-#   - 검색 토크나이저: 1글자 한국어 인덱싱 제외. 본문 길이 절단 폐지.
-#   - 카테고리 폴더의 _meta.yaml 슬러그 오버라이드 제거 (한국어 폴더명은
-#     자동으로 hex 코드포인트 slug 로 변환 + 워닝).
-#   - reserved_slugs 청소: 미사용 토큰 (c, p, api, file, status, blog, project,
-#     research, study) 일괄 제거.
-#   - meta.yaml 의 seo_keywords 필드 폐기 (검색엔진 가중치 없음).
+# 페이지 단위 오버라이드:
+#   - 메인페이지 (홈)         — Articles/meta.yaml
+#   - 카테고리 인덱스 페이지   — Articles/<카테고리경로>/meta.yaml
+#   - 글 페이지                — Articles/<카테고리경로>/<글경로>/meta.yaml
 
-# 도메인
+
+# 사이트 도메인 / DNS 호스트명 (예: siheonlee.com)
 domain: siheonlee.com
+# 사이트 base URL / scheme + host (canonical / sitemap / 피드에 사용)
 base_url: https://siheonlee.com
 
-# 사이트 정보
-# name      — og:site_name 과 카테고리/홈/404/search 페이지의 <title>.
-#              글 페이지의 <title> 은 v0.4.3 부터 글의 title 사용.
-# main_title — 모든 페이지 헤더 좌측 상단 큰 글씨. 원본 == "Lama".
+# 사이트 이름 / og:site_name 과 홈/카테고리/시스템 페이지 <title> 기본값
 name: Lama
+# 헤더 좌상단 큰 글씨 / 임의 문자열
 main_title: Lama
+# 기본 저자 / 임의 문자열 (글 seo.author 비우면 폴백)
 default_author: 이시헌
+# 기본 og:image / site-relative 또는 절대 URL (글/홈/카테고리 seo.og_image 비우면 폴백)
 default_og_image: /assets/default-og.png
 
-# v0.4.5: 다국어 — 모든 페이지의 <html lang> 디폴트.
-# 글 meta.yaml 의 `lang: en` 등이 있으면 그 글에 한해 오버라이드.
-# 카테고리 meta.yaml 의 `lang:` 이 있으면 그 카테고리 인덱스 페이지에 한해 오버라이드.
+# 모든 페이지 <html lang> 디폴트 / BCP 47 코드 (예: ko / en / ja)
 lang: ko
 
-# 모든 페이지 <title> 의 기본 prefix/suffix (v0.4.3 부터 글, v0.5.4 부터
-# 홈/카테고리/404/search 도 포함). `<title>` 은 `{prefix}{title}{suffix}` 형태.
-# 페이지 단위 override:
-#   - 글: meta.yaml 의 `seo.title_prefix` / `seo.title_suffix`
-#   - 홈: Articles/meta.yaml 의 같은 필드
-#   - 카테고리: 카테고리 meta.yaml 의 같은 필드
-#   - 404 / search: 페이지 단위 override 불가능 — site.yaml 한 군데에서만
+# 모든 페이지 <title> 기본 prefix — `{prefix}{title}{suffix}` / 임의 문자열
 default_title_prefix: ""
+# 모든 페이지 <title> 기본 suffix / 임의 문자열
 default_title_suffix: ""
 
-# v0.5.4: 시스템 페이지 (404 / search) 의 <title> 본문 텍스트.
-# 양옆은 위의 default_title_prefix / default_title_suffix 로 감싸진다 — 글·홈·
-# 카테고리와 동일 체인. 두 페이지는 meta.yaml 을 두지 않으므로 (콘텐츠 페이지가
-# 아니라 시스템 페이지) 페이지 단위 override 가 없고 site.yaml 에서만 설정.
-# 비우면 각각 "Not Found" / "Search" 디폴트.
+# 404 페이지 <title> 본문 / 임의 문자열
 error_404_title: Not Found
+# 검색 결과 페이지 <title> 본문 / 임의 문자열
 search_title: Search
 
-# 저작권 (원본 푸터: "Copyright© 2025. 이시헌. All rights reserved.")
+# 저작권자 표시 / 임의 문자열 (푸터에 사용)
 copyright_holder: 이시헌
+# 저작권 시작 연도 / 정수 (예: 2025)
 copyright_year_start: 2025
 
-# slug 예약어 (글 slug 로 사용 금지)
-# v0.4.0 에서 정리: 실제 디렉터리/엔드포인트 충돌 가능성이 있는 항목만 유지.
-# About 페이지는 slug=about 으로 사용하므로 reserved 에서 제외.
-# v0.5.2: 글 자산이 `/{slug}/...` 로 옮겨가면서 `src` 는 더 이상 충돌 가능
-#         디렉터리가 아니라 reserved 에서 제거. `assets`, `search` 만 남음.
+# 글 slug 로 사용 금지 / 문자열 리스트
 reserved_slugs:
-  - assets    # /assets/    — 사이트 공용 자원 디렉터리 (전역)
+  - assets    # /assets/    — 사이트 공용 자원 디렉터리
   - search    # /search.php — 검색 엔드포인트
 
-# 빌드 옵션
+# 언더스코어 폴더 (`_inactive` 등) 참조 시 워닝 / true / false
 warn_on_underscore_ref: true
+# meta.yaml 에 지정된 자산이 누락되었을 때 워닝 / true / false
 warn_on_missing_asset: true
+# updated 가 date 보다 과거일 때 워닝 / true / false
 warn_on_stale_updated: true
 
-# 카테고리 페이지네이션 디폴트 (v0.4.5; v0.4.6 에서 홈 설정 분리됨).
-#   category_per_page         — 카테고리 인덱스 페이지가 *자기 자신* 의 글
-#                                목록을 표시할 때 한 페이지 글 개수.
-#   category_preview_per_page — 카테고리가 *상위 카테고리* 의 인덱스 페이지에
-#                                section 으로 임베드될 때 한 페이지 글 개수.
-# 카테고리별 오버라이드는 그 카테고리 폴더의 meta.yaml. 소분류의 `per_page` 는
-# 그 소분류의 자기 페이지에서, `preview_per_page` 는 부모 페이지의 section 으로
-# 임베드될 때 사용된다.
-# (메인페이지의 페이지당 글 수는 Articles/meta.yaml 의 `per_page`.)
+# 카테고리 자기 페이지의 페이지당 글 수 / 양수 (카테고리 meta.yaml 의 per_page 로 오버라이드)
 category_per_page: 20
+# 카테고리가 상위 페이지에 section 임베드될 때 페이지당 글 수 / 양수
 category_preview_per_page: 5
 
-# SEO summary 길이 한도.
-# description_truncate — 피드 summary (RSS/Atom 의 `<description>` / `<summary>`)
-# 와 갤러리 타일 description 의 최대 글자 수. v0.5.4 까지는 meta.yaml 의
-# seo.description 이 비어 있을 때 본문 첫 단락으로 폴백하던 동작에도 쓰였지만,
-# v0.5.5 의 본문 ↔ 메타데이터 분리 원칙으로 그 폴백이 폐지됨 (description 자체
-# 는 누락된 채 빌드 + 리포트 기록). 절단 규칙: 절단 지점이 ASCII 영문/숫자
-# 시퀀스 한가운데이면 직전 공백까지 backup (v0.5.4). 한국어 등 CJK 글자는 글자
-# 단위가 의미 단위라 영향 없음.
+# 피드 summary / 갤러리 description 의 최대 글자 수 / 양수
 description_truncate: 150
 
-# robots.txt — 사이트 정책은 '모든 글이 검색 가능' 이 기본.
-# 개별 글의 비공개는 meta.yaml 의 `noindex: true` 로 처리.
-# v0.4.4: sitemap.xml 자동 생성. `Sitemap:` 디렉티브가 더 이상 주석 처리되지 않음.
+# /robots.txt 본문 (siheonlee.com) / 여러 줄 문자열
 robots_txt_main: |
   User-agent: *
   Allow: /
 
   Sitemap: https://siheonlee.com/sitemap.xml
 
+# /robots.txt 본문 (lama.pe.kr — 레거시) / 여러 줄 문자열
 robots_txt_legacy: |
   User-agent: *
   Allow: /
 
-# v0.5.1: 이미지 자동 최적화 정책.
-#
-#   enabled       — 전체 토글. false 면 Pillow 가 없어도 빌드 통과 +
-#                   raster 이미지는 v0.5.0 처럼 원본 그대로 dist 에 복사
-#                   + HTML 후처리도 안 함. (단 lazy_loading 은 별도 토글이라
-#                   여기를 false 로 둬도 lazy_loading=true 면 loading="lazy"
-#                   부착은 계속 동작.)
-#   widths        — 생성할 변종 너비 (px) 목록. 원본 width 이하인 것만 실제로
-#                   파일로 떨어진다. 모바일 우선 + 데스크탑 (siheonlee.com 의
-#                   main column 너비 800px) 기준으로 [400, 800, 1600] 이 기본.
-#                   변경 시 dist 의 옛 변종은 _prune_article_assets 가 다음
-#                   빌드에서 정리한다.
-#   max_width     — 원본이 이보다 큰 경우의 다운스케일 한도. 0 이면 비활성.
-#                   widths 의 max 와 동기화하면 충분 (기본은 widths 의 max).
-#   quality       — WebP 인코더 quality (0~100). Google 권장 85 가 시각적
-#                   품질과 파일 크기의 균형점.
-#   lazy_loading  — 모든 <img> 에 loading="lazy" 자동 부착. enabled=false
-#                   여도 이 옵션만 true 면 lazy 부착은 동작 — 즉 Pillow 가
-#                   없는 환경에서도 SEO 의 lazy loading 부분은 챙길 수 있다.
-#   default_sizes — srcset 과 짝이 되는 sizes 속성 디폴트. siheonlee.com
-#                   레이아웃 기준으로 모바일에선 viewport, 데스크탑에선
-#                   800px. <img> 가 이미 sizes 를 갖고 있으면 후처리에서
-#                   덮어쓰지 않는다.
+# 이미지 자동 최적화 정책 (WebP + 다중 해상도 + lazy loading)
 images:
+  # 이미지 최적화 전체 토글 / true / false
   enabled: true
+  # 생성할 변종 너비 (px) 목록 / 양수 리스트
   widths: [400, 800, 1600]
+  # 원본이 이보다 크면 다운스케일 / 0 또는 양수
   max_width: 1600
+  # WebP 인코더 quality / 0 ~ 100
   quality: 85
+  # 모든 <img> 에 loading="lazy" 자동 부착 / true / false
   lazy_loading: true
+  # srcset 과 짝이 되는 sizes 속성 디폴트 / CSS media query
   default_sizes: "(max-width: 800px) 100vw, 800px"
