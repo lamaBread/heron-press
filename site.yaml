@@ -58,17 +58,12 @@ category_preview_per_page: 5
 # 피드 summary / 갤러리 description 의 최대 글자 수 / 양수
 description_truncate: 150
 
-# /robots.txt 본문 (siheonlee.com) / 여러 줄 문자열
+# /robots.txt 본문 / 여러 줄 문자열
 robots_txt_main: |
   User-agent: *
   Allow: /
 
   Sitemap: https://siheonlee.com/sitemap.xml
-
-# /robots.txt 본문 (lama.pe.kr — 레거시) / 여러 줄 문자열
-robots_txt_legacy: |
-  User-agent: *
-  Allow: /
 
 # 이미지 자동 최적화 정책 (WebP + 다중 해상도 + lazy loading)
 images:

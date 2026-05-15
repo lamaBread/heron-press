@@ -122,7 +122,7 @@ class CommentTests(unittest.TestCase):
 class QuotedKeyTests(unittest.TestCase):
 
     def test_quoted_key_with_slash(self):
-        # legacy-map.yaml 의 경로 키 패턴 (예: "old/path/index.php": new)
+        # 경로 형태 키 (예: "old/path/index.php": new)
         src = '"old/path.php": new-slug'
         self.assertEqual(yaml_load(src), {'old/path.php': 'new-slug'})
 

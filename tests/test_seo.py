@@ -40,7 +40,6 @@ def _site(**overrides):
         warn_on_stale_updated=True,
         description_truncate=160,
         robots_txt_main='',
-        robots_txt_legacy='',
     )
     defaults.update(overrides)
     return SiteConfig(**defaults)

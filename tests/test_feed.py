@@ -31,7 +31,7 @@ def _site():
         reserved_slugs=[],
         warn_on_underscore_ref=False, warn_on_missing_asset=False,
         warn_on_stale_updated=False, description_truncate=160,
-        robots_txt_main='', robots_txt_legacy='',
+        robots_txt_main='',
     )
 
 

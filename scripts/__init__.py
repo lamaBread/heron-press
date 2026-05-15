@@ -1,4 +1,4 @@
-"""siheonlee.com v0.6.5 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v0.7.0 — 빌더 내부 모듈 묶음.
 
 루트의 build.py 가 이 패키지를 import 한다.
 모듈:
@@ -13,12 +13,13 @@
   - sitemap      — sitemap.xml 생성 (v0.4.4)
   - feed         — RSS / Atom 피드 생성 (v0.5.3)
   - report       — BuildReport / issue / warning / abort (v0.5.5)
+  - cache        — 글 단위 빌드 증분 캐시 (v0.7.0 신설)
   - builder      — 빌드 파이프라인 (Builder 클래스)
-  - migrate      — 기존 글 마이그레이션 도구 (직접 실행)
 
 __version__:
   사이트 전역 버전 문자열의 단일 source of truth. feed generator 등
-  버전을 표기하는 모든 산출물이 이 값을 참조한다.
+  버전을 표기하는 모든 산출물이 이 값을 참조한다. v0.7.0 의 BuildCache 도
+  이 값을 global_hash 에 포함 — 빌더 버전이 바뀌면 캐시가 일괄 무효화된다.
 """
 
-__version__ = '0.6.5'
+__version__ = '0.7.0'

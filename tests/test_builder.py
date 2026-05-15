@@ -91,7 +91,7 @@ class WrapPageTitleTests(unittest.TestCase):
             reserved_slugs=[],
             warn_on_underscore_ref=False, warn_on_missing_asset=False,
             warn_on_stale_updated=False, description_truncate=160,
-            robots_txt_main='', robots_txt_legacy='',
+            robots_txt_main='',
         )
         defaults.update(site_overrides)
         b.site = SiteConfig(**defaults)
@@ -169,11 +169,6 @@ class StylesFrontmatterTests(unittest.TestCase):
         # (Builder 가 base/templates, base/assets 만 받기 때문).
         shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
         shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
-        # legacy-map.yaml 은 빈 매핑으로 (URL_path → slug 매핑 0 개).
-        # v0.6.5: 옛 'legacy_map: {}\n' 은 자체로 {'legacy_map': {}} 를 만들어
-        # _validate 의 legacy-map 루프가 '존재하지 않는 slug {}' issue 를
-        # 생성했었다. 빈 매핑은 `{}\n` 로 적어야 정상 (yaml_load → 빈 dict).
-        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
 
         # Articles/<slug>/ 글 한 개.
         article_dir = tmp / 'Articles' / 'Demo'
@@ -318,8 +313,6 @@ class PageCssUnificationTests(unittest.TestCase):
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
         shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
         shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
-        # v0.6.5: 빈 매핑 — yaml_load → {} → legacy-map 루프 0 회.
-        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
 
         # Articles/meta.yaml (홈)
         articles_dir = tmp / 'Articles'
@@ -446,8 +439,6 @@ class TemplateRefTests(unittest.TestCase):
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
         shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
         shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
-        # v0.6.5: 빈 매핑 — yaml_load → {} → legacy-map 루프 0 회.
-        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
 
         if templates_extra:
             for rel, content in templates_extra.items():
@@ -582,7 +573,6 @@ class BodyPlaceholderPreservationTests(unittest.TestCase):
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
         shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
         shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
-        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
 
         articles_dir = tmp / 'Articles'
         articles_dir.mkdir(parents=True)
@@ -645,7 +635,6 @@ class BuildReportResetTests(unittest.TestCase):
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
         shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
         shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
-        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
         articles_dir = tmp / 'Articles'
         articles_dir.mkdir(parents=True)
         # 홈에 description 없음 → 1 issue.

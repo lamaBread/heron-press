@@ -2,7 +2,7 @@
 
 지원 문법은 이 프로젝트에서 실제 사용되는 부분집합:
   - key: value  (string, int, bool, null)
-  - "quoted key": value  (legacy-map.yaml 경로 키용)
+  - "quoted key": value
   - key:        → null
   - key: "str" / 'str'
   - key: [a, b]  (inline list)

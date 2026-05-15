@@ -42,7 +42,7 @@ from typing import Optional
 class ReportEntry:
     """리포트 한 항목.
 
-    scope    — 'article' / 'category' / 'home' / 'site' / 'legacy-map'.
+    scope    — 'article' / 'category' / 'home' / 'site'.
                글 단위 / 카테고리 단위 / 전역 메타 단위로 묶어 표시.
     target   — 무엇에 대한 항목인가. 보통 글의 slug 또는 카테고리 경로 (str).
     message  — 사람이 읽을 한 줄 설명.

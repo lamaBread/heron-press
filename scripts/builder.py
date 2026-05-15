@@ -1,5 +1,30 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.7.0 변경 — 빌드 증분 캐싱 (글 단위, fine-grained):
+  - **scripts/cache.py 신설** — `BuildCache` + `CachedArticle` + `replay_*` 헬퍼.
+    `_render_articles` 가 글마다 `compute_article_hash` 로 해시를 만들고
+    `cache.lookup(slug, hash)` 로 매니페스트와 비교한다. hit 면 캐시된 HTML/
+    PHP 를 dist 에 그대로 복원 + 부수 산출 (rendered_bodies[slug] / article_
+    render_meta[slug] / BuildReport 의 issue·warning 항목) 도 함께 복원해
+    이후 단계 (검색 인덱스 / 피드 / 갤러리) 가 캐시 hit 경로에서도 첫 빌드와
+    동등하게 진행된다. miss 면 평소대로 렌더한 뒤 `cache.store(...)` 로 다음
+    빌드를 위해 기록.
+  - **`Builder.__init__(base_dir, *, enable_cache=True)`** — `--no-cache` CLI
+    플래그가 `enable_cache=False` 로 인스턴스를 만든다. 그 경우 lookup() 이
+    항상 None 을 반환하고 store() 가 no-op — v0.6.5 와 동등 동작 + 매니페스트
+    디스크 I/O 0.
+  - **글 단위 캐시 통계** — `Builder._cache_hits` / `_cache_misses` 가 빌드
+    종료 시 콘솔에 "증분 캐시: N 히트 / M 미스 (글 K건)" 로 표시. 캐시 hit/
+    miss 가 0/0 인 경우 (예: 글 0 개) 라인 자체가 출력되지 않음.
+  - **결정성 가드** — 캐시는 *재렌더 여부* 만 결정하고 *산출물 자체* 는 바꾸지
+    않는다. tests/run_diagnostics.py 의 [2] 결정성 섹션이 캐시 hit 경로에서
+    도 통과 (두 번째 빌드의 dist 가 byte 동일).
+  - **글의 issue / warning 도 캐시** — `_render_articles` 내부에서 `_report`
+    에 들어가는 항목 중 `scope='article'` AND `target=slug` 인 것만 *현재 글*
+    의 캐시로 분리 저장. 캐시 hit 시 그 항목들이 `replay_issue` /
+    `replay_warning` 으로 다시 `_report` 에 들어가 빌드 리포트가 매 빌드 byte
+    동일.
+
 v0.6.5 변경 — 안정화 패치 (v0.6.0 ~ v0.6.4 누적 회귀 4 건):
   - **Builder.build() 자동 _report reset** — 한 프로세스에서 build() 를 여러
     번 호출해도 _report 가 누적되지 않는다. v0.6.4 까지는 호출자가 명시적으로
@@ -104,12 +129,11 @@ v0.6.2 변경 — 홈/카테고리 페이지 SEO 메타 태그 출력:
     그대로. robots meta 출력 안 함. sitemap.xml 도 v0.4.4 ~ v0.6.1 정책 그대로.
 
 v0.6.1 변경 — 문서·주석·산출물 가독성 안정화 3회차 (코드 동작 변경 0):
-  - templates/search.php 헤더 주석의 placeholder 누수 결함 해소. `(d) {{LANG}}
-    / {{PAGE_TITLE}} / ...` 같이 안내 자체에 placeholder 토큰을 박아 두면
-    `_render_template` 의 단순 문자열 치환이 주석 안에서도 동작해 dist 의
-    헤더가 "이 자리에 ko / Search / Lama / <a ...>...</a> 가 들어간다" 라고
-    자기 결과를 인용하는 메타-광경이 됐다. 템플릿 측에서 안내 줄에 plain
-    변수명 (LANG, PAGE_TITLE, ...) 만 적도록 정리. 빌더 코드는 그대로.
+  - templates/search.php 헤더 주석의 placeholder 누수 결함 해소. 안내 자체에
+    placeholder 토큰을 박아 두면 `_render_template` 의 단순 문자열 치환이
+    주석 안에서도 동작해 dist 의 헤더가 자기 결과를 인용하는 메타-광경이
+    됐다. 템플릿 측에서 안내 줄에 plain 변수명 (LANG, PAGE_TITLE, ...) 만
+    적도록 정리. 빌더 코드는 그대로.
   - templates/search_tokenize.php 의 헤더 주석 "search.php 가 require_once 하고
     build.py 가 CLI 로 실행" 이 v0.6.0 의 인라인 흐름과 모순되던 부분 갱신.
     템플릿은 진단·CLI 패리티용 단일 진실원으로 그대로 유지된다.
@@ -135,7 +159,7 @@ v0.6.0 변경 — 검색 인덱스 재설계 (메타데이터 3-필드 + PHP 인
     title / description / tags 3-필드만 색인. 본문 평문은 스니펫용으로
     글마다 앞 1500 자만 인덱스에 보존. tags 가 새 가중치 필드 (`w_tags=2.5`).
     `php_array_literal` 의 결정적 직렬화로 두 번 빌드 시 sha256 동일.
-  - 콘텐츠 측 (글/홈/카테고리/sitemap/robots/redirect/feed) 의 형식은
+  - 콘텐츠 측 (글/홈/카테고리/sitemap/robots/feed) 의 형식은
     v0.5.5 와 동등. builder 변경은 검색 단계와 import 한 줄
     (`from . import __version__ as _SITE_VERSION` — 피드 generator 문자열용).
 
@@ -183,8 +207,8 @@ v0.5.4 변경 — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + n
     로 정렬. v0.4.6 까지의 'About 최상단 하드코딩' 폐기. `priority` (부모
     카테고리 page 의 sibling section 정렬) 와는 별개 축.
 
-16단계 파이프라인 (v0.5.3 에서 _build_feeds 추가):
-  [1] _load_config           — site.yaml + legacy-map.yaml + 토크나이저 패리티 검증
+15단계 파이프라인 (v0.5.3 에서 _build_feeds 추가):
+  [1] _load_config           — site.yaml + 토크나이저 패리티 검증
   [2] _scan_articles         — Articles/ 트리 순회, _ 접두 제외
   [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움 (seo: 블록 +
                                 v0.5.3 의 tags 필드 포함)
@@ -209,20 +233,19 @@ v0.5.4 변경 — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + n
                                 v0.5.3 부터 Articles/meta.yaml 의
                                 layout='gallery' 도 지원.
   [10] _build_404            — 404 페이지
-  [11] _build_robots         — robots.txt (main + legacy)
+  [11] _build_robots         — robots.txt
   [12] _build_sitemap        — dist/sitemap.xml (v0.4.4 신설, v0.4.5 에서
                                 서브카테고리 URL 도 포함)
   [12b] _build_feeds         — dist/feed.atom + dist/feed.rss (v0.5.3 신설).
                                 scripts/feed.py 의 추상 모델로 두 파일이 같은
                                 entry 목록을 공유.
-  [13] _build_dispatcher     — dist-legacy/redirect.php (301 매핑)
-  [14] _build_search         — dist/search.php 단일 파일 생성 (v0.6.0).
+  [13] _build_search         — dist/search.php 단일 파일 생성 (v0.6.0).
                                 메타데이터 3-필드 BM25 인덱스를 PHP 정적 배열
                                 리터럴로, 토크나이저 + BM25 점수 계산기를
                                 같은 파일에 인라인. 옛 search-index.json /
                                 search_tokenize.php / search_bm25.php 가
                                 dist 에 남아 있으면 명시적으로 unlink.
-  [15] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리 +
+  [14] _prune_orphans        — 삭제된 슬러그/카테고리의 dist 잔재 정리 +
                                 v0.5.2: 옛 dist/src/ 트리 일괄 제거
 
 v0.5.3 변경 — tags + gallery layout + RSS/Atom 피드:
@@ -425,6 +448,12 @@ from .search import (
 from .sitemap import build_sitemap
 from .feed import build_feed_document, render_atom, render_rss
 from .report import BuildReport, abort
+from .cache import (
+    BuildCache,
+    issue_payload,
+    replay_issue,
+    replay_warning,
+)
 from . import __version__ as _SITE_VERSION
 
 
@@ -567,16 +596,14 @@ class Builder:
     SLUG_RE = re.compile(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$')
     DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
-    def __init__(self, base_dir: Path):
+    def __init__(self, base_dir: Path, *, enable_cache: bool = True):
         self.base = base_dir
         self.articles_dir = base_dir / 'Articles'
         self.assets_dir = base_dir / 'assets'
         self.templates_dir = base_dir / 'templates'
         self.dist = base_dir / 'dist'
-        self.dist_legacy = base_dir / 'dist-legacy'
 
         self.site: SiteConfig = None
-        self.legacy_map: dict = {}
         self.articles: list = []
         self.slug_to_article: dict = {}
         self.categories: dict = {}      # path_tuple → Category
@@ -592,6 +619,12 @@ class Builder:
         # _build_categories (gallery layout), _build_feeds (RSS/Atom) 가 참조한다.
         # slug → {'thumb': URL or None, 'summary': str}
         self.article_render_meta: dict = {}
+        # v0.7.0: 글 단위 빌드 증분 캐시. enable_cache=False 면 lookup() 이 항상
+        # None 이라 v0.6.5 와 동일 동작 (--no-cache 플래그 경로).
+        self.cache: BuildCache = BuildCache(base_dir, enabled=enable_cache)
+        # v0.7.0: 빌드 종료 시 출력할 캐시 히트/미스 카운트.
+        self._cache_hits: int = 0
+        self._cache_misses: int = 0
 
     # ── [1] Config load ──────────────────────────────────────
 
@@ -621,7 +654,6 @@ class Builder:
             warn_on_stale_updated=bool(get('warn_on_stale_updated', True)),
             description_truncate=int(get('description_truncate') or 150),
             robots_txt_main=get('robots_txt_main') or 'User-agent: *\nAllow: /\n',
-            robots_txt_legacy=get('robots_txt_legacy') or 'User-agent: *\nAllow: /\n',
             # v0.4.5: i18n + 카테고리 페이지네이션 디폴트.
             # v0.4.6: home_* 류 (home_per_page / home_excludes_categories /
             # home_sort) 는 Articles/meta.yaml 로 이전됨 — 더 이상 site.yaml
@@ -644,10 +676,6 @@ class Builder:
                 warn(f"site.yaml: '{legacy_key}' 는 v0.4.6 부터 Articles/meta.yaml "
                      f"로 이전되었습니다. site.yaml 에서 제거하고 Articles/meta.yaml "
                      f"의 해당 필드를 사용하세요.")
-
-        legacy_yaml = self.base / 'legacy-map.yaml'
-        if legacy_yaml.exists():
-            self.legacy_map = yaml_load(legacy_yaml.read_text(encoding='utf-8'))
 
         # 토크나이저 패리티 검증 (PHP 없으면 워닝만)
         # v0.5.5: 패리티 검증 실패는 시스템 결함 (Py/PHP 토크나이저 동등성
@@ -1198,15 +1226,6 @@ class Builder:
 
         self.articles = kept
 
-        for url_path, slug in self.legacy_map.items():
-            if slug is not None and slug not in seen_slugs:
-                issue(
-                    'legacy-map', url_path,
-                    f"legacy-map.yaml: slug {slug!r} 미존재 — "
-                    f"'{url_path}' 항목을 건너뜁니다.",
-                    self.base / 'legacy-map.yaml',
-                )
-
         self.slug_to_article = {a.meta.slug: a for a in self.articles}
 
         # v0.4.6: Articles/meta.yaml (메인페이지 카테고리-격 설정) 파싱.
@@ -1725,6 +1744,19 @@ class Builder:
         # v0.6.4: 글마다 template 키가 다를 수 있어 per-article load. 기본 article.html.
         nav_links = self._nav_links_html()
 
+        # v0.7.0: 빌드 증분 캐시 — global_hash 가 모든 글에 영향을 주는 입력의
+        # 종합 sha256. _render_articles 진입 시점이 안전한 호출 위치다 (site /
+        # meta / template / assets 모두 디스크에 확정된 상태).
+        if self.cache.enabled and self.cache.global_hash is None:
+            self.cache.compute_global_hash(
+                site_yaml=self.base / 'site.yaml',
+                scripts_dir=self.base / 'scripts',
+                templates_dir=self.templates_dir,
+                assets_dir=self.assets_dir,
+                articles_dir=self.articles_dir,
+                version=_SITE_VERSION,
+            )
+
         for article in self.articles:
             m = article.meta
             content_path = article.content_file
@@ -1736,6 +1768,42 @@ class Builder:
                     article.source_dir,
                 )
                 continue
+
+            # v0.7.0: 캐시 조회 — article_hash 가 일치하면 dist 에 직접 복원 +
+            # 부수 산출 (rendered_bodies, article_render_meta) 도 캐시에서 복원.
+            article_hash = None
+            if self.cache.enabled:
+                try:
+                    article_hash = self.cache.compute_article_hash(
+                        slug=m.slug,
+                        source_dir=article.source_dir,
+                        content_file=content_path,
+                    )
+                except OSError:
+                    article_hash = None
+                if article_hash is not None:
+                    hit = self.cache.lookup(m.slug, article_hash)
+                    if hit is not None:
+                        for it in hit.issues:
+                            replay_issue(_report, it)
+                        for wn in hit.warnings:
+                            replay_warning(_report, wn)
+                        self.rendered_bodies[m.slug] = hit.body_plain
+                        self.article_render_meta[m.slug] = {
+                            'thumb': hit.thumb,
+                            'summary': hit.summary,
+                        }
+                        out_dir = self.dist / m.slug
+                        out_dir.mkdir(parents=True, exist_ok=True)
+                        out_file = out_dir / f'index.{hit.output_ext}'
+                        out_file.write_text(hit.output, encoding='utf-8')
+                        self.cache.record_hit(m.slug, hit, article_hash)
+                        self._cache_hits += 1
+                        continue
+
+            # 캐시 miss — 평소대로 렌더한 뒤 cache.store() 로 기록.
+            self._cache_misses += 1
+            article_report_offset = len(_report.entries)
 
             content_text = content_path.read_text(encoding='utf-8')
 
@@ -1913,6 +1981,37 @@ class Builder:
             out_dir.mkdir(parents=True, exist_ok=True)
             out_file = out_dir / f'index.{ext}'
             out_file.write_text(page_html, encoding='utf-8')
+
+            # v0.7.0: 캐시 store — 이번 글 렌더 중 _report 에 추가된 항목 중
+            # scope='article' AND target=slug 인 것만 캐시 기록 (다음 빌드의
+            # hit 에서 replay 됨).
+            if self.cache.enabled and article_hash is not None:
+                new_entries = _report.entries[article_report_offset:]
+                cache_issues = [
+                    issue_payload(e.scope, e.target, e.message, e.location)
+                    for e in new_entries
+                    if e.severity == 'issue'
+                    and e.scope == 'article'
+                    and e.target == m.slug
+                ]
+                cache_warnings = [
+                    issue_payload(e.scope, e.target, e.message, e.location)
+                    for e in new_entries
+                    if e.severity == 'warning'
+                    and e.scope == 'article'
+                    and e.target == m.slug
+                ]
+                self.cache.store(
+                    slug=m.slug,
+                    article_hash=article_hash,
+                    output=page_html,
+                    output_ext=ext,
+                    body_plain=self.rendered_bodies.get(m.slug, ''),
+                    thumb=self.article_render_meta.get(m.slug, {}).get('thumb'),
+                    summary=self.article_render_meta.get(m.slug, {}).get('summary', ''),
+                    issues=cache_issues,
+                    warnings=cache_warnings,
+                )
 
     # ── [6] Asset sync ────────────────────────────────────────
 
@@ -2377,8 +2476,8 @@ class Builder:
     def _build_categories(self):
         """v0.4.5: 톱레벨 + 모든 서브카테고리에 대해 인덱스 페이지 생성.
 
-        v0.4.4 까지는 톱레벨만 인덱스가 있었음 (원본 lama.pe.kr quirk 보존).
-        v0.4.5 에서 이 quirk 를 해제 — 서브카테고리도 자기 인덱스 페이지를 가짐.
+        v0.4.4 까지는 톱레벨만 인덱스가 있었음. v0.4.5 부터 서브카테고리도
+        자기 인덱스 페이지를 가짐.
         """
         # 빈 카테고리 (글이 한 편도 없는 카테고리 트리) 는 인덱스 페이지를
         # 만들지 않는다. _validate 가 이미 워닝을 띄웠음.
@@ -2583,10 +2682,6 @@ class Builder:
         (self.dist / 'robots.txt').write_text(
             self.site.robots_txt_main, encoding='utf-8'
         )
-        self.dist_legacy.mkdir(parents=True, exist_ok=True)
-        (self.dist_legacy / 'robots.txt').write_text(
-            self.site.robots_txt_legacy, encoding='utf-8'
-        )
 
     # ── [12] sitemap.xml ──────────────────────────────────────
 
@@ -2640,48 +2735,7 @@ class Builder:
         (self.dist / 'feed.atom').write_text(render_atom(doc), encoding='utf-8')
         (self.dist / 'feed.rss').write_text(render_rss(doc), encoding='utf-8')
 
-    # ── [13] Legacy dispatcher ────────────────────────────────
-
-    def _build_dispatcher(self):
-        # v0.4.2: site.yaml 의 base_url 을 사용 (이전 버전은 도메인 하드코딩).
-        base_url = self.site.base_url.rstrip('/')
-        base_url_php = base_url.replace("'", "\\'")
-
-        lines = ["<?php"]
-        lines.append(f"$BASE_URL = '{base_url_php}';")
-        lines.append("$map = [")
-        for url_path, slug in self.legacy_map.items():
-            key_escaped = url_path.replace("'", "\\'")
-            if slug is None:
-                lines.append(f"    '{key_escaped}' => null,")
-            else:
-                lines.append(f"    '{key_escaped}' => '{slug}',")
-        lines.append("];")
-        lines.append("")
-        lines.append("$path = urldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));")
-        lines.append("$path = rtrim($path, '/') . '/';")
-        lines.append("")
-        lines.append("if (array_key_exists($path, $map)) {")
-        lines.append("    $slug = $map[$path];")
-        lines.append("    if ($slug === null) {")
-        lines.append("        http_response_code(410);")
-        lines.append("        echo '410 Gone';")
-        lines.append("        exit;")
-        lines.append("    }")
-        lines.append("    header(\"Location: {$BASE_URL}/{$slug}/\", true, 301);")
-        lines.append("    exit;")
-        lines.append("}")
-        lines.append("")
-        lines.append("http_response_code(404);")
-        lines.append("header(\"Location: {$BASE_URL}/404.html\", true, 302);")
-        lines.append("exit;")
-
-        self.dist_legacy.mkdir(parents=True, exist_ok=True)
-        (self.dist_legacy / 'redirect.php').write_text(
-            '\n'.join(lines), encoding='utf-8'
-        )
-
-    # ── [14] Search index inlined into search.php ────────────
+    # ── [13] Search index inlined into search.php ────────────
     #
     # v0.6.0: search-index.json 폐기 + search_tokenize.php / search_bm25.php
     # 의 require_once 폐기. 세 파일의 내용 (인덱스 정적 PHP 리터럴 + 토크나이저
@@ -2897,9 +2951,11 @@ class Builder:
         self._build_robots()                   # [11]
         self._build_sitemap()                  # [12]
         self._build_feeds()                    # [12b] (v0.5.3) RSS/Atom
-        self._build_dispatcher()               # [13]
-        self._build_search()                   # [14]
-        self._prune_orphans()                  # [15]
+        self._build_search()                   # [13]
+        self._prune_orphans()                  # [14]
+
+        # v0.7.0: 캐시 매니페스트 commit. 캐시 비활성 시 no-op.
+        self.cache.commit(current_version=_SITE_VERSION)
 
         art_count = len(self.articles)
         cat_count = len(self.categories)
@@ -2909,7 +2965,14 @@ class Builder:
             f'\n빌드 완료: {art_count} 글, {cat_count} 카테고리, '
             f'{issue_count} 보완 필요, {warn_count} 살펴볼 사항.',
         )
-        print(f'산출물: dist/ (siheonlee.com), dist-legacy/ (lama.pe.kr).')
+        if self.cache.enabled:
+            total_attempts = self._cache_hits + self._cache_misses
+            if total_attempts > 0:
+                print(
+                    f'증분 캐시: {self._cache_hits} 히트 / '
+                    f'{self._cache_misses} 미스 (글 {total_attempts}건).'
+                )
+        print(f'산출물: dist/ (siheonlee.com).')
 
         # v0.5.5: 빌드 종료 시 일원화 리포트 출력. meta.yaml 의 필드 부족 /
         # 빈 문자열 / 형식 오류 등 모든 콘텐츠 결함이 여기 모아진다.

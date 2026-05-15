@@ -391,7 +391,7 @@ footer {
     margin: 0.4em 0 0.2em 0 !important;
 }
 
-/* 매치 강조. lama 의 #afafaf41 code 배경색과 톤을 맞춤. */
+/* 매치 강조. */
 mark {
     background-color: #fff3cd;
     color: inherit;

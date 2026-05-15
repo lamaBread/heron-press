@@ -123,7 +123,6 @@ class SiteConfig:
     warn_on_stale_updated: bool
     description_truncate: int
     robots_txt_main: str
-    robots_txt_legacy: str
     # v0.4.5: i18n + 카테고리 페이지네이션 디폴트.
     # v0.4.6: home_* 류 필드는 Articles/meta.yaml 로 이전됨 — site.yaml 에는
     # 진짜 '전역' (= 카테고리 류 전반에 적용되는 디폴트, 또는 사이트 메타) 만 남김.
