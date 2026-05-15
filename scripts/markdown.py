@@ -426,21 +426,76 @@ _SECTION_SCOPED_TAGS = {
 }
 
 
-def normalize_styles(raw) -> dict:
+def normalize_styles(raw):
+    """meta.yaml 의 `styles:` 키를 두 채널로 분리해서 파싱.
+
+    v0.6.3 부터 styles 키가 두 종류의 자식을 동시에 가질 수 있다:
+      - 정수 키 (1, 2, 3, ...) — 값은 글 폴더 안의 외부 CSS 파일 상대 경로
+        문자열. 정수 키 오름차순 (1 → 2 → 3) 이 head 의 link 태그 출력
+        순서가 된다.
+      - 문자열 키 (tag 또는 selector) — 값은 인라인 룰 dict (속성:값).
+        v0.5.x 까지의 동작 그대로. 머리 안에 `<style>` 블록으로 inject.
+
+    반환: (sheets, rules)
+      sheets : list[str] — 외부 CSS 파일의 상대 경로 (정수 키 오름차순).
+                            파일 존재 검증은 호출자 (Builder) 가 별도 수행.
+      rules  : dict[str, dict[str, str]] — 인라인 룰 (v0.5.x 형식 그대로).
+
+    파서 정책: scripts/yaml_parser 의 토크나이저는 키를 *모두 str 로* 반환
+    하므로 `1:` 도 `'1'` 으로 들어온다 — `int(key)` 변환이 성공하면 외부
+    CSS 채널로, 실패하면 문자열 (tag/selector) 채널로 분기. PyYAML 류 파서가
+    int 키를 그대로 주는 환경에서도 동작하도록 isinstance(int) 도 같이 인식.
+    값이 기대 타입과 다른 엔트리는 *조용히 무시* — 형식 오류는 호출자
+    (Builder) 가 더 풍부한 문맥과 함께 issue 로 라우팅한다. 빈 입력 / None /
+    비-dict 입력은 ([], {}) 폴백.
+    """
     if not raw or not isinstance(raw, dict):
-        return {}
-    out = {}
-    for tag, props in raw.items():
-        if not isinstance(props, dict):
+        return [], {}
+    sheet_items = []  # (int_key, path_str)
+    rules = {}
+    for key, value in raw.items():
+        int_key = _coerce_int_key(key)
+        if int_key is not None:
+            if not isinstance(value, str):
+                continue
+            path = value.strip()
+            if path:
+                sheet_items.append((int_key, path))
+            continue
+        # 인라인 룰 — 키를 문자열 selector 로 다룬다.
+        if not isinstance(value, dict):
             continue
         normalized_props = {}
-        for prop, value in props.items():
-            if value is None:
+        for prop, val in value.items():
+            if val is None:
                 continue
-            normalized_props[str(prop).strip()] = str(value).strip()
+            normalized_props[str(prop).strip()] = str(val).strip()
         if normalized_props:
-            out[str(tag).strip()] = normalized_props
-    return out
+            rules[str(key).strip()] = normalized_props
+    sheet_items.sort(key=lambda kv: kv[0])
+    sheets = [p for (_, p) in sheet_items]
+    return sheets, rules
+
+
+def _coerce_int_key(key):
+    """styles 키를 외부 CSS 채널의 정수 키로 해석할 수 있으면 int, 아니면 None.
+
+    yaml_parser 가 `1:` 을 `'1'` 으로 반환하므로 str 도 받아 변환 시도.
+    bool 은 거부 (YAML 의 `true:` 같은 키가 isinstance(int) 통과하는 함정 방지).
+    """
+    if isinstance(key, bool):
+        return None
+    if isinstance(key, int):
+        return key
+    if isinstance(key, str):
+        s = key.strip()
+        if not s:
+            return None
+        try:
+            return int(s)
+        except ValueError:
+            return None
+    return None
 
 
 def _resolve_selector(tag_or_selector: str) -> str:
@@ -454,18 +509,53 @@ def _resolve_selector(tag_or_selector: str) -> str:
     return f'section {raw}'
 
 
-def render_article_styles(styles: dict) -> str:
-    if not styles:
+def render_inline_styles(rules: dict) -> str:
+    """인라인 룰 dict 을 head 의 `<style>` 블록으로 렌더.
+
+    v0.6.3 에서 옛 `render_article_styles` 가 이름 변경 — 출력 텍스트는
+    동일. 정수 키 (외부 CSS 파일) 와 분리된 *문자열 키* 만 입력으로 받음.
+    빈 입력이면 빈 문자열.
+    """
+    if not rules:
         return ''
-    rules = []
-    for tag, props in styles.items():
+    out_rules = []
+    for tag, props in rules.items():
         if not props:
             continue
         selector = _resolve_selector(tag)
         if not selector:
             continue
         decls = '; '.join(f'{p}: {v}' for p, v in props.items())
-        rules.append(f'    {selector} {{ {decls}; }}')
-    if not rules:
+        out_rules.append(f'    {selector} {{ {decls}; }}')
+    if not out_rules:
         return ''
-    return '<style>\n' + '\n'.join(rules) + '\n  </style>'
+    return '<style>\n' + '\n'.join(out_rules) + '\n  </style>'
+
+
+def render_stylesheet_links(sheets, slug: str) -> str:
+    """외부 CSS 파일 리스트를 head 의 `<link>` 태그들로 렌더 (v0.6.3 신설).
+
+    각 항목은 글 폴더 기준 상대 경로. URL 은 v0.5.2 자산 경로 일원화 정책
+    (글 자산 = `/{slug}/...`) 에 맞춰 site-absolute (`/{slug}/<rel>`).
+    파일이 _sync_assets 에 의해 dist/{slug}/<rel> 로 자동 복사된다.
+
+    파일 존재 검증은 호출자 (Builder 의 _parse_frontmatter) 에서 수행되어
+    이 함수에 도달하는 sheets 는 *글 폴더에 실제로 존재한다고 가정한다*.
+    빈 sheets 면 빈 문자열을 반환 (head 의 placeholder 라인이 line-eating
+    되어 빈 줄이 남지 않도록 빌더가 별도 처리).
+    """
+    if not sheets:
+        return ''
+    if not slug:
+        return ''
+    lines = []
+    for rel in sheets:
+        # 정규화 — Windows 경로 호환 + leading './' 제거.
+        norm = str(rel).replace('\\', '/').strip()
+        while norm.startswith('./'):
+            norm = norm[2:]
+        # _parse_frontmatter 가 절대경로 / '..' 이탈을 미리 거부했으므로 여기
+        # 도달하는 norm 은 글 폴더 안의 깨끗한 상대 경로.
+        url = f'/{slug}/{norm}'
+        lines.append(f"    <link href='{url}' rel='stylesheet' type='text/css'>")
+    return '\n'.join(lines)

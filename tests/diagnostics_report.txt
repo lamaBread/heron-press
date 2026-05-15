@@ -2,18 +2,18 @@
 ════════════════════════════════════════════════════════════
 [1] Unit tests
 ────────────────────────────────────────────────────────────
-  tests run     : 188
+  tests run     : 210
   failures      : 0
   errors        : 0
   skipped       : 0
-  elapsed       : 1.037s
+  elapsed       : 36.273s
   → PASS
 
 ════════════════════════════════════════════════════════════
 [2] Build determinism (dist sha256 stability)
 ────────────────────────────────────────────────────────────
-  files (1st build): 22
-  files (2nd build): 22
+  files (1st build): 23
+  files (2nd build): 23
   all files identical between 1st and 2nd build.
   → PASS
 
@@ -21,7 +21,7 @@
 [3] dist/search.php php -l (PHP syntax)
 ────────────────────────────────────────────────────────────
   exit code   : 0
-  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v0.6.2\dist\search.php
+  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v0.6.3\dist\search.php
   → PASS
 
 ════════════════════════════════════════════════════════════

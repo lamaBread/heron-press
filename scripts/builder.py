@@ -1,5 +1,28 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.6.3 변경 — 글 단위 외부 CSS 파일 + use_common_css 토글:
+  - `meta.yaml` 의 `styles:` 키가 두 채널을 동시에 가질 수 있게 확장. 정수
+    키 (1, 2, 3, ...) 는 글 폴더 안의 외부 CSS 파일 상대 경로, 문자열 키
+    (tag/selector) 는 기존 인라인 룰. 두 채널이 같은 키 아래 자유롭게 섞임.
+    `_parse_frontmatter` 가 `normalize_styles` 의 (sheets, rules) 결과를
+    받아 ArticleMeta 의 새 `stylesheets` 필드와 기존 `styles` 필드로 분리
+    저장. CSS 파일은 글 폴더에 *실제로 존재해야* 함 — 없거나 글 폴더를
+    이탈 (`/`, `..`) 하면 BuildReport 의 issue 로 기록 + 해당 link 만 출력
+    제외 (빌드는 통과).
+  - `_render_articles` 가 두 새 placeholder 를 렌더 — `{{COMMON_CSS}}` 는
+    `use_common_css` 가 True 면 `<link href='/assets/common_template.css' ...>`,
+    False 면 placeholder 라인 통째로 제거 (ROBOTS_META 와 동일한 line-eating
+    패턴). `{{ARTICLE_STYLESHEETS}}` 는 ArticleMeta.stylesheets 의 각 항목을
+    `<link href='/{slug}/<rel>' rel='stylesheet'>` 로 렌더 (정수 키 오름차순).
+    로드 순서 = common → 외부 CSS → 인라인 `<style>` (인라인이 마지막 발언권
+    = "미세 override" 의도).
+  - 카테고리/홈은 외부 CSS 미지원 (영구적 정책). `_parse_category_meta_file`
+    이 styles 의 정수 키를 발견하면 issue 로 알려주고 인라인 룰만 채택.
+    `use_common_css` 토글도 글에만 존재 (카테고리/홈에는 없음).
+  - 함수 이름 변경: 옛 `render_article_styles` 가 `render_inline_styles` 로
+    바뀌고, 새 `render_stylesheet_links(sheets, slug)` 가 외부 CSS link 렌더
+    전담. 카테고리의 `_category_styles_html` 도 `render_inline_styles` 로 전환.
+
 v0.6.2 변경 — 홈/카테고리 페이지 SEO 메타 태그 출력:
   - v0.5.4 의 한계 표 "홈/카테고리 페이지의 SEO 메타 태그 출력 (description /
     og_* / twitter_*)" 항목 해소. `_build_home` 과 `_build_category_page` 가
@@ -275,7 +298,8 @@ from .slugs import category_slug_from_name, is_underscore_path, has_non_ascii
 from .markdown import (
     escape_html,
     render_article_md,
-    render_article_styles,
+    render_inline_styles,
+    render_stylesheet_links,
     normalize_styles,
     process_html,
     has_live_php,
@@ -778,6 +802,47 @@ class Builder:
                     )
                     nav_priority = 0
 
+            # v0.6.3: styles 키가 두 채널로 분리 — 정수 키 = 외부 CSS 파일
+            # 상대 경로, 문자열 키 = 인라인 룰. normalize_styles 가 두 결과를
+            # (sheets, rules) 로 반환. 외부 CSS 는 글 폴더 안에 실제 존재해야
+            # 하므로 여기서 파일 존재 검증 + 글 폴더 이탈 거부.
+            raw_sheets, rules = normalize_styles(raw.get('styles'))
+            validated_sheets = []
+            for rel in raw_sheets:
+                rel_norm = str(rel).replace('\\', '/').strip()
+                while rel_norm.startswith('./'):
+                    rel_norm = rel_norm[2:]
+                # 글 폴더 이탈 거부 — 절대 경로, 상위 디렉터리, 빈 경로 모두 제거.
+                if (not rel_norm
+                        or rel_norm.startswith('/')
+                        or '..' in rel_norm.split('/')):
+                    issue(
+                        'article', slug,
+                        f"meta.yaml: styles 의 CSS 파일 경로는 글 폴더 안의 "
+                        f"상대 경로여야 합니다 (받은 값: {rel!r}) — 이 항목 무시.",
+                        meta_file,
+                    )
+                    continue
+                css_path = article.source_dir / rel_norm
+                if not css_path.is_file():
+                    issue(
+                        'article', slug,
+                        f"meta.yaml: styles 에 명시한 CSS 파일이 글 폴더에 "
+                        f"없습니다: {rel!r} — link 출력 안 함.",
+                        meta_file,
+                    )
+                    continue
+                validated_sheets.append(rel_norm)
+
+            # v0.6.3: use_common_css — common_template.css link 출력 여부.
+            # 기본 True (= 모든 옛 글이 변경 의무 없음). False 면 link 태그
+            # 자체가 head 에서 출력되지 않음.
+            use_common_css_raw = raw.get('use_common_css')
+            if use_common_css_raw is None:
+                use_common_css = True
+            else:
+                use_common_css = bool(use_common_css_raw)
+
             article.meta = ArticleMeta(
                 slug=slug,
                 title=title,
@@ -786,7 +851,9 @@ class Builder:
                 noindex=noindex,
                 lang=lang,
                 seo=seo,
-                styles=normalize_styles(raw.get('styles')),
+                styles=rules,
+                stylesheets=validated_sheets,
+                use_common_css=use_common_css,
                 tags=tags,
                 nav_priority=nav_priority,
             )
@@ -1142,12 +1209,25 @@ class Builder:
                 )
                 nav_priority = 0
 
+        # v0.6.3: 카테고리/홈은 외부 CSS 파일 (styles 의 정수 키) 을 지원하지
+        # 않음 — 사이트 공통 톤에서 벗어날 가능성이 매우 희박하다는 정책. author
+        # 가 실수로 적은 경우 알려준다 (인라인 룰은 정상 적용, 정수 키만 무시).
+        cat_sheets, cat_rules = normalize_styles(styles_raw)
+        if cat_sheets:
+            issue(
+                'category', cat_target,
+                f"meta.yaml: styles 의 외부 CSS 파일 매핑 (정수 키) 은 "
+                f"글에서만 지원됩니다 — 카테고리/홈에서는 무시됩니다 "
+                f"(무시된 항목: {cat_sheets!r}).",
+                meta_file,
+            )
+
         return CategoryMeta(
             per_page=int(per_page) if per_page is not None else None,
             preview_per_page=int(preview) if preview is not None else None,
             layout=str(layout),
             lang=str(lang_val) if lang_val else None,
-            styles=normalize_styles(styles_raw),
+            styles=cat_rules,
             priority=priority,
             excludes_categories=excludes,
             title=title,
@@ -1432,7 +1512,11 @@ class Builder:
                     config=self.site.images,
                 )
 
-            article_styles = render_article_styles(m.styles)
+            # v0.6.3: styles 키 분리 — 외부 CSS link 와 인라인 <style> 블록을
+            # 각각 렌더. 로드 순서는 common_template.css → 외부 CSS → 인라인 —
+            # 인라인이 마지막으로 발언해 "미세 override" 의도를 보장.
+            article_stylesheets = render_stylesheet_links(m.stylesheets, m.slug)
+            article_styles = render_inline_styles(m.styles)
 
             if self.site.warn_on_underscore_ref:
                 for pattern in [r'src="([^"]+)"', r'href="([^"]+)"']:
@@ -1481,6 +1565,40 @@ class Builder:
                     r'^[ \t]*\{\{ROBOTS_META\}\}[ \t]*\r?\n',
                     '',
                     tpl,
+                    flags=re.MULTILINE,
+                )
+
+            # v0.6.3: COMMON_CSS — use_common_css=False 면 placeholder 라인
+            # 통째로 제거 (= common_template.css link 출력 안 함). 기본 True
+            # 케이스는 정확히 v0.6.2 의 link 한 줄로 치환되어 회귀 0.
+            if m.use_common_css:
+                tpl_local = tpl_local.replace(
+                    '{{COMMON_CSS}}',
+                    "<link href='/assets/common_template.css' "
+                    "rel='stylesheet' type='text/css'>",
+                )
+            else:
+                tpl_local = re.sub(
+                    r'^[ \t]*\{\{COMMON_CSS\}\}[ \t]*\r?\n',
+                    '',
+                    tpl_local,
+                    flags=re.MULTILINE,
+                )
+
+            # v0.6.3: ARTICLE_STYLESHEETS — 외부 CSS 없는 글은 placeholder
+            # 라인 통째로 제거. 1+ 개면 link 들의 *내부 들여쓰기 + 줄바꿈* 이
+            # 이미 render_stylesheet_links 출력에 포함되므로 placeholder 자리에
+            # 그대로 치환.
+            if article_stylesheets:
+                tpl_local = tpl_local.replace(
+                    '{{ARTICLE_STYLESHEETS}}',
+                    article_stylesheets.lstrip(),
+                )
+            else:
+                tpl_local = re.sub(
+                    r'^[ \t]*\{\{ARTICLE_STYLESHEETS\}\}[ \t]*\r?\n',
+                    '',
+                    tpl_local,
                     flags=re.MULTILINE,
                 )
 
@@ -1788,8 +1906,11 @@ class Builder:
         """카테고리 meta.yaml 의 styles → <style> 블록.
 
         section TAG 선택자로 글 styles 와 동일한 우선순위 정책 적용.
+        v0.6.3: 카테고리/홈은 외부 CSS 파일 (정수 키) 미지원 — meta.yaml
+        파싱 단계에서 정수 키가 제거되어 여기 도달하는 styles 는 인라인
+        룰 (문자열 키) 만 담는다.
         """
-        return render_article_styles(cat.meta.styles)
+        return render_inline_styles(cat.meta.styles)
 
     def _build_category_page(self, cat: Category):
         """톱레벨/서브카테고리 공용 인덱스 페이지 빌더 (v0.4.5).

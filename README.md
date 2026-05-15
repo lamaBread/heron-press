@@ -1,11 +1,11 @@
-# siheonlee.com v0.6.2 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.6.3 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.6.2 한 줄 요약:** v0.5.4 의 한계 표 "홈/카테고리 페이지의 SEO 메타 태그 일부만 (description / og_* / twitter_*)" 항목 해소. `build_meta_tags()` 시그니처를 글 전용에서 keyword-only 일반 인자로 일반화하여 글/홈/카테고리 세 호출자가 같은 함수를 공유 — 홈과 모든 카테고리 페이지에도 글과 동일한 메타 태그 묶음 (description / og_title / og_description / og_image / og:image:alt / og:type / og:url / og:site_name / twitter:card / twitter:title / twitter:description / twitter:image / link canonical) 이 출력된다. og:type 디폴트는 페이지 종류 별로 (글=article, 홈/카테고리=website, OGP 표준). `seo.description` 필수화 정책 (v0.5.5) 도 홈/카테고리에 확장되어 누락 시 BuildReport 의 issue 에 기록. 색인 정책은 변경 없음 (홈/카테고리도 v0.4.0 부터의 색인 허용 그대로). 글 페이지 dist 산출물은 v0.6.1 과 *바이트 동일*. 단위 테스트 179 → 188. 자세한 내역은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
+> **v0.6.3 한 줄 요약:** *글 단위 외부 CSS 파일 지원 + 사이트 공통 CSS 비활성화 토글.* `meta.yaml` 의 `styles:` 키가 두 채널을 동시에 받도록 확장 — 정수 키 (1, 2, 3, ...) 는 글 폴더 안의 외부 CSS 파일 상대 경로, 문자열 키 (tag/selector) 는 기존 인라인 룰 (v0.5.x 동작 그대로). 글의 자기 디자인을 그 글의 폴더 안에 두는 자연스러운 위치를 제공하며, v0.5.2 자산 경로 일원화 정책에 따라 `dist/{slug}/<rel>` 로 자동 복사 + head 의 `<link href='/{slug}/<rel>'>` 로 자동 link. 로드 순서는 *common_template.css → 외부 CSS → 인라인 `<style>`* (인라인이 마지막 발언권 = "미세 override" 의도). 같이 도입된 `use_common_css: false` 토글은 사이트 공통 CSS link 자체를 head 에서 끊어 글에서 완전히 새로운 디자인/서비스를 제공할 수 있게 한다 (기본값 True 라 옛 글 변경 의무 없음). 카테고리/홈은 외부 CSS 미지원 (영구적 정책 — 카테고리/홈은 사이트 공통 톤에서 벗어날 가능성이 매우 희박). 단위 테스트 188 → 210. 외부 CSS 를 안 쓰는 모든 옛 글의 dist 산출물은 v0.6.2 와 *바이트 동일*. 자세한 내역은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
 
 | 핵심 가치 | 어떻게 보장하는가 |
 |---|---|
@@ -14,7 +14,7 @@
 | **이미지 자동 최적화** (v0.5.1) — SEO 직접 영향 항목을 빌드가 처리 | raster 이미지 자동 WebP 변환 + 다중 해상도 srcset + 모든 `<img>` 에 `loading="lazy"` 자동 부착. 글마다 별도 작업 없음. |
 | **서버 설정과 콘텐츠 분리** — 글을 추가해도 서버를 안 건든다 | `.htaccess` 미사용. 모든 라우팅 규칙은 Apache VirtualHost 메인 설정에 한 번만 등록. |
 | **두 도메인 동시 관리** — 신규 도메인과 구 도메인 리다이렉트를 한 번에 | 빌드 산출물이 `dist/`(siheonlee.com)와 `dist-legacy/`(lama.pe.kr 301 리다이렉트)로 분리됨. |
-| **글마다 표현 제어** — 사이트 전역 CSS 와 별도로 글 단위 미세 조정 가능 | `meta.yaml` 의 `styles:` 필드로 본문 태그(p, h3, ul 등)의 CSS 속성을 글마다 독립적으로 override. |
+| **글마다 표현 제어** — 사이트 전역 CSS 와 별도로 글 단위 미세 조정 + 본격 디자인 모두 가능 | `meta.yaml` 의 `styles:` 키 안의 *문자열 키* (태그/선택자) 로 본문 태그(p, h3, ul 등)의 CSS 속성을 글마다 독립적으로 미세 override. 더 큰 자유도 (at-rule / 중첩 / 변수 / 의사클래스 조합) 가 필요하면 글 폴더 안에 진짜 CSS 파일을 두고 같은 `styles:` 키 안의 *정수 키* (1, 2, 3, ...) 로 등록 (v0.6.3). 글에서 완전히 새로운 디자인을 제공할 때는 `use_common_css: false` 로 사이트 공통 CSS link 자체를 끊는 것도 가능 (v0.6.3). |
 | **글마다 색인 정책** (v0.4.0) — 전역으론 검색 가능, 필요시 개별 비공개 | 전역 `<meta robots noindex>` 폐지. 비공개로 두려는 글은 그 글의 `meta.yaml` 에 `noindex: true` 한 줄. |
 | **사이트 내 검색** — 클라이언트 JS 없이 한국어 친화 부분검색 | 빌드 시 `dist/search.php` 한 파일에 검색 엔드포인트 + 토크나이저 + BM25 함수 + 정적 인덱스가 모두 인라인 (v0.6.0). 카테고리 페이지 검색은 자동으로 해당 카테고리 내부로 한정. v0.4.0 부터 1글자 한국어는 인덱싱/쿼리 대상에서 제외, Python↔PHP 토크나이저 패리티를 빌드마다 자동 검증. **v0.5.0 부터 Okapi BM25 + 필드 가중치 + phrase 부스트**, **v0.6.0 부터 메타데이터 3-필드 (title / description / tags) 만 색인** — 흔한 토큰 vs 희귀 토큰, 짧은 글 vs 긴 글, 흩어진 매치 vs 정확한 phrase 매치를 점수가 합리적으로 반영합니다. PHP OPcache 활성화 시 인덱스가 메모리에 상주해 JSON 파싱 / 디스크 IO 0. |
 
@@ -55,7 +55,7 @@
 
 ### 빌드
 
-이 폴더(`siheonlee.com_v0.6.2/`) 에서 터미널을 열고:
+이 폴더(`siheonlee.com_v0.6.3/`) 에서 터미널을 열고:
 
 ```bash
 python build.py
@@ -158,7 +158,7 @@ python -m http.server 8000
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.6.2/
+siheonlee.com_v0.6.3/
 │
 ├── build.py              ← 빌드 진입점 (이것을 실행합니다)
 ├── site.yaml             ← 사이트 전역 설정
@@ -300,8 +300,19 @@ seo:
 # 됩니다 (값 자체는 자유 — 한국어 다어절 태그도 허용).
 tags: [intro, sample]
 
-# 본문 태그의 CSS 속성을 이 글에서만 override (자세한 내용은 § 4-6)
+# v0.6.3: 사이트 공통 CSS (assets/common_template.css) link 출력 여부.
+# 기본 true (옛 글 변경 의무 없음). false 면 link 태그 자체가 head 에서
+# 출력되지 않아 이 글은 사이트 공통 톤을 완전히 끊고 자기 디자인만 적용.
+# 글에서 완전히 새로운 서비스/랜딩페이지를 제공할 때 사용.
+# use_common_css: false
+
+# 글 단위 표현 제어 (두 채널 공존, 자세한 내용은 § 4-6).
+#   - 정수 키 (1, 2, 3, ...) — 글 폴더 안의 외부 CSS 파일 상대 경로 (v0.6.3).
+#                              정수 오름차순으로 head 의 link 출력.
+#   - 문자열 키 (태그/선택자) — 인라인 CSS 룰. head 의 <style> 블록.
+# 로드 순서: common_template.css → 외부 CSS (정수 키 순) → 인라인 <style>.
 styles:
+  # 1: style.css      # 글 폴더에 style.css 를 두고 외부 CSS 로 등록한 예
   p:
     text-indent: 0
     line-height: 1.7em
@@ -592,13 +603,42 @@ Articles/Blog/프로젝트/
 
 이 경우 `https://siheonlee.com/project-slug/log/day1.html` 로 직접 접근할 수 있습니다.
 
-### 4-6. styles — 글 단위 CSS 오버라이드
+### 4-6. styles — 글 단위 CSS 오버라이드 (인라인 미세 채널 + 외부 파일 채널)
 
-**본문 태그의 CSS 속성을 글마다 독립적으로 변경** 할 수 있습니다.
+**한 글의 표현을 두 채널로 제어** 할 수 있습니다 — 인라인 룰 (자주 쓰이는 작은 속성 override 의 미세 채널) 과 외부 CSS 파일 (글이 자기 CSS 파일을 가질 자격이 있을 때의 본격 디자인 채널, v0.6.3 부터). 두 채널은 `meta.yaml` 의 같은 `styles:` 키 아래 자유롭게 공존합니다 — *키의 타입* 으로 자동 분기됩니다.
 
-#### 동작 원리
+| 채널 | 키 형태 | 값 | 출력 위치 | 의도 |
+|---|---|---|---|---|
+| 인라인 룰 | 문자열 (태그/선택자) | dict (속성:값) | head 의 `<style>` 블록 | *자주 사용되는 일부 속성의 미세 override*. at-rule / 중첩 / 변수 / 의사클래스 조합 등은 표현 불가 — 의도된 한계. |
+| 외부 CSS 파일 *(v0.6.3)* | 정수 (1, 2, 3, ...) | 글 폴더 안의 상대 경로 문자열 | head 의 `<link rel='stylesheet'>` | 더 큰 자유도가 필요한 글이 자기 CSS 파일을 가진다. 정수 키 오름차순이 link 출력 순서. |
 
-`meta.yaml` 의 `styles:` 필드에 적은 내용이 article.html 의 head 영역에 `<style>` 블록으로 inject 됩니다.
+**로드 순서 (cascading)**: `assets/common_template.css` → 외부 CSS (정수 키 순) → 인라인 `<style>`. 인라인이 마지막 발언권 — 두 채널을 같은 글에서 동시에 쓰면 인라인이 외부 CSS 의 같은 규칙을 이깁니다. ("미세 override" 의도와 부합.)
+
+```yaml
+# meta.yaml — 두 채널 공존 예
+styles:
+  1: layout.css         # 외부: 글 폴더 안의 layout.css → head 에 <link>
+  2: theme.css          # 외부: 두 번째로 출력 (정수 오름차순)
+  p:                    # 인라인: p 태그 미세 override
+    text-indent: 0
+  blockquote:
+    border-left: 3px solid #0172d5
+```
+
+**`use_common_css: false` 토글 (v0.6.3)** — 사이트 공통 CSS link 자체를 head 에서 끊습니다. 글에서 완전히 새로운 디자인 / 랜딩페이지 / 단일 페이지 서비스를 제공할 때 사용. 기본값 `true` 라 모든 옛 글은 변경 의무 없음. **카테고리/홈에는 이 토글이 없습니다** — 카테고리/홈은 사이트 공통 톤에서 벗어날 가능성이 매우 희박하다는 정책 (영구적).
+
+```yaml
+# meta.yaml — 완전히 새로운 디자인 제공
+use_common_css: false   # 사이트 공통 CSS link 제거
+styles:
+  1: landing.css        # 이 글만의 디자인을 모두 담은 외부 CSS
+```
+
+> **이 절의 모든 후속 안내 (동작 원리 / 기본 사용법 / 복합 선택자 등) 는 *인라인 룰 채널* 기준입니다.** 외부 CSS 파일 채널은 글 폴더의 진짜 `.css` 파일에서 자유롭게 작성하면 되며, 빌더가 자동으로 `dist/{slug}/<rel>` 로 복사 + head 에 `<link href='/{slug}/<rel>'>` 출력합니다 (v0.5.2 자산 경로 일원화).
+
+#### 동작 원리 (인라인 채널)
+
+`meta.yaml` 의 `styles:` 키 *안의 문자열 키* (태그/선택자) 가 article.html 의 head 영역에 `<style>` 블록으로 inject 됩니다.
 
 ```yaml
 # meta.yaml
@@ -687,14 +727,17 @@ styles:
     border: 1px solid black
 ```
 
-**근본적으로 안 되는 것:**
+**인라인 채널에서 근본적으로 안 되는 것 (의도된 한계 — 외부 CSS 파일 채널로 자연 승격):**
 
-| 한계 | 이유 / 회피 |
+| 한계 | 어떻게 풀까 |
 |---|---|
-| `@media` 쿼리 | 현재 직렬화는 `selector { decls }` 평면 규칙만 생성. 반응형은 `content.html` 에 `<style>` 블록을 직접 쓰거나 빌더 확장 필요. |
-| `@keyframes`, `@supports`, `@font-face`, `@import` | 위와 동일 — 모든 at-rule 미지원. |
+| `@media` 쿼리 | 글 폴더 안에 진짜 CSS 파일을 두고 `styles: { 1: my.css }` 로 등록. (v0.6.3) |
+| `@keyframes`, `@supports`, `@font-face`, `@import` | 위와 동일 — 모든 at-rule 은 외부 CSS 파일에서 자유롭게 작성. |
+| CSS 중첩 / 변수 (`--foo`) 의 본격 활용 | 외부 CSS 파일 권장. 인라인 채널은 단순 키-값 dict 만 표현 가능 (의도된 제약). |
 | 한 속성을 여러 줄에 나눠 쓰기 | YAML 한 줄로 작성. (`box-shadow: 0 1px 2px rgba(0,0,0,.1), 0 2px 4px rgba(...)`) |
 | 값 라인 옆 인라인 주석 (`text-indent: 0  # 들여쓰기 제거`) | 주석이 값에 포함됨. 주석은 별도 줄에. |
+
+> **인라인 채널의 표현력 한계는 결함이 아닙니다.** "자주 사용되는 일부 작은 속성을 사용자 편의성을 위해 YAML 에서 기술할 수 있도록 지원" 이 이 채널의 본분 — 더 큰 자유도가 필요한 글은 그 글의 폴더 안에 자기 CSS 파일을 두는 편이 자연스러운 위치 (v0.6.3 의 정수 키 채널 도입 동기).
 
 #### 미묘한 함정 — specificity
 
@@ -1251,11 +1294,11 @@ def hello():
 | `site.yaml` | 사이트 전역 (도메인, name, copyright, lang 디폴트, default_og_image 등) / 여러 페이지에 공통 적용되는 디폴트 (`category_per_page`, `category_preview_per_page`) / robots.txt 본문 / reserved_slugs / warn_on_* / `description_truncate` / `images:` (v0.5.1, 이미지 최적화 정책) / `error_404_title` `search_title` (v0.5.4, meta.yaml 이 없는 시스템 페이지의 `<title>` 본문) |
 | `Articles/meta.yaml` (v0.4.6) | 메인페이지 (= 사이트 루트, 홈) 전용 — `per_page`, `excludes_categories`, `lang`, `layout`, `styles`, `title` (v0.5.4), `seo:` (v0.5.4) |
 | `Articles/<카테고리>/meta.yaml` (v0.4.5) | 그 카테고리 인덱스 페이지 전용 — `per_page`, `preview_per_page`, `priority` (v0.4.6), `nav_priority` (v0.5.4, 톱레벨 카테고리에서만 의미), `lang`, `layout`, `styles`, `title` (v0.5.4), `seo:` (v0.5.4) |
-| `Articles/<카테고리>/<글>/meta.yaml` | 그 글 페이지 전용 — `slug`, `title`, `date`, `updated`, `noindex`, `lang`, `seo:`, `styles`, `tags` (v0.5.3), `nav_priority` (v0.5.4, 톱레벨 글에서만 의미 — 예: About) |
+| `Articles/<카테고리>/<글>/meta.yaml` | 그 글 페이지 전용 — `slug`, `title`, `date`, `updated`, `noindex`, `lang`, `seo:`, `styles` (v0.6.3 부터 외부 CSS 파일 매핑도 같은 키), `tags` (v0.5.3), `nav_priority` (v0.5.4, 톱레벨 글에서만 의미 — 예: About), `use_common_css` (v0.6.3, 사이트 공통 CSS link 출력 여부 — 기본 true) |
 
 > **v0.4.6 의 변경:** 옛 site.yaml 의 메인페이지 전용 키 3개 (`home_per_page` / `home_excludes_categories` / `home_sort`) 가 모두 `Articles/meta.yaml` 로 이전되었습니다 (`home_sort` 는 빌더가 사용한 적 없는 dead field 라 그대로 폐기). 옛 키를 site.yaml 에 그대로 두면 빌드는 진행되지만 무시되며 워닝이 출력됩니다.
 
-### 11-2. site.yaml 예시 (v0.6.2 기준)
+### 11-2. site.yaml 예시 (v0.6.3 기준)
 
 ```yaml
 # 도메인
@@ -2007,13 +2050,14 @@ python build.py --clean
 
     **`og_image` 의 본문 추출 폴백을 두지 않는 이유:** SNS / 메신저 미리보기는 `og:image` 가 없을 때 본문 첫 이미지나 favicon 을 임의로 긁어가 카드를 조합한다. 이는 author 의 의도와 무관한 부작용이며, 같은 행동을 SSG 가 빌드 시점에 자동화하는 것은 동일하게 무례한 일이다. `meta.yaml` 에 `og_image` 가 없으면 `site.default_og_image` 를 무조건 사용한다 — author 가 명시적으로 선택한 사이트 기본값이라는 점에서 본문 추출과 본질이 다르다.
 
-### 현재 버전(v0.6.2) 의 한계
+### 현재 버전(v0.6.3) 의 한계
 
-> 아래 표는 v0.6.2 시점에 여전히 유효한 한계만 모았습니다. v0.6.2 에서 해소된 항목 — *홈·카테고리 페이지의 SEO 메타 태그 일부만* (v0.5.4부터 한계 표에 있던 항목) — 은 글과 동일한 폴백 규칙으로 description / og_* / twitter_* / canonical / og:image 등이 출력되게 되어 표에서 제거된 상태입니다.
+> 아래 표는 v0.6.3 시점에 여전히 유효한 한계만 모았습니다. v0.6.3 에서 해소된 항목 — *styles 의 at-rule / 중첩 / 변수 / 의사클래스 조합 미지원* — 은 인라인 채널의 의도된 한계이며, 더 큰 자유도가 필요한 글은 그 글의 폴더 안에 자기 CSS 파일을 두고 `styles:` 의 정수 키로 등록하면 모든 표준 CSS 문법이 자유롭게 동작합니다 (v0.6.3 신설). 결함이 아닌 *채널 분리* 이므로 한계 표에서 제거된 상태입니다.
 
 | 한계 | 내용 |
 |---|---|
-| styles 의 @-rule 미지원 | `@media`, `@keyframes`, `@font-face`, `@supports`, `@import` 등 모든 at-rule 은 inject 안 됨 — [scripts/markdown.py](scripts/markdown.py) 의 `render_article_styles` 가 평면 `selector { decls }` 규칙만 직렬화. content.html 의 인라인 `<style>` 로 회피. |
+| 카테고리/홈의 외부 CSS 미지원 (영구적) | `Articles/meta.yaml` (홈) / `Articles/<카테고리>/meta.yaml` 의 `styles:` 에 정수 키 (외부 CSS 파일) 를 적어도 무시되고 issue 가 기록됩니다. *카테고리/홈은 사이트 공통 톤에서 벗어날 가능성이 매우 희박* 하다는 정책 — 외부 CSS 가 필요한 케이스는 글에 한정. 인라인 룰 (문자열 키) 은 카테고리/홈에서도 그대로 작동합니다. |
+| 카테고리/홈의 `use_common_css` 토글 부재 (영구적) | 사이트 공통 CSS 비활성화 토글은 글에만 존재합니다. 위와 같은 이유. |
 | 이미지 최적화는 정적 단일 프레임만 (v0.5.1) | animated GIF 는 첫 프레임만 WebP 로 인코딩되어 애니메이션이 사라집니다. 애니메이션을 보존하려면 그 글의 첨부를 webp 로 직접 만들거나, `<img>` 의 src 를 외부 URL 로 두면 후처리에서 src 가 변경되지 않습니다. 한 글 / 한 이미지에 대해서만 최적화를 끄는 옵션은 아직 없음 (사이트 전역 토글만). |
 | 빌드 증분 캐싱 없음 | 매 빌드마다 전체 글 재렌더 + 검색 인덱스 재구축. 글 자원만 mtime 기준 skip ([builder.py](scripts/builder.py) 의 `_copy_if_newer`) 이며 그 외 캐시 없음. 글 ≤ 수십 건 규모에선 무시 가능. |
 
@@ -2021,16 +2065,57 @@ python build.py --clean
 
 ## 18. 업데이트 로그
 
-### v0.6.2 (2026-05-15) — 홈/카테고리 페이지 SEO 메타 태그 출력 (v0.5.4 한계 표 해소)
+### v0.6.3 (2026-05-15) — 글 단위 외부 CSS 파일 + use_common_css 토글
 
-v0.5.4 시점부터 한계 표에 머물러 있던 "홈·카테고리 페이지의 SEO 메타 태그 일부만 (description / og_* / twitter_* placeholder 부재)" 항목을 해소. v0.5.4 의 `<title>` 폴백 체인 일반화에 이어, 같은 author-authored 메타데이터 묶음 (description / og_title / og_description / og_image / og:image:alt / og:type / og:url / og:site_name / twitter:card / twitter:title / twitter:description / twitter:image / link canonical) 이 홈 / 톱레벨 카테고리 / 서브카테고리 페이지에도 *글과 동일한 폴백 규칙으로* 출력된다. 새 폴더 [siheonlee.com_v0.6.2/](siheonlee.com_v0.6.2) 에서 작업.
+v0.5.x ~ v0.6.2 까지 `meta.yaml` 의 `styles:` 는 *인라인 룰 dict-of-dict* 한 종류만 받았고, at-rule / 중첩 / 변수 / 의사클래스 조합 같은 더 큰 표현이 필요한 글은 마땅한 자리가 없었다 (한계 표에 "at-rule 미지원" 으로 굳어 있던 항목). v0.6.3 은 이 한계를 *기능 확장* 이 아니라 *채널 분리* 로 푼다 — `styles:` 키가 두 종류의 자식을 동시에 가질 수 있게 되어, *정수 키* (1, 2, 3, ...) 가 외부 CSS 파일 채널을, *문자열 키* (태그/선택자) 가 기존 인라인 룰 채널을 담당. 두 채널은 같은 키 아래 자유롭게 섞인다. "글 = 폴더" 원칙 그대로, 글이 자기 디자인 파일을 가질 때 그 파일이 글 폴더 안에 살고 (v0.5.2 자산 경로 일원화에 따라 `dist/{slug}/<rel>` 로 자동 복사), 빌더가 head 의 `<link href='/{slug}/<rel>'>` 를 자동 출력한다. 새 폴더 [siheonlee.com_v0.6.3/](siheonlee.com_v0.6.3) 에서 작업.
+
+**사용자 결정 사항 (작업 전 합의):**
+1. **로드 순서: common_template.css → 외부 CSS (정수 키 순) → 인라인 `<style>`** — 인라인이 마지막 발언권. 인라인 채널이 "자주 사용되는 일부 작은 속성의 미세 override" 의도이므로 source order 의 마지막에 두어 외부 CSS 의 같은 규칙을 이기게 함.
+2. **scope: 글 페이지만.** 카테고리/홈은 외부 CSS 도 `use_common_css` 토글도 *영구적으로 미지원*. 카테고리/홈은 사이트 공통 톤에서 벗어날 가능성이 매우 희박하다는 정책. 카테고리 meta.yaml 에 정수 키가 들어오면 issue 로 알려준다.
+3. **명시 키 (자동 발견 없음).** 글 폴더에 `style.css` 같은 magic name 의 파일을 두는 것만으로 자동 link 되지 않는다 — author 가 `meta.yaml` 의 `styles:` 안에 정수 키로 명시해야 link 출력. 값이 비어있거나 키가 없으면 추가 link 0. 다중 파일은 정수 키 1, 2, 3, ... 으로 순서까지 지정.
+4. **CSS 파일 누락 정책: BuildReport issue + link 미출력 (빌드 통과).** v0.5.5 의 description 누락 정책 ("미완성 글 리포트 + 메타 태그 미출력, 빌드는 끝까지 완성") 과 동일한 톤. 상위 디렉터리 이탈 (`..`) 과 절대 경로 (`/etc/passwd` 등) 도 같은 정책으로 거부 + issue.
+
+**변경 여섯 갈래:**
 
 | 변경 | 내용 |
 |---|---|
-| `build_meta_tags()` 시그니처 일반화 | [scripts/seo.py](siheonlee.com_v0.6.2/scripts/seo.py) 의 시그니처가 글 전용 `(article, rr, site)` → keyword-only 일반 인자 `(title, seo, site, canonical_path, page_kind, published=None, updated=None)` 로 변경. 글/홈/카테고리 세 호출자가 같은 함수를 사용. 페이지 종류별 차이는 두 군데뿐 — (a) `og:type` 디폴트 (글=article, 홈/카테고리=website, OGP 표준 권장), (b) `article:published_time` / `article:modified_time` 의 출력 여부 (published 인자가 전달됐을 때만 = 글일 때만). |
-| `SeoMeta.og_type` 디폴트 변경 | [scripts/models.py](siheonlee.com_v0.6.2/scripts/models.py) 의 `SeoMeta.og_type` 의 기본값이 `'article'` → `None`. 글/홈/카테고리가 같은 SeoMeta 모델을 쓰기 때문에 페이지 종류 별 디폴트가 자연스럽다. None 이면 `build_meta_tags` 가 page_kind 로 결정. author 가 `meta.yaml` 의 `seo.og_type` 으로 명시 override 하면 그 값이 우선. 글 페이지의 dist 산출물은 변경 0 (`None` → page_kind='article' → 'article'). |
+| `styles` 다형 구조 + `normalize_styles` 분리 반환 | [scripts/markdown.py](siheonlee.com_v0.6.3/scripts/markdown.py) 의 `normalize_styles(raw)` 가 이전 dict 반환 → **(sheets, rules) 튜플 반환** 으로 변경. 정수 키 (int / digit-only str — yaml_parser 의 키 반환 타입 호환) 는 sheets 의 (key, path) 쌍으로 수집되어 정수 오름차순 정렬, 문자열 키는 기존 인라인 룰 형식 그대로 rules 로. bool 키 (`true:` `false:`) 는 명시적으로 거부. |
+| 새 헬퍼 `render_stylesheet_links` + 옛 `render_article_styles` 이름 변경 | `render_stylesheet_links(sheets, slug)` 신설 — 외부 CSS link 태그들을 렌더 (URL = `/{slug}/<rel>`, v0.5.2 자산 경로 일원화 형식). 옛 `render_article_styles(rules)` → **`render_inline_styles(rules)`** 로 이름 변경 (반환 텍스트는 동일). 카테고리의 `_category_styles_html` 도 새 이름으로 전환. |
+| ArticleMeta 두 필드 신설 | [scripts/models.py](siheonlee.com_v0.6.3/scripts/models.py) 의 `ArticleMeta` 에 `stylesheets: list = []` 와 `use_common_css: bool = True` 추가. 기존 `styles` 필드의 의미가 좁아져 *문자열 키 (인라인 룰) 만* 담는다 — `_parse_frontmatter` 가 normalize_styles 의 두 결과를 두 필드로 분리해 저장. |
+| `_parse_frontmatter` 의 검증 로직 | [scripts/builder.py](siheonlee.com_v0.6.3/scripts/builder.py) 의 글 파서가 외부 CSS 경로마다 *글 폴더 이탈 거부* (절대 경로, `..`, 빈 경로) + *파일 존재 검증* 을 수행하고 통과한 항목만 `stylesheets` 에 저장. 거부된 항목은 BuildReport 의 issue 로 분류 + 빌드는 계속 진행. `use_common_css` 는 `bool(raw.get('use_common_css'))` 로 파싱하고 키 부재 시 True. |
+| 템플릿 + line-eating placeholder | [templates/article.html](siheonlee.com_v0.6.3/templates/article.html) 의 `<head>` 에서 `<link href='/assets/common_template.css'>` 한 줄을 **`{{COMMON_CSS}}` placeholder 로 교체** + 새 `{{ARTICLE_STYLESHEETS}}` placeholder 를 인라인 `<style>` 바로 위에 추가. 두 placeholder 모두 `{{ROBOTS_META}}` 와 같은 line-eating 패턴 — use_common_css=False 면 placeholder 라인 통째로 제거, sheets 가 비었으면 그 라인도 통째로 제거 (빈 줄 잔존 방지). |
+| 카테고리 측 정수 키 거부 | [scripts/builder.py](siheonlee.com_v0.6.3/scripts/builder.py) 의 `_parse_category_meta_file` 이 styles 의 sheets 부분 (= 정수 키 항목들) 이 비어있지 않으면 issue 로 알려주고 인라인 룰만 채택. README 한계 표에도 "카테고리/홈의 외부 CSS 미지원 (영구적)" 으로 명시. |
+
+**dist 출력 확인 (실제 예시):**
+- 외부 CSS 미사용 글 5 개 (`about`, `section-markers-demo`, `pagination-demo-{one,two,three}`) + 홈 + 카테고리 + sitemap.xml + feed.{atom,rss} + search.php + 404 등 모든 산출물이 **v0.6.2 와 바이트 동일** — 회귀 가드 통과.
+- 데모 적용 글 `dist/hello-world/index.html` 의 head 에 `<link href='/hello-world/style.css' rel='stylesheet' type='text/css'>` 한 줄이 추가됨 (common_template.css link 다음, 인라인 `<style>` 직전). 새 파일 `dist/hello-world/style.css` 가 글 폴더에서 자동 복사 됨. 인라인 채널의 `<style>` 블록은 외부 link 뒤에 그대로 출력되어 cascading 의도 충족.
+
+**검증:**
+- 빌드 6 글 / 2 카테고리 / 0 abort. description 누락 issue 4 건 = about / home / blog / blog/tutorials (v0.6.2 와 동일 — 콘텐츠 측 잔존).
+- 단위 테스트 188 → **210** (test_markdown.py 의 styles 분리/렌더 케이스 11개 + test_builder.py 의 통합 빌드 시나리오 9개 추가).
+- 진단 5/5 PASS (단위 테스트 + sha256 결정성 + PHP -l + Python↔PHP BM25 점수 패리티 8 쿼리 × 12 매치 + 인덱스 v4 형식).
+- `diff -rq` v0.6.2/dist vs v0.6.3/dist: **2 파일 차이 (= 데모 적용분)** — `dist/hello-world/index.html` (link 한 줄 추가) + `dist/hello-world/style.css` (신규 복사). 데모 변경을 되돌리면 모든 파일 v0.6.2 와 *바이트 동일*.
+
+**적용 메모:**
+- 옛 글/카테고리/홈 `meta.yaml` 변경 의무 없음. `use_common_css` 키가 없으면 기본 True 로 옛 동작 그대로.
+- 글에서 외부 CSS 를 쓰려면: (1) 글 폴더 안에 `.css` 파일을 둔다, (2) `meta.yaml` 의 `styles:` 안에 `1: <파일명>` 줄 추가. 둘 다 만족할 때만 head 에 link 가 출력된다.
+- 사이트 공통 톤을 끊고 글이 완전히 자기 디자인을 가지려면: `meta.yaml` 최상위에 `use_common_css: false`. 옛 글에 영향 없음 (디폴트 True).
+- `styles:` 의 인라인 룰 채널 (문자열 키) 은 그대로 — at-rule / 중첩 / 변수 등 더 큰 표현이 필요해지면 외부 CSS 파일로 자연 승격.
+
+**미수용 (영구):**
+- 카테고리/홈의 외부 CSS 자동 link / `use_common_css` 토글. 사이트 공통 톤에서 벗어날 가능성이 매우 희박하다는 정책.
+- 글 폴더의 `*.css` 자동 발견. 명시 키 (`meta.yaml` 의 정수 키) 가 있어야만 link 출력 — author 의 의도가 명시적으로 표현되는 안전한 동작.
+
+### v0.6.2 (2026-05-15) — 홈/카테고리 페이지 SEO 메타 태그 출력 (v0.5.4 한계 표 해소)
+
+v0.5.4 시점부터 한계 표에 머물러 있던 "홈·카테고리 페이지의 SEO 메타 태그 일부만 (description / og_* / twitter_* placeholder 부재)" 항목을 해소. v0.5.4 의 `<title>` 폴백 체인 일반화에 이어, 같은 author-authored 메타데이터 묶음 (description / og_title / og_description / og_image / og:image:alt / og:type / og:url / og:site_name / twitter:card / twitter:title / twitter:description / twitter:image / link canonical) 이 홈 / 톱레벨 카테고리 / 서브카테고리 페이지에도 *글과 동일한 폴백 규칙으로* 출력된다. 새 폴더 [siheonlee.com_v0.6.3/](siheonlee.com_v0.6.2) 에서 작업.
+
+| 변경 | 내용 |
+|---|---|
+| `build_meta_tags()` 시그니처 일반화 | [scripts/seo.py](siheonlee.com_v0.6.3/scripts/seo.py) 의 시그니처가 글 전용 `(article, rr, site)` → keyword-only 일반 인자 `(title, seo, site, canonical_path, page_kind, published=None, updated=None)` 로 변경. 글/홈/카테고리 세 호출자가 같은 함수를 사용. 페이지 종류별 차이는 두 군데뿐 — (a) `og:type` 디폴트 (글=article, 홈/카테고리=website, OGP 표준 권장), (b) `article:published_time` / `article:modified_time` 의 출력 여부 (published 인자가 전달됐을 때만 = 글일 때만). |
+| `SeoMeta.og_type` 디폴트 변경 | [scripts/models.py](siheonlee.com_v0.6.3/scripts/models.py) 의 `SeoMeta.og_type` 의 기본값이 `'article'` → `None`. 글/홈/카테고리가 같은 SeoMeta 모델을 쓰기 때문에 페이지 종류 별 디폴트가 자연스럽다. None 이면 `build_meta_tags` 가 page_kind 로 결정. author 가 `meta.yaml` 의 `seo.og_type` 으로 명시 override 하면 그 값이 우선. 글 페이지의 dist 산출물은 변경 0 (`None` → page_kind='article' → 'article'). |
 | 홈/카테고리 description 필수화 | v0.5.5 의 "본문 ↔ 메타데이터 분리 원칙" 으로 글에만 적용되던 `seo.description` 누락/빈 문자열 issue 가 홈/카테고리에도 동일 적용. `Articles/meta.yaml` (홈) / `Articles/<카테고리>/meta.yaml` 에 description 이 없거나 빈 문자열이면 BuildReport 의 issue 에 기록 (빌드는 통과). 새 헬퍼 `Builder._check_page_description(seo, page_kind, location, slug='')` 가 검사 로직을 페이지 종류 별로 일반화. |
-| 템플릿 placeholder | [templates/home.html](siheonlee.com_v0.6.2/templates/home.html), [templates/category.html](siheonlee.com_v0.6.2/templates/category.html) 의 `<head>` 에 `{{META_TAGS}}` placeholder 추가 (article.html 과 같은 위치). 빌더의 `_build_home` / `_build_category_page` 가 같은 호출 패턴으로 메타 태그를 만들어 placeholder 자리에 렌더. |
+| 템플릿 placeholder | [templates/home.html](siheonlee.com_v0.6.3/templates/home.html), [templates/category.html](siheonlee.com_v0.6.3/templates/category.html) 의 `<head>` 에 `{{META_TAGS}}` placeholder 추가 (article.html 과 같은 위치). 빌더의 `_build_home` / `_build_category_page` 가 같은 호출 패턴으로 메타 태그를 만들어 placeholder 자리에 렌더. |
 | 색인 정책 변경 없음 | 홈 / 톱레벨 카테고리 / 서브카테고리 모두 *색인 허용* 그대로. robots meta 출력 안 함 (글 단위 `noindex: true` 와 search.php 만 noindex). sitemap.xml 도 v0.4.4 ~ v0.6.1 정책 (홈 / 톱레벨·서브카테고리 URL 포함) 그대로. 결정 근거 — v0.4.0 부터 이어진 글 단위 noindex 정책의 일관성, sitemap 과 robots 의 신호 충돌 회피, 메모리에 명시된 "글과 동일한 방식" 차기 의제 흐름. |
 | 단위 테스트 | 179 → **188** (test_seo.py 가 14 → 23: 글 케이스의 og:type 디폴트 + override 2개 + 홈/카테고리 7개 추가). 글 페이지 메타 태그 출력 회귀 가드는 `diff -rq` 가 dist 의 6개 글 페이지를 v0.6.1 과 바이트 동일하게 유지하는 것으로 확보. |
 | `_wrap_page_title` 의 사용처 축소 | 헬퍼 자체는 유지하되, 글/홈/카테고리는 모두 `build_meta_tags` 가 반환하는 full_title 을 직접 사용 (`<title>` 폴백 체인이 한 함수로 통일). 헬퍼는 meta.yaml 이 없는 시스템 페이지 (404 / search) 에서만 호출 — 두 페이지는 description / og_* 등의 메타 태그를 출력하지 않으므로 prefix/suffix 폴백 체인만 적용. |
@@ -2547,4 +2632,4 @@ v0.1 의 SSG 내부 시스템은 그대로 유지하면서, 출력 HTML/CSS 만 
 
 ---
 
-*이 문서는 siheonlee.com v0.6.2 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력 v0.6.2) 기준으로 작성되었습니다. (2026-05-15)*
+*이 문서는 siheonlee.com v0.6.3 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력; 글 단위 외부 CSS 파일 + use_common_css 토글 v0.6.3) 기준으로 작성되었습니다. (2026-05-15)*

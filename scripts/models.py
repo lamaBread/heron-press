@@ -2,6 +2,20 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
+v0.6.3 변경:
+  - ArticleMeta 에 `stylesheets` (list[str]) 와 `use_common_css` (bool=True)
+    필드 추가. `meta.yaml` 의 `styles:` 키가 두 종류의 자식을 동시에 가질
+    수 있게 됨 — 정수 키 (1, 2, 3, ...) 는 글 폴더 안의 외부 CSS 파일
+    상대 경로, 문자열 키 (tag/selector) 는 기존 인라인 룰 그대로. 파서
+    (`scripts/markdown.py:normalize_styles`) 가 두 종류를 분리해 builder
+    가 `stylesheets` (정수 키 오름차순 정렬 결과) 와 `styles` (인라인 룰
+    dict) 로 나눠 ArticleMeta 에 채운다. 카테고리/홈은 정수 키를 지원하지
+    않음 — `_parse_category_meta_file` 이 정수 키 존재 시 issue 로 기록.
+  - `use_common_css` 가 False 면 `<link href='/assets/common_template.css'>`
+    링크 태그 자체가 head 에서 출력되지 않음. 글에서 완전히 새로운 디자인을
+    제공할 때 사이트 공통 톤 (header/nav/footer/pagination/gallery 기본 CSS)
+    을 의도적으로 끊는 옵션. 기본값 True 라 모든 옛 글은 변경 의무 없음.
+
 v0.5.5 변경:
   - RenderResult 에서 `first_paragraph` / `first_image` 필드 제거. v0.5.4
     까지 SEO description / og_image / 갤러리 썸네일 / 피드 summary 의 폴백
@@ -158,7 +172,25 @@ class ArticleMeta:
     seo: SeoMeta = field(default_factory=SeoMeta)
     # 본문 태그 (p, h3, ul, blockquote, a, ...) 의 기본 속성을 글 단위로 override.
     # 결과는 head 의 <style> 에 inject 되어 `section TAG` 선택자로 적용된다.
+    # v0.6.3: 의미가 좁아졌다 — `meta.yaml` 의 styles 키 *중 문자열 키* (tag/
+    # selector) 만 여기 담긴다. 정수 키 (외부 CSS 파일 경로) 는
+    # `stylesheets` 필드로 분리된다.
     styles: dict = field(default_factory=dict)
+    # v0.6.3 신설: 글 폴더 안의 외부 CSS 파일 경로 리스트. `meta.yaml` 의
+    # styles 키의 정수 자식 키 (1, 2, 3, ...) 가 정수 오름차순으로 정렬된
+    # 결과. 각 항목은 글 폴더 기준 상대 경로 (예: 'style.css', 'theme.css').
+    # builder 가 head 에 `<link href='/{slug}/<rel>' rel='stylesheet'>` 들을
+    # 이 순서로 출력. 로드 순서는 common_template.css → 이 외부 CSS 들 →
+    # 인라인 <style> (styles 필드) — 인라인이 최종 발언권 (= "미세 override").
+    stylesheets: list = field(default_factory=list)
+    # v0.6.3 신설: 사이트 공통 CSS (assets/common_template.css) 의 head link
+    # 출력 여부. 기본 True (= 모든 옛 글이 변경 의무 없음). False 면 link
+    # 태그 자체가 head 에서 출력되지 않아, 이 글은 사이트 공통 톤 (header /
+    # nav / footer / pagination / gallery 기본 디자인) 을 완전히 끊고 자기
+    # 디자인만 적용. 글에서 완전히 새로운 서비스 / 랜딩페이지를 제공할 때
+    # 사용. 카테고리/홈은 이 옵션이 없다 (해당 페이지는 사이트 공통 톤에서
+    # 벗어날 가능성이 매우 희박하다는 정책).
+    use_common_css: bool = True
     # v0.5.3: 글 작성자가 직접 적는 주제어 목록. 산출물에서 두 곳에 쓰임 —
     # (1) feed.atom / feed.rss 의 <category>, (2) v0.6.0 부터 검색 인덱스의
     # 세 번째 BM25 필드 (w_tags=2.0, 정확매치 phrase boost ×2.5). meta.yaml

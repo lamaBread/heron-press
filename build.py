@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.6.2 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.6.3 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다. 사이트 전역 버전 문자열은
@@ -9,13 +9,56 @@ source of truth — 피드 generator 등이 이 값을 참조.
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
-    python -m unittest discover -s tests   # 단위 테스트 (v0.6.2: 187개)
+    python -m unittest discover -s tests   # 단위 테스트 (v0.6.3: 210개)
     python tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
-빌드 의존성 (v0.6.2):
+빌드 의존성 (v0.6.3):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.6.3 변경 사항 (vs v0.6.2) — 글 단위 외부 CSS 파일 + use_common_css 토글:
+  - meta.yaml 의 `styles:` 키가 두 채널을 동시에 가질 수 있게 확장 — 정수
+    키 (1, 2, 3, ...) 는 글 폴더 안의 외부 CSS 파일 상대 경로, 문자열 키
+    (tag/selector) 는 기존 인라인 룰 (v0.5.x 동작 그대로). 두 종류가 한 키
+    아래 자유롭게 섞임. 정수 키들의 오름차순이 head 의 `<link>` 출력 순서.
+    글 폴더의 css 파일은 v0.5.2 자산 경로 일원화에 따라 `dist/{slug}/<rel>`
+    로 자동 복사되고, head 의 `<link href='/{slug}/<rel>'>` 가 가리킨다.
+    "글 = 폴더" 원칙에 따라 글이 자기 디자인을 가질 때 그 디자인 파일을
+    글 폴더 안에 두는 것이 가장 자연스럽다는 의도.
+  - **로드 순서**: common_template.css → 외부 CSS (정수 키 순) → 인라인
+    `<style>` (문자열 키). 인라인이 마지막 발언권 — 인라인 채널이 "자주
+    사용되는 일부 속성의 미세 override" 의도라는 README §11 정의와 부합.
+  - **CSS 파일 누락 정책**: meta.yaml 에 명시한 파일이 글 폴더에 없으면
+    BuildReport 의 issue 로 기록 + 해당 link 만 출력에서 제외. 빌드는 통과.
+    v0.5.5 의 "description 누락 = issue + 메타 태그 미출력" 정책과 일관.
+    상위 디렉터리 이탈 (`..`) 과 절대 경로도 동일하게 issue + 출력 제외.
+  - **`use_common_css` 토글** (ArticleMeta 의 새 bool 필드, 기본 True). False
+    면 `<link href='/assets/common_template.css'>` 태그가 head 에서 *통째로*
+    출력되지 않음. 글에서 완전히 새로운 서비스/랜딩페이지를 제공할 때 사이트
+    공통 톤 (header / nav / footer / pagination / gallery 기본 디자인) 을
+    의도적으로 끊는 옵션. 기본 True 라 모든 옛 글이 변경 의무 없음.
+  - **카테고리/홈은 외부 CSS 미지원** — 카테고리/홈은 사이트 공통 톤에서
+    벗어날 가능성이 매우 희박하다는 정책 (영구적). Articles/meta.yaml /
+    Articles/<카테고리>/meta.yaml 의 styles 에 정수 키가 들어오면 issue 로
+    알려주고 인라인 룰만 적용. use_common_css 토글도 카테고리/홈에는 없음.
+  - 템플릿: `templates/article.html` 의 `<head>` 에 `{{COMMON_CSS}}` +
+    `{{ARTICLE_STYLESHEETS}}` 두 placeholder 추가. 비활성/0개 케이스에서는
+    `{{ROBOTS_META}}` 와 같은 line-eating 패턴으로 빈 줄 잔존 방지.
+  - 데이터 모델: ArticleMeta 에 `stylesheets` (list[str]) + `use_common_css`
+    (bool=True) 필드 신설. `styles` 필드의 의미가 좁아져 *문자열 키만* 담음
+    (= 인라인 룰). normalize_styles 가 (sheets, rules) 튜플로 반환.
+  - 함수 분리: 옛 `render_article_styles` 를 `render_inline_styles` (인라인
+    `<style>` 블록 렌더) 로 이름 변경 + 새 `render_stylesheet_links` (외부
+    CSS link 태그 렌더) 신설. 카테고리 측 `_category_styles_html` 도
+    `render_inline_styles` 로 전환.
+  - 단위 테스트: 188 → **210** (test_markdown.py 의 styles 분리/렌더 케이스
+    11개 + test_builder.py 의 통합 빌드 시나리오 9개).
+  - 회귀 가드: 외부 CSS 를 안 쓰는 모든 옛 글의 dist 산출물은 v0.6.2 와
+    **바이트 동일**. 데모로 `Articles/Blog/Hello World/style.css` 와 같은
+    글의 meta.yaml 에 `styles.1: style.css` 한 줄을 추가한 결과만 두 파일
+    차이 (`dist/hello-world/index.html` 의 link 한 줄 추가 +
+    `dist/hello-world/style.css` 신규 복사).
 
 v0.6.2 변경 사항 (vs v0.6.1) — 홈/카테고리 페이지 SEO 메타 태그 출력:
   - v0.5.4 의 한계 표 "홈/카테고리 페이지의 SEO 메타 태그 출력 (description /

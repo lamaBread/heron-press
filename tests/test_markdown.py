@@ -19,7 +19,8 @@ from scripts.markdown import (  # noqa: E402
     resolve_section_markers,
     finalize_md_html,
     normalize_styles,
-    render_article_styles,
+    render_inline_styles,
+    render_stylesheet_links,
     has_live_php,
 )
 
@@ -140,24 +141,97 @@ class FinalizeMdTests(unittest.TestCase):
 class StyleTests(unittest.TestCase):
 
     def test_normalize_strips_none(self):
+        # v0.6.3: 반환이 (sheets, rules) 튜플로 변경.
         raw = {'p': {'color': 'red', 'margin': None}}
-        self.assertEqual(normalize_styles(raw), {'p': {'color': 'red'}})
+        sheets, rules = normalize_styles(raw)
+        self.assertEqual(sheets, [])
+        self.assertEqual(rules, {'p': {'color': 'red'}})
 
     def test_normalize_empty_dict_to_dict(self):
-        self.assertEqual(normalize_styles({}), {})
-        self.assertEqual(normalize_styles(None), {})
-        self.assertEqual(normalize_styles('not a dict'), {})
+        self.assertEqual(normalize_styles({}), ([], {}))
+        self.assertEqual(normalize_styles(None), ([], {}))
+        self.assertEqual(normalize_styles('not a dict'), ([], {}))
 
     def test_render_section_scoped_tag(self):
-        out = render_article_styles({'p': {'color': 'red'}})
+        out = render_inline_styles({'p': {'color': 'red'}})
         self.assertIn('section p', out)
         self.assertIn('color: red', out)
 
     def test_render_complex_selector_unchanged(self):
         # 공백 / 콤마 등 'CSS selector 같은' 입력은 section prefix 안 붙음
-        out = render_article_styles({'.foo > p': {'color': 'red'}})
+        out = render_inline_styles({'.foo > p': {'color': 'red'}})
         self.assertIn('.foo > p', out)
         self.assertNotIn('section .foo', out)
+
+    # v0.6.3 신규 케이스 ─────────────────────────────────────────────
+
+    def test_normalize_separates_int_and_str_keys(self):
+        """정수 키 = 외부 CSS 파일 / 문자열 키 = 인라인 룰."""
+        raw = {
+            2: 'theme.css',
+            'p': {'color': 'red'},
+            1: 'layout.css',
+        }
+        sheets, rules = normalize_styles(raw)
+        self.assertEqual(sheets, ['layout.css', 'theme.css'])
+        self.assertEqual(rules, {'p': {'color': 'red'}})
+
+    def test_normalize_int_keys_sort_ascending(self):
+        """정수 키는 오름차순으로 정렬 — 1 → 2 → 3."""
+        sheets, _ = normalize_styles({10: 'c.css', 1: 'a.css', 5: 'b.css'})
+        self.assertEqual(sheets, ['a.css', 'b.css', 'c.css'])
+
+    def test_normalize_int_keys_allow_gaps(self):
+        """빠진 번호 (1, 3) 도 허용."""
+        sheets, _ = normalize_styles({1: 'a.css', 3: 'b.css'})
+        self.assertEqual(sheets, ['a.css', 'b.css'])
+
+    def test_normalize_skips_non_string_int_value(self):
+        """정수 키의 값이 문자열이 아니면 무시 (silent — Builder 가 issue)."""
+        sheets, _ = normalize_styles({1: ['not', 'a', 'str']})
+        self.assertEqual(sheets, [])
+
+    def test_normalize_skips_empty_int_value(self):
+        """빈 문자열 / 공백만 있는 값 무시."""
+        sheets, _ = normalize_styles({1: '', 2: '   ', 3: 'real.css'})
+        self.assertEqual(sheets, ['real.css'])
+
+    def test_normalize_skips_bool_key(self):
+        """YAML 의 `true:` 같은 bool 키는 정수로 등록되지 않음."""
+        sheets, rules = normalize_styles({True: 'x.css', False: 'y.css'})
+        self.assertEqual(sheets, [])
+        self.assertEqual(rules, {})
+
+    def test_render_stylesheet_links_empty(self):
+        self.assertEqual(render_stylesheet_links([], 'slug'), '')
+        self.assertEqual(render_stylesheet_links(['a.css'], ''), '')
+
+    def test_render_stylesheet_links_basic(self):
+        out = render_stylesheet_links(['style.css'], 'about')
+        self.assertIn("href='/about/style.css'", out)
+        self.assertIn("rel='stylesheet'", out)
+        self.assertEqual(out.count('<link'), 1)
+
+    def test_render_stylesheet_links_multiple_order_preserved(self):
+        out = render_stylesheet_links(['a.css', 'b.css'], 'slug')
+        pos_a = out.find('a.css')
+        pos_b = out.find('b.css')
+        self.assertGreater(pos_a, -1)
+        self.assertGreater(pos_b, pos_a)
+
+    def test_render_stylesheet_links_normalizes_dot_slash(self):
+        out = render_stylesheet_links(['./theme.css'], 'slug')
+        self.assertIn("href='/slug/theme.css'", out)
+        self.assertNotIn('./theme.css', out)
+
+    def test_render_stylesheet_links_subdir(self):
+        out = render_stylesheet_links(['css/main.css'], 'slug')
+        self.assertIn("href='/slug/css/main.css'", out)
+
+    def test_render_stylesheet_links_backslash_to_slash(self):
+        # Windows 경로 호환.
+        out = render_stylesheet_links(['css\\theme.css'], 'slug')
+        self.assertIn("href='/slug/css/theme.css'", out)
 
 
 class HasLivePhpTests(unittest.TestCase):
