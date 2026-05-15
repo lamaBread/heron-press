@@ -1,11 +1,11 @@
-# siheonlee.com v0.6.4 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.6.5 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.6.4 한 줄 요약:** *홈/카테고리도 글과 같은 CSS 자유도 (외부 CSS 파일 + use_common_css 토글) + meta.yaml 의 `template:` 키로 페이지 단위 템플릿 선택.* v0.6.3 의 비대칭 (글만 외부 CSS / 토글 지원, 홈·카테고리는 "영구 미지원") 해소 — 세 페이지 종류가 동일한 `styles:` 두 채널 (정수 키 = 외부 CSS, 문자열 키 = 인라인) + `use_common_css` 토글을 가진다. 외부 CSS URL 은 페이지 종류 별 접두 (글 `/<slug>/<rel>`, 카테고리 `/<cat_slug_path>/<rel>`, 홈 `/<rel>`). 새 `template:` 키는 페이지가 사용할 템플릿 파일을 명시 — `'name.html'` → `templates/` 에서, `'./name.html'` → meta.yaml 의 부모 폴더에서 (글 = 폴더 원칙 연장). 검증 실패 / 파일 없음 → BuildReport issue + 페이지 종류 기본 템플릿 폴백. 부수로 `_render_template` 가 미치환 `{{XXX}}` placeholder 를 빈 문자열로 strip + warning. 단위 테스트 210 → **227**. 외부 CSS 를 안 쓰는 글 6 개 / 카테고리 2 개 / search.php / sitemap 등은 v0.6.3 과 *바이트 동일*. dist 차이는 3 파일 — feed.atom/rss = generator 자동 갱신 + 홈 index.html = 신설 `{{PAGE_STYLES}}` placeholder 의 빈 치환 1 줄. 자세한 내역은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
+> **v0.6.5 한 줄 요약:** *v0.6.4 의 큰 변경 직후 면밀 감사로 발견된 누적 회귀 4 건을 해소하는 안정화 릴리스.* (1) `Builder.build()` 가 진입 시 자동으로 `_report` 를 reset — 한 프로세스에서 여러 번 빌드해도 issue/warning 카운트가 누적되지 않음. (2) `_render_template` 가 3-pass 로 분리되어 사용자 본문 (BODY / SUBCATEGORY_SECTIONS / ARTICLE_LIST) 안의 `{{XXX}}` 대문자 placeholder 패턴이 silent strip 되던 v0.6.4 회귀 해소 (예: 튜토리얼의 `{{COPYRIGHT_YEAR}}` 코드 블록이 보존됨). (3) `_parse_frontmatter` / `_parse_category_meta_file` 가 og_type 디폴트를 강제 ('article' / 'website') 하던 코드 제거 — v0.6.2 의 page_kind 기반 분기가 단일 진실원으로 되살아남. (4) 테스트 스캐폴드의 잘못된 `legacy-map.yaml` 형식 (`legacy_map: {}`) 수정 — spurious issue 잡음 제거. 단위 테스트 227 → **231**. 외부 산출물은 v0.6.4 와 **바이트 동일** (`feed.atom` / `feed.rss` generator 자동 갱신 2 파일만 차이). 자세한 내역은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
 
 | 핵심 가치 | 어떻게 보장하는가 |
 |---|---|
@@ -55,7 +55,7 @@
 
 ### 빌드
 
-이 폴더(`siheonlee.com_v0.6.3/`) 에서 터미널을 열고:
+이 폴더(`siheonlee.com_v0.6.5/`) 에서 터미널을 열고:
 
 ```bash
 python build.py
@@ -158,7 +158,7 @@ python -m http.server 8000
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.6.3/
+siheonlee.com_v0.6.5/
 │
 ├── build.py              ← 빌드 진입점 (이것을 실행합니다)
 ├── site.yaml             ← 사이트 전역 설정
@@ -1300,7 +1300,7 @@ def hello():
 
 > **v0.4.6 의 변경:** 옛 site.yaml 의 메인페이지 전용 키 3개 (`home_per_page` / `home_excludes_categories` / `home_sort`) 가 모두 `Articles/meta.yaml` 로 이전되었습니다 (`home_sort` 는 빌더가 사용한 적 없는 dead field 라 그대로 폐기). 옛 키를 site.yaml 에 그대로 두면 빌드는 진행되지만 무시되며 워닝이 출력됩니다.
 
-### 11-2. site.yaml 예시 (v0.6.3 기준)
+### 11-2. site.yaml 예시 (v0.6.5 기준)
 
 ```yaml
 # 도메인
@@ -2067,19 +2067,53 @@ python build.py --clean
 
     **`og_image` 의 본문 추출 폴백을 두지 않는 이유:** SNS / 메신저 미리보기는 `og:image` 가 없을 때 본문 첫 이미지나 favicon 을 임의로 긁어가 카드를 조합한다. 이는 author 의 의도와 무관한 부작용이며, 같은 행동을 SSG 가 빌드 시점에 자동화하는 것은 동일하게 무례한 일이다. `meta.yaml` 에 `og_image` 가 없으면 `site.default_og_image` 를 무조건 사용한다 — author 가 명시적으로 선택한 사이트 기본값이라는 점에서 본문 추출과 본질이 다르다.
 
-### 현재 버전(v0.6.4) 의 한계
+11. **`template:` 의 페이지 종류 가로지르기 — 허용하되 알린다 (v0.6.4)** — 글/카테고리/홈은 각각 자기 기본 템플릿 (`article.html` / `category.html` / `home.html`) 을 갖지만, `meta.yaml` 의 `template:` 키로 author 는 다른 페이지 종류의 템플릿이나 직접 작성한 임의의 템플릿을 지정할 수 있다. 빌더는 *page_kind ↔ template 의 정합성을 자동 거부하지 않는다.* 빌더가 채울 줄 모르는 placeholder (예: 글 페이지에 `{{SUBCATEGORY_SECTIONS}}` 가 있는 템플릿) 는 [scripts/builder.py](scripts/builder.py) 의 `_render_template` 후처리에서 빈 문자열로 strip 되고, 미치환 이름마다 BuildReport warning 한 줄이 남는다 (시스템 페이지 — 404/search — 는 빌더가 직접 컨트롤하므로 strip 만 적용, warning 없음).
 
-> 아래 표는 v0.6.4 시점에 여전히 유효한 한계만 모았습니다. v0.6.4 에서 해소된 항목 — *카테고리/홈의 외부 CSS / `use_common_css` 토글 미지원* — 은 페이지 종류 간 비대칭이었으나 v0.6.4 에서 글/카테고리/홈 모두 같은 메커니즘으로 통일 (`styles:` 정수 키 + `use_common_css` + `template:`). 한계 표에서 제거된 상태입니다. v0.6.3 에서 해소된 *styles 의 at-rule / 중첩 / 변수 / 의사클래스 조합* 은 인라인 채널의 의도된 한계이며, 더 큰 자유도가 필요하면 자기 CSS 파일을 두고 `styles:` 의 정수 키로 등록하면 표준 CSS 문법이 자유롭게 동작합니다.
+    **issue (보완해야 할 결함) 가 아니라 warning (의도 확인) 인 이유:** 가로지름은 author 의 의도일 수 있다 — 예를 들어 어떤 카테고리에 글 템플릿을 입혀 인덱스 섹션을 의도적으로 비운 랜딩 페이지를 만들거나, 글 하나에 홈 템플릿을 빌려 와 최근 글 목록이 빠진 정적 페이지를 만드는 등. 빌더가 정합성을 자동 거부하면 이 의도된 가로지름이 막힌다. 그래서 SSG 는 **알리기만 하고 판정은 author 의 몫으로 둔다** — 본문 ↔ 메타데이터 분리 (#10) 와 같은 톤의 "추측 안 함" 원칙. silent strip 도 (의도와 무관하게 산출물이 조용히 깨지므로), 자동 거부도 (의도된 사용을 막으므로) 아닌, *알림 + author 확인* 이 정답.
+
+### 현재 버전(v0.6.5) 의 한계
+
+> 아래 표는 v0.6.5 시점에 여전히 유효한 한계만 모았습니다. v0.6.4 에서 해소된 항목 — *카테고리/홈의 외부 CSS / `use_common_css` 토글 미지원* — 은 페이지 종류 간 비대칭이었으나 v0.6.4 에서 글/카테고리/홈 모두 같은 메커니즘으로 통일 (`styles:` 정수 키 + `use_common_css` + `template:`). 한계 표에서 제거된 상태입니다. v0.6.3 에서 해소된 *styles 의 at-rule / 중첩 / 변수 / 의사클래스 조합* 은 인라인 채널의 의도된 한계이며, 더 큰 자유도가 필요하면 자기 CSS 파일을 두고 `styles:` 의 정수 키로 등록하면 표준 CSS 문법이 자유롭게 동작합니다. v0.6.5 에서 코드 동작 변경은 *사용자 본문 안의 `{{XXX}}` 패턴 보존* (이전엔 silent strip) 1 가지 + 운영자 측 잡음 정리 3 가지이며, 한계 표 자체는 v0.6.5 의 doc 편집으로 한 항목이 빠졌습니다 — *페이지 종류 가로지르는 `template:` 의 정합성* 은 결함이 아니라 설계 원칙 #11 의 "허용하되 알린다" 가 의도한 동작이므로, 한계가 아니라 원칙으로 재분류했습니다.
 
 | 한계 | 내용 |
 |---|---|
 | 이미지 최적화는 정적 단일 프레임만 (v0.5.1) | animated GIF 는 첫 프레임만 WebP 로 인코딩되어 애니메이션이 사라집니다. 애니메이션을 보존하려면 그 글의 첨부를 webp 로 직접 만들거나, `<img>` 의 src 를 외부 URL 로 두면 후처리에서 src 가 변경되지 않습니다. 한 글 / 한 이미지에 대해서만 최적화를 끄는 옵션은 아직 없음 (사이트 전역 토글만). |
 | 빌드 증분 캐싱 없음 | 매 빌드마다 전체 글 재렌더 + 검색 인덱스 재구축. 글 자원만 mtime 기준 skip ([builder.py](scripts/builder.py) 의 `_copy_if_newer`) 이며 그 외 캐시 없음. 글 ≤ 수십 건 규모에선 무시 가능. |
-| 페이지 종류 가로지르는 `template:` 의 정합성은 author 책임 | meta.yaml 의 `template:` 으로 페이지 종류 (글/카테고리/홈) 와 짝지지 않는 템플릿을 골라도 빌드는 통과합니다 — 빌더가 채우지 않은 placeholder (예: 글 페이지에 `{{SUBCATEGORY_SECTIONS}}` 가 있는 템플릿) 는 후처리에서 빈 문자열로 strip + warning. 의도된 가로지르기일 수 있으므로 issue 가 아닌 warning. author 가 의도한 결과를 확인해야 합니다. |
 
 ---
 
 ## 18. 업데이트 로그
+
+### v0.6.5 (2026-05-15) — 안정화 패치 (v0.6.0 ~ v0.6.4 누적 회귀 4 건)
+
+v0.6.4 의 큰 변경 (홈/카테고리 CSS 일원화 + `template:` 키) 직후 면밀 감사로 발견된 누적 회귀 4 건을 한 라운드로 정리. 코드 동작 영향은 (2) 의 사용자 본문 placeholder 보존이 가장 가시적 (튜토리얼/문서 글 작성자에게 직접 영향) 이고, 나머지 셋은 운영자 측 잡음 / 죽은 코드 정리 위주. 새 폴더 [siheonlee.com_v0.6.5/](siheonlee.com_v0.6.5) 에서 작업.
+
+**해소된 회귀 네 갈래:**
+
+| 회귀 | 증상 | 원인 | 수정 |
+|---|---|---|---|
+| **(1) `Builder.build()` 가 `_report` 를 자동 reset 하지 않음** | 한 프로세스에서 build() 를 여러 번 호출하면 issue/warning 이 누적. `tests/run_diagnostics.py` 의 [2] 결정성 섹션 (build 2 회 연속) 출력에 "보완 필요 9건" 처럼 부풀려진 카운트. 실 산출물 영향 없음. | `_report` 가 모듈 전역 — `reset_report()` 호출 책임이 caller 쪽. CLI build.py 는 1 회만 부르므로 표면화 안 됨. | [scripts/builder.py](siheonlee.com_v0.6.5/scripts/builder.py) 의 `Builder.build()` 진입 직후 `reset_report()` 호출 1 줄 추가. |
+| **(2) `_render_template` 가 사용자 본문 안의 `{{XXX}}` 패턴을 silent strip** | 사용자 본문에 들어 있던 `{{COPYRIGHT_YEAR}}` (튜토리얼/문서의 코드 블록 예) 가 산출물에서 통째로 사라짐. | v0.6.4 의 신설 leftover strip 이 BODY substitute 이후에 돌아서, BODY 안에 든 대문자 placeholder 도 미치환으로 검출되어 제거. | `_render_template(template, vars, *, content_vars=None, warn_context=None)` 로 시그니처 확장. 3-pass — Pass 1: frame vars substitute, Pass 2: leftover 검출 + strip + warn (content_vars 자리는 검출 제외), Pass 3: content_vars substitute. 호출자가 글=`{'BODY'}`, 카테고리=`{'SUBCATEGORY_SECTIONS'}`, 홈=`{'ARTICLE_LIST'}` 명시. |
+| **(3) `og_type` 디폴트 강제 — page_kind 분기가 dead code** | v0.6.2 의 설계 (SeoMeta.og_type=None 일 때 build_meta_tags 가 page_kind 로 결정) 가 두 frontmatter 파서의 `or 'article'` / `or 'website'` 디폴트 강제 때문에 살아 동작하지 않음. 현재 케이스는 결과가 같아 산출물 영향 0. | `_parse_frontmatter` 의 `og_type=seo_raw.get('og_type') or 'article'`, `_parse_category_meta_file` 의 `or 'website'` 가 v0.6.2 의 dataclass 디폴트 변경 (`'article'` → `None`) 이후에도 옛 코드 그대로. | 두 파서 모두 `og_type=seo_raw.get('og_type')` 로 정리 — None/'' 보존. build_meta_tags 의 page_kind 분기가 단일 진실원으로 되살아남. |
+| **(4) 테스트 스캐폴드의 잘못된 `legacy-map.yaml`** | 모든 v0.6.3 ~ v0.6.4 통합 테스트 빌드가 매번 `[legacy-map] legacy_map` issue 한 건씩 생성 — 빌드 자체는 통과해도 리포트 출력에 잡음. | 스캐폴드 콘텐츠 `'legacy_map: {}\n'` 이 yaml_load → `{'legacy_map': {}}` → _validate 의 legacy-map 루프가 url_path='legacy_map' / slug={} 로 spurious issue. | 세 스캐폴드 모두 `'{}\n'` (빈 매핑) 으로 수정 — yaml_load 가 빈 dict 반환, 루프 0 회. |
+
+**검증:**
+- 빌드 6 글 / 2 카테고리 / 0 abort. description 누락 issue 4 건 = about / home / blog / blog/tutorials (v0.6.4 와 동일 — 콘텐츠 측 잔존).
+- 단위 테스트 227 → **231** (`BodyPlaceholderPreservationTests` 3 개 + `BuildReportResetTests` 1 개 추가).
+- 진단 5/5 PASS — 단위 테스트 + sha256 결정성 + PHP -l + Python↔PHP BM25 점수 패리티 + 인덱스 v4 형식.
+- `diff -rq` v0.6.4/dist vs v0.6.5/dist: **2 파일 차이** — `feed.atom` / `feed.rss` = generator v0.6.4 → v0.6.5 자동 갱신 (`__version__` 단일 source effect). 글 6 개 / 카테고리 2 개 / search.php / sitemap / robots / 404 / dispatcher / 홈 index.html 등 **모든 다른 산출물 byte 동일**.
+
+**적용 메모:**
+- 옛 글/카테고리/홈 `meta.yaml` 변경 의무 없음.
+- 사용자 본문에 `{{XXX}}` 패턴이 들어있던 글이 있었다면 v0.6.5 빌드 후 자동 복원.
+- (3) 의 og_type 영향: author 가 `seo.og_type` 을 안 쓴 글/카테고리/홈의 산출물은 동일 (`page_kind` 디폴트도 같은 값). `seo.og_type: ''` (빈 문자열 명시) 를 적은 페이지가 있다면, v0.6.4 까지는 빈 문자열 → 'article'/'website' 강제, v0.6.5 부터는 빈 문자열 → page_kind 디폴트 — 결과 동일 ('article' / 'website').
+
+**미수용 (차기 의제):**
+- 태그별 색인 페이지 (`/tag/foo/` URL).
+- 검색 결과의 카테고리·태그 필터 UI.
+- Parsedown PHP↔Python 동등성 비교 트리 동봉 (의도된 한계 — 사용자 정책).
+- 자기 폴더의 `template.html` 자동 발견. 명시 키 정책 유지.
+- `_report` 의 per-Builder 인스턴스화 (현재는 모듈 전역). v0.6.5 의 자동 reset 으로 누적 문제는 해소됐지만, 동시 빌드 (멀티스레드) 가 필요해질 때 자연 의제.
 
 ### v0.6.4 (2026-05-15) — 홈/카테고리 CSS 일원화 + `template:` 키
 
@@ -2685,4 +2719,4 @@ v0.1 의 SSG 내부 시스템은 그대로 유지하면서, 출력 HTML/CSS 만 
 
 ---
 
-*이 문서는 siheonlee.com v0.6.3 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력; 글 단위 외부 CSS 파일 + use_common_css 토글 v0.6.3) 기준으로 작성되었습니다. (2026-05-15)*
+*이 문서는 siheonlee.com v0.6.5 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력; 글/카테고리/홈 모두 외부 CSS 파일 + `use_common_css` 토글 + `template:` 키 지원 v0.6.4; v0.6.4 의 큰 변경 직후 발견된 누적 회귀 4 건 안정화 v0.6.5) 기준으로 작성되었습니다. (2026-05-15)*

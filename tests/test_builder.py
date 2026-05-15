@@ -169,8 +169,11 @@ class StylesFrontmatterTests(unittest.TestCase):
         # (Builder 가 base/templates, base/assets 만 받기 때문).
         shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
         shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
-        # legacy-map.yaml 은 빈 dict 로.
-        (tmp / 'legacy-map.yaml').write_text('legacy_map: {}\n', encoding='utf-8')
+        # legacy-map.yaml 은 빈 매핑으로 (URL_path → slug 매핑 0 개).
+        # v0.6.5: 옛 'legacy_map: {}\n' 은 자체로 {'legacy_map': {}} 를 만들어
+        # _validate 의 legacy-map 루프가 '존재하지 않는 slug {}' issue 를
+        # 생성했었다. 빈 매핑은 `{}\n` 로 적어야 정상 (yaml_load → 빈 dict).
+        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
 
         # Articles/<slug>/ 글 한 개.
         article_dir = tmp / 'Articles' / 'Demo'
@@ -315,7 +318,8 @@ class PageCssUnificationTests(unittest.TestCase):
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
         shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
         shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
-        (tmp / 'legacy-map.yaml').write_text('legacy_map: {}\n', encoding='utf-8')
+        # v0.6.5: 빈 매핑 — yaml_load → {} → legacy-map 루프 0 회.
+        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
 
         # Articles/meta.yaml (홈)
         articles_dir = tmp / 'Articles'
@@ -442,7 +446,8 @@ class TemplateRefTests(unittest.TestCase):
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
         shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
         shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
-        (tmp / 'legacy-map.yaml').write_text('legacy_map: {}\n', encoding='utf-8')
+        # v0.6.5: 빈 매핑 — yaml_load → {} → legacy-map 루프 0 회.
+        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
 
         if templates_extra:
             for rel, content in templates_extra.items():
@@ -558,6 +563,115 @@ class TemplateRefTests(unittest.TestCase):
         ]
         joined = '\n'.join(warnings)
         self.assertIn('SUBCATEGORY_SECTIONS', joined)
+
+
+class BodyPlaceholderPreservationTests(unittest.TestCase):
+    """v0.6.5: 사용자 본문 (BODY) 에 들어 있는 `{{XXX}}` 대문자 placeholder 가
+    silent 으로 strip 되지 않아야 한다 (v0.6.4 회귀).
+
+    예: 사용자가 템플릿 엔진 튜토리얼을 쓰면서 코드 블록에 `{{NAV_LINKS}}` 같은
+    문자열을 넣었을 때, v0.6.4 의 leftover strip 이 BODY 안에 든 패턴까지 잡아
+    사용자 텍스트를 잃었다. v0.6.5 의 3-pass _render_template 가 BODY 치환을
+    leftover strip 이후로 미뤄 사용자 본문을 보존한다.
+    """
+
+    SITE_YAML = StylesFrontmatterTests.SITE_YAML
+
+    def _scaffold(self, *, content_md: str):
+        tmp = Path(tempfile.mkdtemp(prefix='ssg-v065-body-'))
+        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
+        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
+
+        articles_dir = tmp / 'Articles'
+        articles_dir.mkdir(parents=True)
+        (articles_dir / 'meta.yaml').write_text(
+            "seo:\n  description: site.\n", encoding='utf-8',
+        )
+        art_dir = articles_dir / 'Demo'
+        art_dir.mkdir(parents=True)
+        (art_dir / 'meta.yaml').write_text(
+            "slug: demo\ntitle: Demo\ndate: 2026-01-01\n"
+            "seo:\n  description: Demo article.\n",
+            encoding='utf-8',
+        )
+        (art_dir / 'content.md').write_text(content_md, encoding='utf-8')
+
+        builder_module.reset_report()
+        b = Builder(base_dir=tmp)
+        b.build()
+        return tmp, tmp / 'dist'
+
+    def test_body_preserves_unknown_uppercase_placeholder(self):
+        """본문 안의 vars 에 없는 `{{FOO_BAR}}` 는 그대로 보존되어야 한다."""
+        _, dist = self._scaffold(content_md='# Demo\n\nLiteral `{{FOO_BAR}}` text.\n')
+        html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('{{FOO_BAR}}', html)
+
+    def test_body_preserves_known_uppercase_placeholder(self):
+        """본문 안의 vars 에 있는 `{{NAV_LINKS}}` 도 보존되어야 한다.
+
+        v0.6.5: content_vars 의 substitute 는 frame vars 와 leftover strip 이
+        끝난 뒤에 일어나므로, BODY 가 substitute 되는 시점에는 더 이상 다른
+        `.replace()` 가 돌지 않아 BODY 안의 패턴이 안전하다.
+        """
+        _, dist = self._scaffold(
+            content_md='# Demo\n\nThe `{{NAV_LINKS}}` slot.\n',
+        )
+        html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
+        # BODY 안의 `{{NAV_LINKS}}` 는 그대로. (head 의 nav 영역은 template
+        # 측에서 이미 substitute 되었지만, BODY 자리에는 사용자 문자가 들어감.)
+        # parsedown 이 `code` 를 <code> 로 감싸므로 escape 후에도 텍스트 보존.
+        self.assertIn('{{NAV_LINKS}}', html)
+
+    def test_body_preserves_placeholder_in_code_block(self):
+        """코드 블록 안의 placeholder 패턴 보존."""
+        md = '# Demo\n\n```\n{{COPYRIGHT_YEAR}}\n```\n'
+        _, dist = self._scaffold(content_md=md)
+        html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('{{COPYRIGHT_YEAR}}', html)
+
+
+class BuildReportResetTests(unittest.TestCase):
+    """v0.6.5: Builder().build() 호출 시 _report 가 자동 초기화되어 한 프로세스
+    안에서 여러 번 빌드를 돌려도 issue/warning 카운트가 누적되지 않는다.
+    """
+
+    SITE_YAML = StylesFrontmatterTests.SITE_YAML
+
+    def _make_site(self):
+        tmp = Path(tempfile.mkdtemp(prefix='ssg-v065-reset-'))
+        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
+        (tmp / 'legacy-map.yaml').write_text('{}\n', encoding='utf-8')
+        articles_dir = tmp / 'Articles'
+        articles_dir.mkdir(parents=True)
+        # 홈에 description 없음 → 1 issue.
+        (articles_dir / 'meta.yaml').write_text('', encoding='utf-8')
+        art_dir = articles_dir / 'Demo'
+        art_dir.mkdir(parents=True)
+        # 글에도 description 없음 → 1 issue.
+        (art_dir / 'meta.yaml').write_text(
+            "slug: demo\ntitle: Demo\ndate: 2026-01-01\n",
+            encoding='utf-8',
+        )
+        (art_dir / 'content.md').write_text('# Demo\n', encoding='utf-8')
+        return tmp
+
+    def test_consecutive_builds_do_not_accumulate_issues(self):
+        tmp = self._make_site()
+        builder_module.reset_report()
+        Builder(base_dir=tmp).build()
+        count_after_first = builder_module.report().issue_count()
+        # 두 번째 빌드 — reset_report() 를 호출자가 안 해도 build() 가 자동
+        # 초기화해야 한다.
+        Builder(base_dir=tmp).build()
+        count_after_second = builder_module.report().issue_count()
+        self.assertEqual(count_after_first, count_after_second,
+                         '두 번째 빌드 후 issue 카운트가 같아야 한다 '
+                         '(누적되면 안 됨)')
 
 
 if __name__ == '__main__':

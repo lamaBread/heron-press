@@ -1,5 +1,19 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.6.5 변경 — 안정화 패치 (v0.6.0 ~ v0.6.4 누적 회귀 4 건):
+  - **Builder.build() 자동 _report reset** — 한 프로세스에서 build() 를 여러
+    번 호출해도 _report 가 누적되지 않는다. v0.6.4 까지는 호출자가 명시적으로
+    reset_report() 를 호출해야 했고, tests/run_diagnostics.py 의 결정성
+    섹션 (build 2 회 연속) 이 이 버그를 가시화 했다. build() 진입 시 reset.
+  - **_render_template 의 3-pass 분리** — content_vars 인자 추가. 사용자
+    콘텐츠 (BODY / SUBCATEGORY_SECTIONS / ARTICLE_LIST) 의 substitute 를
+    leftover 검출/strip 이후로 미뤄, 사용자 본문 안의 `{{XXX}}` 대문자
+    placeholder 패턴이 silent 으로 제거되지 않게 한다. v0.6.4 의 회귀였다.
+  - **og_type 디폴트 강제 제거** — _parse_frontmatter / _parse_category_meta_file
+    가 og_type 의 빈 값을 'article' / 'website' 로 강제하던 코드를 제거.
+    v0.6.2 의 page_kind 기반 디폴트 분기 (build_meta_tags) 가 dead code 가
+    아닌, 의도된 단일 진실원으로 되살아남.
+
 v0.6.4 변경 — CSS 일원화 (홈/카테고리도 글과 동일) + template 키:
   - 글/카테고리/홈의 `styles:` 두 채널 (정수 키 = 외부 CSS, 문자열 키 = 인라인
     룰) + `use_common_css` 토글이 *모두* 동일 의미로 작동. v0.6.3 의 "카테고리/
@@ -489,7 +503,8 @@ def _load_template(templates_dir: Path, name: str) -> str:
 _UNFILLED_PLACEHOLDER_RE = re.compile(r'\{\{([A-Z_][A-Z0-9_]*)\}\}')
 
 
-def _render_template(template: str, vars: dict, warn_context=None) -> str:
+def _render_template(template: str, vars: dict, *,
+                     content_vars=None, warn_context=None) -> str:
     """Substitute `{{KEY}}` placeholders with `vars[KEY]`.
 
     v0.6.4: 치환 후 남은 `{{XXX}}` 패턴을 빈 문자열로 strip + (warn_context 가
@@ -499,11 +514,31 @@ def _render_template(template: str, vars: dict, warn_context=None) -> str:
     (404 / search) 처럼 빌더가 컨트롤하는 템플릿은 None 으로 호출 — strip
     만 적용.
 
+    v0.6.5: content_vars 인자 추가. 사용자 콘텐츠를 담는 vars (BODY,
+    SUBCATEGORY_SECTIONS, ARTICLE_LIST) 의 substitution 을 leftover 검출/strip
+    이후로 미룬다. v0.6.4 는 BODY 가 먼저 substitute 된 뒤에 leftover 검출/
+    strip 이 돌아서, 사용자 본문에 들어 있던 `{{COPYRIGHT_YEAR}}` 같은 대문자
+    placeholder 패턴이 silent 으로 제거되는 회귀가 있었다. 3-pass 로 분리:
+      Pass 1 — frame vars (vars - content_vars) 를 모두 substitute.
+      Pass 2 — leftover 검출 + strip + warn. content_vars 자리는 아직
+               placeholder 형태로 남아 있으므로 검출 대상에서 제외.
+      Pass 3 — content_vars 자리에 값 substitute (사용자 본문 안의
+               `{{XXX}}` 패턴은 그대로 보존된다).
+
     warn_context 형식: (scope: str, target: str, location: Path|str|None).
     """
+    content_vars = set(content_vars or ())
+    # Pass 1: frame vars 만 치환.
     for k, v in vars.items():
+        if k in content_vars:
+            continue
         template = template.replace('{{' + k + '}}', str(v) if v is not None else '')
-    leftovers = sorted(set(_UNFILLED_PLACEHOLDER_RE.findall(template)))
+    # Pass 2: leftover 검출 — content_vars 자리는 아직 placeholder 라 검출
+    # 대상에서 제외. 그 외 미치환 placeholder 만 warn + strip.
+    leftovers = sorted({
+        name for name in _UNFILLED_PLACEHOLDER_RE.findall(template)
+        if name not in content_vars
+    })
     if leftovers and warn_context is not None:
         scope, target, location = warn_context
         for name in leftovers:
@@ -513,8 +548,14 @@ def _render_template(template: str, vars: dict, warn_context=None) -> str:
                 f"strip 되었습니다: {{{{{name}}}}}.",
                 location,
             )
-    if leftovers:
-        template = _UNFILLED_PLACEHOLDER_RE.sub('', template)
+    for name in leftovers:
+        template = template.replace('{{' + name + '}}', '')
+    # Pass 3: content_vars 치환 (사용자 본문의 `{{XXX}}` 가 보존된다).
+    for k in content_vars:
+        if k not in vars:
+            continue
+        v = vars[k]
+        template = template.replace('{{' + k + '}}', str(v) if v is not None else '')
     return template
 
 
@@ -976,6 +1017,10 @@ class Builder:
             # v0.5.5: 빈 문자열을 None 으로 강제 변환하지 않는다.
             # SeoMeta 가 None/''/'text' 세 상태를 보존해 build_meta_tags 가
             # 적절히 처리한다 (None/'' → 메타 태그 누락, '' → 추가로 리포트).
+            # v0.6.5: og_type 의 디폴트 강제 ('article') 제거. v0.6.2 설계대로
+            # SeoMeta.og_type=None (= author 명시 안 함) 일 때 build_meta_tags
+            # 가 page_kind 로 결정 ('article'/'website'). 여기서 또 디폴트를
+            # 강제하면 v0.6.2 의 page_kind 분기가 죽은 코드가 된다.
             seo = SeoMeta(
                 title_prefix=seo_raw.get('title_prefix'),
                 title_suffix=seo_raw.get('title_suffix'),
@@ -986,7 +1031,7 @@ class Builder:
                 og_description=seo_raw.get('og_description'),
                 og_image=seo_raw.get('og_image'),
                 og_image_alt=seo_raw.get('og_image_alt'),
-                og_type=seo_raw.get('og_type') or 'article',
+                og_type=seo_raw.get('og_type'),
                 twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
                 twitter_image=seo_raw.get('twitter_image'),
             )
@@ -1408,6 +1453,9 @@ class Builder:
             seo_raw = {}
 
         # v0.5.5: 빈 문자열 보존 (글 SeoMeta 와 동일 정책).
+        # v0.6.5: og_type 의 디폴트 강제 ('website') 제거. build_meta_tags 가
+        # page_kind 로 결정하도록 None 을 그대로 보존 (글 _parse_frontmatter 와
+        # 같은 정책).
         seo = SeoMeta(
             title_prefix=seo_raw.get('title_prefix'),
             title_suffix=seo_raw.get('title_suffix'),
@@ -1418,7 +1466,7 @@ class Builder:
             og_description=seo_raw.get('og_description'),
             og_image=seo_raw.get('og_image'),
             og_image_alt=seo_raw.get('og_image_alt'),
-            og_type=seo_raw.get('og_type') or 'website',
+            og_type=seo_raw.get('og_type'),
             twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
             twitter_image=seo_raw.get('twitter_image'),
         )
@@ -1854,6 +1902,7 @@ class Builder:
             }
             page_html = _render_template(
                 tpl_local, vars_,
+                content_vars={'BODY'},
                 warn_context=('article', m.slug,
                               article.source_dir / 'meta.yaml'),
             )
@@ -2317,6 +2366,7 @@ class Builder:
         }
         page_html = _render_template(
             tpl_local, vars_,
+            content_vars={'SUBCATEGORY_SECTIONS'},
             warn_context=('category', '/'.join(cat.slug_path), cat_meta_file),
         )
 
@@ -2433,6 +2483,7 @@ class Builder:
         }
         page_html = _render_template(
             tpl_local, vars_,
+            content_vars={'ARTICLE_LIST'},
             warn_context=('home', '', home_meta_file),
         )
         self.dist.mkdir(parents=True, exist_ok=True)
@@ -2820,6 +2871,13 @@ class Builder:
 
     def build(self):
         print('빌드 시작...', flush=True)
+
+        # v0.6.5: 한 프로세스에서 Builder().build() 가 여러 번 호출돼도
+        # _report 가 누적되지 않도록 빌드 시작 시 자동 초기화. v0.6.4 까지는
+        # 호출자가 명시적으로 reset_report() 를 호출해야 했고 (tests/
+        # run_diagnostics.py 의 결정성 섹션처럼) 그렇지 않으면 issue/warning
+        # 카운트가 빌드마다 누적되어 리포트에 중복 항목으로 나타났다.
+        reset_report()
 
         # v0.5.1: 이미지 최적화 도입으로 asset 단계가 article render 보다
         # 먼저 와야 한다. asset 단계가 raster 이미지를 webp 변종으로 만들고

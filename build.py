@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.6.4 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.6.5 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다. 사이트 전역 버전 문자열은
@@ -9,13 +9,47 @@ source of truth — 피드 generator 등이 이 값을 참조.
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
-    python -m unittest discover -s tests   # 단위 테스트 (v0.6.4: 227개)
+    python -m unittest discover -s tests   # 단위 테스트 (v0.6.5: 231개)
     python tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
-빌드 의존성 (v0.6.4):
+빌드 의존성 (v0.6.5):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.6.5 변경 사항 (vs v0.6.4) — 안정화 패치 (v0.6.0 ~ v0.6.4 누적 회귀 4 건):
+  - **(#1) Builder.build() 가 자동으로 _report 를 reset** — v0.6.4 까지는 한
+    프로세스에서 build() 를 여러 번 호출하면 issue/warning 이 누적됐다.
+    tests/run_diagnostics.py 의 [2] 결정성 섹션이 build() 를 두 번 돌리면서
+    이 버그를 드러냈는데 (출력에 '보완 필요 9건' 처럼 부풀려진 카운트), 산출
+    물 자체는 정상이라 묻혀 있었다. v0.6.5 부터 build() 진입 시 reset_report()
+    가 자동 호출 — 호출자는 더 이상 명시적 초기화를 신경 쓸 필요 없다.
+  - **(#2) _render_template 가 BODY 안의 `{{XXX}}` 패턴을 보존** — v0.6.4 의
+    placeholder strip 이 BODY substitute 이후에 돌아서, 사용자 본문에 들어
+    있던 대문자 placeholder 패턴 (예: 템플릿 엔진 튜토리얼의
+    `{{COPYRIGHT_YEAR}}` 코드 블록) 이 silent 으로 제거되는 회귀가 있었다.
+    v0.6.5 는 3-pass 로 분리:
+      Pass 1 — frame vars (LANG, META_TAGS, NAV_LINKS, ...) substitute.
+      Pass 2 — leftover 검출 + strip + warn (BODY 등 content_vars 는 제외).
+      Pass 3 — content_vars (BODY / SUBCATEGORY_SECTIONS / ARTICLE_LIST)
+               substitute — 사용자 본문 안의 `{{XXX}}` 가 보존된다.
+    호출자가 `content_vars=` 인자로 어느 vars 가 사용자 콘텐츠인지 명시.
+  - **(#3) og_type 디폴트 강제 제거** — v0.6.2 의 설계는 SeoMeta.og_type=None
+    일 때 build_meta_tags 가 page_kind 로 결정 (글=article, 홈/카테고리=
+    website) 이었으나, _parse_frontmatter 가 'or "article"', _parse_category_
+    meta_file 이 'or "website"' 로 디폴트를 강제해 page_kind 분기가 dead
+    code 가 됐다. v0.6.5 는 두 파서가 raw 값을 그대로 보존 — page_kind 분기가
+    되살아남. 산출물 동일 (현재 케이스에서는 두 디폴트가 같은 결과).
+  - **(#4) test 스캐폴드의 잘못된 legacy-map.yaml 형식 수정** — 옛 스캐폴드가
+    `legacy_map: {}\n` 을 적어 yaml_load 가 `{'legacy_map': {}}` 를 반환,
+    _validate 의 legacy-map 루프가 매번 spurious issue 한 건을 만들었다.
+    빈 매핑 (`{}\n`) 으로 수정. 본 빌드/산출물에는 영향 없음 (test 잡음만 제거).
+  - 단위 테스트: 227 → **231** (test_builder.py 의
+    BodyPlaceholderPreservationTests 3 개 + BuildReportResetTests 1 개 추가).
+  - 회귀 가드: v0.6.4 와 dist 차이 2 파일 — `feed.atom` / `feed.rss` =
+    generator v0.6.4 → v0.6.5 자동 갱신 (__version__ 단일 source 효과).
+    글 6 개 / 카테고리 2 개 / search.php / sitemap / robots / 404 / dispatcher
+    / 홈 index.html 등 *모든 다른 산출물 byte 동일*.
 
 v0.6.4 변경 사항 (vs v0.6.3) — 홈/카테고리 CSS 일원화 + template: 키:
   - v0.6.3 의 비대칭 (글만 외부 CSS / use_common_css 지원, 홈/카테고리는 영구
