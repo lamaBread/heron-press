@@ -39,7 +39,7 @@ v0.5.5 변경:
   - RenderResult 에서 `first_paragraph` / `first_image` 필드 제거. v0.5.4
     까지 SEO description / og_image / 갤러리 썸네일 / 피드 summary 의 폴백
     소스로 본문에서 휴리스틱 추출된 값이었으나, "본문 ↔ 메타데이터 분리
-    원칙" (README § 5-1 참조) 도입과 함께 폐기. 모든 외부 노출 메타데이터는
+    원칙" (README § 16 의 설계 원칙 10 참조) 도입과 함께 폐기. 모든 외부 노출 메타데이터는
     `meta.yaml` 의 명시적 author-authored 값만 사용한다.
   - SeoMeta.description 등 Optional[str] 필드의 의미가 *세 상태* 로 확장:
     `None` = 키 부재 또는 값 부재 (opt-out, 메타 태그 누락), `''` = 작성자

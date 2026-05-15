@@ -1,4 +1,4 @@
-"""siheonlee.com v0.7.0 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v0.7.1 — 빌더 내부 모듈 묶음.
 
 루트의 build.py 가 이 패키지를 import 한다.
 모듈:
@@ -22,4 +22,4 @@ __version__:
   이 값을 global_hash 에 포함 — 빌더 버전이 바뀌면 캐시가 일괄 무효화된다.
 """
 
-__version__ = '0.7.0'
+__version__ = '0.7.1'

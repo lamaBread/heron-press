@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.7.0 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.7.1 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다. 사이트 전역 버전 문자열은
@@ -11,13 +11,41 @@ Usage:
     python build.py --clean        # wipe dist/, .build_cache/ 후 빌드
     python build.py --clean-cache  # .build_cache/ 만 폐기 후 빌드 (dist 는 유지)
     python build.py --no-cache     # 증분 캐시 비활성 (v0.6.5 동작)
-    python -m unittest discover -s tests   # 단위 테스트 (v0.7.0: 258개)
+    python -m unittest discover -s tests   # 단위 테스트 (v0.7.1: 258개)
     python tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
-빌드 의존성 (v0.7.0):
+빌드 의존성 (v0.7.1):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.7.1 변경 사항 (vs v0.7.0) — 안정화 패치 (정합성 회복, 코드 동작 변경 0):
+  - v0.7.0 에서 lama.pe.kr 마이그레이션 인프라 일괄 제거 직후 누적된 문서·주석
+    drift 정리. dist 산출물은 v0.7.0 과 *바이트 동일* (`__version__` 단일 source
+    효과로 feed.atom / feed.rss 의 generator 문자열만 v0.7.0 → v0.7.1 자동
+    갱신).
+  - **빌더 docstring 의 파이프라인 헤더 정정** — scripts/builder.py 의 "15단계
+    파이프라인" 헤더가 v0.6.4 에서 추가된 `_sync_page_css` 단계 ([6b]) 를
+    빠뜨리고 있던 부분 갱신. 실 파이프라인 (`build()` 의 16개 self._… 호출) 과
+    docstring 의 단계 표가 일치.
+  - **README §2 빌드 단계 표 재작성** — v0.5.1 의 asset/render 순서 역전,
+    v0.5.3 의 `_build_feeds` ([12b]), v0.6.4 의 `_sync_page_css` ([6b]) 가
+    누락돼 있던 표를 실 파이프라인 그대로 재기술.
+  - **본문 폴백 잔존 안내 정리** — README §5 (gallery 썸네일 결정 규칙) /
+    §13b (feed entry table 의 `<summary>` 폴백) 가 v0.5.5 폐기된 "본문 첫
+    이미지 / 본문 첫 단락" 폴백을 여전히 안내하던 부분 정정. 모든 외부 노출
+    메타데이터는 `meta.yaml` 의 명시값만 사용한다는 본문 ↔ 메타데이터 분리
+    원칙 (설계 원칙 10) 과 일관.
+  - **stale § cross-ref 정정** — 마이그레이션 절 (구 §14) 제거에 따른 §
+    번호 시프트가 코드 docstring 에 따라잡지 못한 부분 정정: build.py 의
+    `§ 18 (업데이트 로그)` → `§ 17`, scripts/builder.py 의 `§ 17 참조` →
+    `§ 16 의 설계 원칙 10`, scripts/builder.py 와 scripts/models.py 의 옛
+    `§ 5-1 참조` (한 시점에 본문 ↔ 메타데이터 분리 원칙이 있었던 절) →
+    현재의 `§ 16 의 설계 원칙 10`.
+  - **README 헤더/푸터/폴더 트리의 버전 표기** v0.7.0 → v0.7.1. v0.7.0 의
+    각 기능 도입 시점을 가리키는 changelog 본문의 v0.7.0 표기는 *역사 기록* 이라
+    그대로 유지.
+  - 검증: 단위 테스트 258 (v0.7.0 과 동일), 진단 5/5 PASS.
 
 v0.7.0 변경 사항 (vs v0.6.5) — 빌드 증분 캐싱 도입:
   - **글 단위 증분 캐시** (`scripts/cache.py` 신설) — 매 빌드마다 모든 글을
@@ -456,7 +484,7 @@ v0.4.0 변경 사항 (vs v0.3.2):
   - reserved_slugs 정리, seo_keywords 필드 폐기 등 잔재 청소.
   - build.py 분할: 모든 모듈은 scripts/ 패키지에 거주.
 
-자세한 내용은 README.md 의 § 18 (업데이트 로그) 참조.
+자세한 내용은 README.md 의 § 17 (업데이트 로그) 참조.
 """
 import shutil
 import sys

@@ -1,11 +1,13 @@
-# siheonlee.com v0.7.0 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.7.1 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.7.0 한 줄 요약:** *빌드 증분 캐싱 도입.* 매 빌드마다 모든 글을 재렌더하던 동작이, 변경되지 않은 글은 캐시된 HTML/PHP 를 그대로 dist 에 복원하는 방식으로 전환됩니다. 글이 많아질수록 빌드 시간이 *변경된 글 수* 에 비례 — 한 글의 content 만 바꾸면 그 글만 재렌더, 나머지는 캐시 hit. 캐시 키는 fine-grained 라 site.yaml / 템플릿 / 빌더 코드가 바뀌면 모든 글이 정확히 invalidate 됩니다. CLI 신설 3 종: `--no-cache` (캐시 비활성, v0.6.5 동작), `--clean-cache` (`.build_cache/` 만 폐기 후 빌드), `--clean` 확장 (dist/ 외에 `.build_cache/` 도 함께 폐기). dist 산출물은 v0.6.5 와 **바이트 동일** (`feed.atom` / `feed.rss` generator 자동 갱신 2 파일만 차이). 단위 테스트 231 → **258** (`tests/test_cache.py` 27 케이스 신설). 자세한 내역은 [§ 17 업데이트 로그](#17-업데이트-로그) 참조.
+> **v0.7.1 한 줄 요약:** *v0.7.0 직후 누적된 문서·주석 drift 안정화 (회귀 0).* lama.pe.kr 마이그레이션 인프라 일괄 제거 직후 빌더 docstring 의 파이프라인 헤더가 `_sync_page_css` ([6b]) 를 빠뜨리고 있던 부분, README §2 빌드 단계 표가 v0.5.1 의 asset/render 순서 역전과 v0.5.3 의 `_build_feeds` / v0.6.4 의 `_sync_page_css` 를 누락하고 있던 부분, §5 갤러리 썸네일 / §13b 피드 entry 가 v0.5.5 폐기된 본문 폴백 ("본문 첫 이미지" / "본문 첫 단락") 을 여전히 안내하던 부분, 그리고 옛 마이그레이션 절 제거에 따른 § 번호 시프트가 코드 docstring 에 따라잡지 못한 부분을 일괄 정정. dist 산출물은 v0.7.0 과 **바이트 동일** (`feed.atom` / `feed.rss` generator 문자열만 v0.7.0 → v0.7.1 자동 갱신 — `__version__` 단일 source 효과). 단위 테스트 258 그대로. 자세한 내역은 [§ 17 업데이트 로그](#17-업데이트-로그) 참조.
+
+> **v0.7.0 한 줄 요약:** *빌드 증분 캐싱 도입.* 매 빌드마다 모든 글을 재렌더하던 동작이, 변경되지 않은 글은 캐시된 HTML/PHP 를 그대로 dist 에 복원하는 방식으로 전환됩니다. 글이 많아질수록 빌드 시간이 *변경된 글 수* 에 비례 — 한 글의 content 만 바꾸면 그 글만 재렌더, 나머지는 캐시 hit. 캐시 키는 fine-grained 라 site.yaml / 템플릿 / 빌더 코드가 바뀌면 모든 글이 정확히 invalidate 됩니다. CLI 신설 3 종: `--no-cache` (캐시 비활성, v0.6.5 동작), `--clean-cache` (`.build_cache/` 만 폐기 후 빌드), `--clean` 확장 (dist/ 외에 `.build_cache/` 도 함께 폐기). 단위 테스트 231 → **258** (`tests/test_cache.py` 27 케이스 신설).
 
 | 핵심 가치 | 어떻게 보장하는가 |
 |---|---|
@@ -53,7 +55,7 @@
 
 ### 빌드
 
-이 폴더(`siheonlee.com_v0.7.0/`) 에서 터미널을 열고:
+이 폴더(`siheonlee.com_v0.7.1/`) 에서 터미널을 열고:
 
 ```bash
 python build.py                # 평소 빌드 (캐시 사용 — v0.7.0 신설)
@@ -137,15 +139,17 @@ python -m http.server 8000
 | 1 | `site.yaml` 읽기. (v0.4.1) 토크나이저 패리티 검증 — PHP CLI 가 있으면 자동 검증, 없으면 워닝 후 통과 |
 | 2 | `Articles/` 트리를 뒤져 글 후보 수집 |
 | 3 | 각 글의 `meta.yaml` 파싱 (제목, 날짜, SEO 설정, styles 등) |
-| 4 | 검증: slug 중복 없는지, 날짜 형식이 맞는지 등 확인. 문제 있으면 빌드 중단 |
-| 5 | 각 글의 본문 렌더 (.md 는 파서 호출, .html 은 그대로) → styles 블록 inject → 템플릿에 끼워 넣어 `dist/{slug}/index.html` 생성 |
-| 6 | 글별 이미지/파일을 `dist/{slug}/` 로 복사 (v0.5.2: 옛 `dist/src/{slug}/` 폐지) |
-| 7 | 카테고리 색인 페이지 생성 |
-| 8 | 홈 페이지 생성 |
-| 9 | `assets/` → `dist/assets/` 복사 |
+| 4 | 검증: slug 중복 없는지, 날짜 형식이 맞는지 등 확인. 문제 있으면 BuildReport 의 issue 로 기록 + 그 글만 산출물 제외 (v0.5.5 부터 빌드 자체는 계속) |
+| 5 | 글별 이미지/파일을 `dist/{slug}/` 로 복사 (v0.5.2: 옛 `dist/src/{slug}/` 폐지). v0.5.1 부터 raster 이미지 (.jpg .jpeg .png .gif) 는 Pillow 로 WebP 다중 해상도 변종으로 변환 |
+| 6 | `assets/` → `dist/assets/` 복사 (raster 이미지는 5단계와 동일하게 WebP 변환) |
+| 6b | 카테고리/홈의 외부 CSS 파일을 dist 로 명시 복사 (v0.6.4. 글의 외부 CSS 는 5단계에서 글 폴더 통째 복사로 함께 처리) |
+| 7 | 각 글의 본문 렌더 (.md 는 파서 호출, .html 은 그대로) → 5/6 단계의 image_variants 정보로 본문 `<img>` 후처리 (WebP src + srcset + loading="lazy", v0.5.1) → styles 블록 inject → 템플릿에 끼워 넣어 `dist/{slug}/index.html` 생성 |
+| 8 | 카테고리 색인 페이지 생성 (톱레벨 + 서브카테고리, v0.4.5) |
+| 9 | 홈 페이지 생성 |
 | 10 | 404 에러 페이지 생성 |
 | 11 | `robots.txt` 생성 (Sitemap 디렉티브 포함, v0.4.4) |
 | 12 | `sitemap.xml` 생성 (v0.4.4) |
+| 12b | `feed.atom` / `feed.rss` 생성 (v0.5.3. 두 파일이 같은 entry 목록을 공유) |
 | 13 | `dist/search.php` 단일 파일 생성 — 메타데이터 3-필드 (title / description / tags) BM25 인덱스 + 토크나이저 + 점수 계산기를 한 파일에 PHP 정적 배열 / 함수로 인라인 (v0.6.0) |
 | 14 | 이전 빌드에서 삭제된 글의 파일 정리 (고아 정리) |
 
@@ -154,7 +158,7 @@ python -m http.server 8000
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.7.0/
+siheonlee.com_v0.7.1/
 │
 ├── build.py              ← 빌드 진입점 (이것을 실행합니다)
 ├── site.yaml             ← 사이트 전역 설정
@@ -866,11 +870,13 @@ preview_per_page: 4
 layout: gallery
 ```
 
-**썸네일 결정 규칙:**
+**썸네일 결정 규칙 (v0.5.5 의 본문 ↔ 메타데이터 분리 원칙, § 16 의 설계 원칙 10):**
 
 1. 글의 `seo.og_image` 가 있으면 그 값.
-2. 없으면 글 본문의 **첫 이미지** (`<img src=...>`).
+2. 없으면 `site.yaml` 의 `default_og_image` (사이트 기본).
 3. 둘 다 없으면 **빈 플레이스홀더** (옅은 그라데이션 배경).
+
+> **v0.5.5 변경:** v0.5.4 까지 있던 "본문 첫 이미지" 폴백을 폐지. 빌더가 author 의 의도와 무관하게 본문에서 이미지를 긁어가는 동작 (SNS 미리보기가 본문 첫 이미지를 임의로 가져가는 행동의 자동화) 을 없애기 위한 정책.
 
 빌드 시 이미지 자동 최적화 (v0.5.1) 와 자연스럽게 연동됩니다 — raster 썸네일이라면 webp 변종 + srcset + `sizes` + `loading="lazy"` 가 자동으로 부착됩니다. 별도 작업 없이 그대로 동작.
 
@@ -1287,7 +1293,7 @@ def hello():
 
 > **v0.4.6 의 변경:** 옛 site.yaml 의 메인페이지 전용 키 3개 (`home_per_page` / `home_excludes_categories` / `home_sort`) 가 모두 `Articles/meta.yaml` 로 이전되었습니다 (`home_sort` 는 빌더가 사용한 적 없는 dead field 라 그대로 폐기). 옛 키를 site.yaml 에 그대로 두면 빌드는 진행되지만 무시되며 워닝이 출력됩니다.
 
-### 11-2. site.yaml 예시 (v0.7.0 기준)
+### 11-2. site.yaml 예시 (v0.7.1 기준)
 
 ```yaml
 # 도메인
@@ -1757,7 +1763,7 @@ v0.5.x 까지 있던 `search-index.json` / `search_tokenize.php` / `search_bm25.
 | `<id>` | `<guid isPermaLink="true">` | 글의 절대 URL (= 영구 식별자) |
 | `<published>` | `<pubDate>` | meta.yaml 의 `date` |
 | `<updated>` | (없음) | meta.yaml 의 `updated` (없으면 `date`) |
-| `<summary>` | `<description>` | seo.description > 본문 첫 단락. site.yaml 의 `description_truncate` 적용. |
+| `<summary>` | `<description>` | seo.description (v0.5.5 부터 본문 첫 단락 폴백 폐기 — § 16 의 설계 원칙 10). site.yaml 의 `description_truncate` 적용. 부재/빈 문자열 시 entry 의 summary/description 자체 누락 + BuildReport issue. |
 | `<author>` | (생략) | seo.author > site.default_author. RSS 의 `<author>` 는 email 형식 강제라 dc:creator 없이는 표현 한계 — 생략. |
 | `<category term=>` | `<category>` | 톱레벨 카테고리 폴더명 + 글의 `tags` (v0.5.3). 중복 제거. |
 
@@ -1953,9 +1959,9 @@ python build.py --clean
 
     **issue (보완해야 할 결함) 가 아니라 warning (의도 확인) 인 이유:** 가로지름은 author 의 의도일 수 있다 — 예를 들어 어떤 카테고리에 글 템플릿을 입혀 인덱스 섹션을 의도적으로 비운 랜딩 페이지를 만들거나, 글 하나에 홈 템플릿을 빌려 와 최근 글 목록이 빠진 정적 페이지를 만드는 등. 빌더가 정합성을 자동 거부하면 이 의도된 가로지름이 막힌다. 그래서 SSG 는 **알리기만 하고 판정은 author 의 몫으로 둔다** — 본문 ↔ 메타데이터 분리 (#10) 와 같은 톤의 "추측 안 함" 원칙. silent strip 도 (의도와 무관하게 산출물이 조용히 깨지므로), 자동 거부도 (의도된 사용을 막으므로) 아닌, *알림 + author 확인* 이 정답.
 
-### 현재 버전(v0.7.0) 의 한계
+### 현재 버전(v0.7.1) 의 한계
 
-> 아래 표는 v0.7.0 시점에 여전히 유효한 한계만 모았습니다. v0.6.5 에서 해소된 항목 — *사용자 본문의 `{{XXX}}` placeholder silent strip* / *_report 누적* / *og_type 디폴트 강제* — 은 모두 안정화 패치로 사라졌습니다. v0.6.4 의 *카테고리/홈 외부 CSS 미지원* 비대칭도 해소된 상태 (글/카테고리/홈 모두 같은 메커니즘). **v0.7.0 에서 새로 해소된 항목** — *빌드 증분 캐싱 없음* — 도 한계 표에서 빠집니다. 글 단위 캐시 (`.build_cache/`) 가 도입되어 변경되지 않은 글은 캐시 hit 로 재렌더 없이 dist 에 복원됩니다 (검색 인덱스 / sitemap / feed / 홈 / 카테고리는 모든 글이 입력이라 매 빌드 재구축 — 의도된 범위).
+> 아래 표는 v0.7.1 시점에 여전히 유효한 한계만 모았습니다. v0.6.5 에서 해소된 항목 — *사용자 본문의 `{{XXX}}` placeholder silent strip* / *_report 누적* / *og_type 디폴트 강제* — 은 모두 안정화 패치로 사라졌습니다. v0.6.4 의 *카테고리/홈 외부 CSS 미지원* 비대칭도 해소된 상태 (글/카테고리/홈 모두 같은 메커니즘). v0.7.0 에서 새로 해소된 항목 — *빌드 증분 캐싱 없음* — 도 한계 표에서 빠집니다. 글 단위 캐시 (`.build_cache/`) 가 도입되어 변경되지 않은 글은 캐시 hit 로 재렌더 없이 dist 에 복원됩니다 (검색 인덱스 / sitemap / feed / 홈 / 카테고리는 모든 글이 입력이라 매 빌드 재구축 — 의도된 범위). **v0.7.1 은 안정화 패치 (회귀 0)** 라 한계 목록 자체에는 변동이 없습니다.
 
 | 한계 | 내용 |
 |---|---|
@@ -1965,6 +1971,21 @@ python build.py --clean
 ---
 
 ## 17. 업데이트 로그
+
+### v0.7.1 (2026-05-16) — 안정화 패치 (정합성 회복, 코드 동작 변경 0)
+
+v0.7.0 의 lama.pe.kr 마이그레이션 인프라 일괄 제거 직후 면밀 재감사에서 드러난 문서·주석·README 정합성 갭 정리. 빌더 로직 무변경 — dist 의 모든 파일이 v0.7.0 과 byte 단위 동등 (`feed.atom` / `feed.rss` 의 generator 문자열만 `v0.7.0` → `v0.7.1` 자동 갱신, `__version__` 단일 source 효과).
+
+- **빌더 파이프라인 헤더 정정.** [scripts/builder.py](scripts/builder.py) 의 docstring 이 "15단계 파이프라인" 으로 표기하면서 v0.6.4 에서 신설된 `_sync_page_css` ([6b]) 단계를 목록에서 빠뜨리고 있던 부분 갱신. 실 파이프라인 (`build()` 의 16 개 self._… 호출) 과 docstring 의 단계 표가 일치.
+- **README §2 빌드 단계 표 재작성.** 표가 v0.4.x 시절의 (a) `_render_articles` 가 `_sync_assets` 보다 앞서던 옛 순서를 그대로 둔 부분 (v0.5.1 에서 image_variants 채우기 위해 역전됨), (b) v0.5.3 의 `_build_feeds` ([12b]) 누락, (c) v0.6.4 의 `_sync_page_css` ([6b]) 누락 세 부분을 한 번에 정정. 표가 실 파이프라인을 거꾸로 안내하던 사용자 혼선 해소.
+- **본문 폴백 잔존 안내 정리.** §5 (`layout: gallery` 의 썸네일 결정 규칙) 가 v0.5.5 폐기된 "본문 첫 이미지" 폴백을 여전히 안내하던 부분 + §13b (RSS / Atom entry table 의 `<summary>` 폴백) 가 마찬가지로 폐기된 "본문 첫 단락" 폴백을 안내하던 부분을 일괄 정정. v0.5.5 의 본문 ↔ 메타데이터 분리 원칙 (§ 16 의 설계 원칙 10) 과 일관.
+- **stale § cross-ref 정정.** v0.7.0 에서 마이그레이션 절 (구 §14) 을 제거하면서 후속 § 번호가 시프트됐는데, 코드 docstring 안의 README 참조 두어 곳이 따라오지 못한 부분 정정:
+    - [build.py](build.py) 의 `§ 18 (업데이트 로그)` → `§ 17`.
+    - [scripts/builder.py](scripts/builder.py) `_gallery_tile_html` 의 `§ 17 참조` → `§ 16 의 설계 원칙 10`.
+    - [scripts/builder.py](scripts/builder.py) v0.5.5 변경 절 + [scripts/models.py](scripts/models.py) RenderResult 절의 옛 `§ 5-1 참조` (한 시점에 "본문 ↔ 메타데이터 분리 원칙" 절이 있던 §) → `§ 16 의 설계 원칙 10`.
+- **버전 표기 일괄 갱신.** [scripts/\_\_init\_\_.py](scripts/__init__.py) 의 `__version__` `0.7.0` → `0.7.1`. README 헤더 / 빠른 시작 폴더 예시 / 폴더 트리 (`siheonlee.com_v0.7.0/` → `siheonlee.com_v0.7.1/`) / §11-2 site.yaml 예시 헤더 / 현재 한계 표 / 푸터 캡션도 모두 v0.7.1 로 갱신. 단 *changelog 본문* 안의 v0.7.0 표기는 *기능 도입 시점* 을 가리키는 역사 기록이라 그대로 보존.
+
+**검증:** 단위 테스트 258 / 0 (v0.7.0 과 동일). 빌드 진단 (`tests/run_diagnostics.py`) 5/5 PASS. `python build.py --clean` 1 회 + 2 회차 빌드 sha256 동일 (결정성). v0.7.0/dist 대비 byte 차이는 feed.atom / feed.rss 2 파일 한정 (generator 문자열만 갱신).
 
 ### v0.7.0 (2026-05-16) — 빌드 증분 캐싱 (글 단위, fine-grained)
 
@@ -2098,4 +2119,4 @@ Python stdlib only SSG 첫 동작 버전. YAML 파서·마크다운 파서·HTML
 
 ---
 
-*이 문서는 siheonlee.com v0.7.0 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력; 글/카테고리/홈 모두 외부 CSS 파일 + `use_common_css` 토글 + `template:` 키 지원 v0.6.4; v0.6.4 의 큰 변경 직후 발견된 누적 회귀 4 건 안정화 v0.6.5; **빌드 증분 캐싱 (글 단위, fine-grained) 도입 v0.7.0**) 기준으로 작성되었습니다. (2026-05-16)*
+*이 문서는 siheonlee.com v0.7.1 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력; 글/카테고리/홈 모두 외부 CSS 파일 + `use_common_css` 토글 + `template:` 키 지원 v0.6.4; v0.6.4 의 큰 변경 직후 발견된 누적 회귀 4 건 안정화 v0.6.5; 빌드 증분 캐싱 (글 단위, fine-grained) 도입 v0.7.0; **v0.7.0 직후 누적된 문서·주석·README §2 빌드 단계 표 / §5 갤러리 썸네일 / §13b 피드 entry / 코드의 § cross-ref 정합성 회복 v0.7.1**) 기준으로 작성되었습니다. (2026-05-16)*
