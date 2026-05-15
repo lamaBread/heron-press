@@ -8,6 +8,8 @@
   - Builder._wrap_page_title  : v0.5.4 의 페이지 제목 폴백 체인.
   - v0.6.3 신규: 글 단위 외부 CSS (`styles:` 정수 키) + use_common_css 토글의
                  frontmatter 파싱 동작을 통합 빌드로 검증.
+  - v0.6.4 신규: 카테고리/홈도 같은 styles 두 채널 + use_common_css 지원,
+                 + meta.yaml 의 template 키 (페이지 단위 템플릿 선택).
 """
 import shutil
 import sys
@@ -191,7 +193,7 @@ class StylesFrontmatterTests(unittest.TestCase):
         return tmp, tmp / 'dist'
 
     def test_no_stylesheets_keeps_v062_output(self):
-        """외부 CSS 없는 글: ARTICLE_STYLESHEETS placeholder 줄이 통째로 제거되어
+        """외부 CSS 없는 글: PAGE_STYLESHEETS placeholder 줄이 통째로 제거되어
         head 가 공통 CSS → atom/rss → (인라인) → title 순으로 깔끔."""
         _, dist = self._scaffold('')
         html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
@@ -199,7 +201,7 @@ class StylesFrontmatterTests(unittest.TestCase):
             "<link href='/assets/common_template.css'",
             html,
         )
-        self.assertNotIn('{{ARTICLE_STYLESHEETS}}', html)
+        self.assertNotIn('{{PAGE_STYLESHEETS}}', html)
         self.assertNotIn('{{COMMON_CSS}}', html)
 
     def test_external_css_emits_link_in_head(self):
@@ -290,6 +292,272 @@ class StylesFrontmatterTests(unittest.TestCase):
         html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
         self.assertNotIn('/assets/common_template.css', html)
         self.assertIn("/demo/only.css", html)
+
+
+# ════════════════════════════════════════════════════════════════
+# v0.6.4 — 카테고리/홈 일원화 + template: 키
+# ════════════════════════════════════════════════════════════════
+
+
+class PageCssUnificationTests(unittest.TestCase):
+    """v0.6.4 — 홈 (Articles/meta.yaml) 과 카테고리 (Articles/<cat>/meta.yaml) 도
+    글과 같은 styles 두 채널 + use_common_css 토글을 지원하는지 검증.
+    """
+
+    SITE_YAML = StylesFrontmatterTests.SITE_YAML
+
+    def _scaffold(self, *, home_meta='', category_meta=None, category_files=None,
+                  home_files=None):
+        """홈 + 1 개 카테고리 + 그 카테고리 안에 글 1 개. 카테고리 / 홈의
+        meta.yaml 본문을 호출자가 주입할 수 있도록 한다.
+        """
+        tmp = Path(tempfile.mkdtemp(prefix='ssg-v064-'))
+        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
+        (tmp / 'legacy-map.yaml').write_text('legacy_map: {}\n', encoding='utf-8')
+
+        # Articles/meta.yaml (홈)
+        articles_dir = tmp / 'Articles'
+        articles_dir.mkdir(parents=True)
+        (articles_dir / 'meta.yaml').write_text(
+            "seo:\n  description: Site root description.\n" + (home_meta or ''),
+            encoding='utf-8',
+        )
+        if home_files:
+            for rel, content in home_files.items():
+                p = articles_dir / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(content, encoding='utf-8')
+
+        # Articles/Blog/meta.yaml (카테고리)
+        cat_dir = articles_dir / 'Blog'
+        cat_dir.mkdir(parents=True)
+        (cat_dir / 'meta.yaml').write_text(
+            "seo:\n  description: Blog category.\n" + (category_meta or ''),
+            encoding='utf-8',
+        )
+        if category_files:
+            for rel, content in category_files.items():
+                p = cat_dir / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(content, encoding='utf-8')
+
+        # Articles/Blog/Hello/ — 글 1 개 (홈/카테고리 페이지가 비어있지 않도록).
+        art_dir = cat_dir / 'Hello'
+        art_dir.mkdir(parents=True)
+        (art_dir / 'meta.yaml').write_text(
+            "slug: hello\ntitle: Hello\ndate: 2026-01-01\n"
+            "seo:\n  description: Hello article.\n",
+            encoding='utf-8',
+        )
+        (art_dir / 'content.md').write_text('# Hello\n', encoding='utf-8')
+
+        builder_module.reset_report()
+        b = Builder(base_dir=tmp)
+        b.build()
+        return tmp, tmp / 'dist'
+
+    # ── 홈 ────────────────────────────────────────────────────────
+
+    def test_home_external_css_emits_link_and_copies_file(self):
+        """홈의 styles: 1: theme.css → link 가 dist/index.html head 에 출력
+        + 파일이 dist 루트에 복사."""
+        _, dist = self._scaffold(
+            home_meta="styles:\n  1: theme.css\n",
+            home_files={'theme.css': '/* home theme */'},
+        )
+        html = (dist / 'index.html').read_text(encoding='utf-8')
+        self.assertIn(
+            "<link href='/theme.css' rel='stylesheet' type='text/css'>",
+            html,
+        )
+        self.assertTrue((dist / 'theme.css').is_file())
+
+    def test_home_use_common_css_false_omits_common_link(self):
+        _, dist = self._scaffold(home_meta="use_common_css: false\n")
+        html = (dist / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('/assets/common_template.css', html)
+
+    def test_home_inline_styles_render(self):
+        """홈의 styles: p: { color: red } 인라인 룰이 <style> 로 출력."""
+        _, dist = self._scaffold(
+            home_meta="styles:\n  p:\n    color: red\n",
+        )
+        html = (dist / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('<style>', html)
+        self.assertIn('section p', html)
+        self.assertIn('color: red', html)
+
+    def test_home_missing_css_routes_issue(self):
+        """홈의 styles 에 존재하지 않는 CSS 를 적으면 issue + link 미출력."""
+        _, dist = self._scaffold(home_meta="styles:\n  1: missing.css\n")
+        html = (dist / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('missing.css', html)
+        joined = '\n'.join(
+            e.message for e in builder_module.report().entries
+            if e.severity == 'issue'
+        )
+        self.assertIn('missing.css', joined)
+
+    # ── 카테고리 ──────────────────────────────────────────────────
+
+    def test_category_external_css_emits_link_and_copies_file(self):
+        """카테고리의 styles: 1: cat.css → link 가 dist/blog/index.html 에 출력
+        + 파일이 dist/blog/ 로 복사."""
+        _, dist = self._scaffold(
+            category_meta="styles:\n  1: cat.css\n",
+            category_files={'cat.css': '/* cat */'},
+        )
+        html = (dist / 'blog' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn(
+            "<link href='/blog/cat.css' rel='stylesheet' type='text/css'>",
+            html,
+        )
+        self.assertTrue((dist / 'blog' / 'cat.css').is_file())
+
+    def test_category_use_common_css_false_omits_common_link(self):
+        _, dist = self._scaffold(category_meta="use_common_css: false\n")
+        html = (dist / 'blog' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('/assets/common_template.css', html)
+
+    def test_category_inline_styles_render(self):
+        _, dist = self._scaffold(
+            category_meta="styles:\n  p:\n    color: blue\n",
+        )
+        html = (dist / 'blog' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('<style>', html)
+        self.assertIn('section p', html)
+        self.assertIn('color: blue', html)
+
+
+class TemplateRefTests(unittest.TestCase):
+    """v0.6.4 — meta.yaml 의 template 키로 페이지 단위 템플릿 선택."""
+
+    SITE_YAML = StylesFrontmatterTests.SITE_YAML
+
+    def _scaffold(self, *, article_meta='', article_files=None,
+                  templates_extra=None):
+        tmp = Path(tempfile.mkdtemp(prefix='ssg-v064-tpl-'))
+        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
+        (tmp / 'legacy-map.yaml').write_text('legacy_map: {}\n', encoding='utf-8')
+
+        if templates_extra:
+            for rel, content in templates_extra.items():
+                p = tmp / 'templates' / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(content, encoding='utf-8')
+
+        articles_dir = tmp / 'Articles'
+        articles_dir.mkdir(parents=True)
+        (articles_dir / 'meta.yaml').write_text(
+            "seo:\n  description: site.\n", encoding='utf-8',
+        )
+        art_dir = articles_dir / 'Demo'
+        art_dir.mkdir(parents=True)
+        meta_body = (
+            "slug: demo\ntitle: Demo\ndate: 2026-01-01\n"
+            "seo:\n  description: Demo article.\n"
+        ) + (article_meta or '')
+        (art_dir / 'meta.yaml').write_text(meta_body, encoding='utf-8')
+        (art_dir / 'content.md').write_text('# Demo\n', encoding='utf-8')
+        if article_files:
+            for rel, content in article_files.items():
+                p = art_dir / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(content, encoding='utf-8')
+
+        builder_module.reset_report()
+        b = Builder(base_dir=tmp)
+        b.build()
+        return tmp, tmp / 'dist'
+
+    def test_no_template_key_uses_default(self):
+        """template 키 없음 → 기본 article.html."""
+        _, dist = self._scaffold()
+        html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
+        # 기본 article.html 에는 imgslidebox.js 가 포함됨 (식별 단서).
+        self.assertIn('imgslidebox.js', html)
+
+    def test_template_key_from_templates_dir(self):
+        """template: 'name.html' → templates/ 에서 로드."""
+        _, dist = self._scaffold(
+            article_meta="template: tiny.html\n",
+            templates_extra={
+                'tiny.html':
+                    '<html><head><title>{{PAGE_TITLE}}</title></head>'
+                    '<body>{{BODY}}</body></html>',
+            },
+        )
+        html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
+        # tiny.html 은 header/nav/footer 가 없어 imgslidebox.js 도 없음.
+        self.assertNotIn('imgslidebox.js', html)
+        self.assertIn('<title>Demo | E</title>', html)
+        # 본문 markdown 의 `# Demo` 가 <h1>Demo</h1> 로 렌더되어 BODY 자리에.
+        self.assertIn('<h1>Demo</h1>', html)
+
+    def test_template_key_dot_slash_from_article_folder(self):
+        """template: './local.html' → 글 폴더에서 로드."""
+        _, dist = self._scaffold(
+            article_meta="template: ./local.html\n",
+            article_files={
+                'local.html':
+                    '<html><body><h1>LOCAL {{PAGE_TITLE}}</h1>{{BODY}}</body></html>',
+            },
+        )
+        html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('LOCAL Demo | E', html)
+
+    def test_template_key_missing_file_falls_back_to_default(self):
+        """존재하지 않는 템플릿 → issue + 기본 article.html 폴백."""
+        _, dist = self._scaffold(
+            article_meta="template: ghost.html\n",
+        )
+        html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
+        # 기본으로 폴백 → header/footer 등 정상.
+        self.assertIn('imgslidebox.js', html)
+        joined = '\n'.join(
+            e.message for e in builder_module.report().entries
+            if e.severity == 'issue'
+        )
+        self.assertIn('ghost.html', joined)
+
+    def test_template_key_path_escape_rejected(self):
+        """절대경로 / '..' 포함 → issue + 기본 폴백."""
+        _, dist = self._scaffold(
+            article_meta="template: ../escape.html\n",
+        )
+        html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
+        self.assertIn('imgslidebox.js', html)  # 기본 폴백
+        joined = '\n'.join(
+            e.message for e in builder_module.report().entries
+            if e.severity == 'issue'
+        )
+        self.assertIn("'template'", joined)
+
+    def test_unfilled_placeholder_strip_and_warn(self):
+        """페이지 종류 가로지르기 → 미치환 placeholder strip + warning."""
+        _, dist = self._scaffold(
+            article_meta="template: weird.html\n",
+            templates_extra={
+                # SUBCATEGORY_SECTIONS 는 카테고리에서만 채워지므로 글이
+                # 이 템플릿을 골랐을 때 남는다 → strip + warning.
+                'weird.html':
+                    '<html><body>{{BODY}}<x>{{SUBCATEGORY_SECTIONS}}</x>'
+                    '</body></html>',
+            },
+        )
+        html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
+        self.assertNotIn('{{SUBCATEGORY_SECTIONS}}', html)
+        self.assertIn('<x></x>', html)  # strip 후 빈 문자열.
+        warnings = [
+            e.message for e in builder_module.report().entries
+            if e.severity == 'warning'
+        ]
+        joined = '\n'.join(warnings)
+        self.assertIn('SUBCATEGORY_SECTIONS', joined)
 
 
 if __name__ == '__main__':

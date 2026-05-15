@@ -2,11 +2,11 @@
 ════════════════════════════════════════════════════════════
 [1] Unit tests
 ────────────────────────────────────────────────────────────
-  tests run     : 210
+  tests run     : 227
   failures      : 0
   errors        : 0
   skipped       : 0
-  elapsed       : 36.273s
+  elapsed       : 78.361s
   → PASS
 
 ════════════════════════════════════════════════════════════
@@ -21,7 +21,7 @@
 [3] dist/search.php php -l (PHP syntax)
 ────────────────────────────────────────────────────────────
   exit code   : 0
-  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v0.6.3\dist\search.php
+  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v0.6.4\dist\search.php
   → PASS
 
 ════════════════════════════════════════════════════════════

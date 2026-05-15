@@ -1,5 +1,46 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.6.4 변경 — CSS 일원화 (홈/카테고리도 글과 동일) + template 키:
+  - 글/카테고리/홈의 `styles:` 두 채널 (정수 키 = 외부 CSS, 문자열 키 = 인라인
+    룰) + `use_common_css` 토글이 *모두* 동일 의미로 작동. v0.6.3 의 "카테고리/
+    홈은 외부 CSS 영구 미지원" 정책 폐기. CategoryMeta 가 글의 ArticleMeta 와
+    같은 `stylesheets` / `use_common_css` 필드를 가진다.
+  - **공용 검증 헬퍼 `_validate_stylesheets`** — 글/카테고리/홈의 styles 정수
+    키 (CSS 파일 상대 경로) 를 같은 규칙으로 검증 (절대 경로 거부, `..` 거부,
+    빈 경로 거부, 파일 존재 확인). 검증 통과한 상대 경로만 stylesheets 에
+    저장. 거부된 항목은 scope 별 issue.
+  - **새 빌드 단계 `_sync_page_css`** — 카테고리/홈의 선언된 CSS 파일을
+    dist 에 명시적으로 복사. 글은 기존 [6] `_sync_assets` 가 폴더를 통째로
+    복사하므로 별도 처리 불필요. 카테고리: `Articles/Cat/<rel>` →
+    `dist/<cat_slug_path>/<rel>` (URL = `/<cat_slug_path>/<rel>`). 홈:
+    `Articles/<rel>` → `dist/<rel>` (URL = `/<rel>`, 사이트 루트).
+  - **`render_stylesheet_links` 시그니처 일반화** — 두 번째 인자가 `slug` →
+    `url_prefix`. 글은 `f'/{m.slug}/'`, 카테고리는 `'/' + '/'.join(slug_path) + '/'`,
+    홈은 `'/'` 로 호출.
+  - **placeholder 이름 통일** — 세 템플릿 모두 `{{COMMON_CSS}}` /
+    `{{PAGE_STYLESHEETS}}` / `{{PAGE_STYLES}}` 같은 이름. v0.6.3 의
+    `{{ARTICLE_STYLESHEETS}}` / `{{ARTICLE_STYLES}}` / `{{CATEGORY_STYLES}}` 는
+    모두 일제히 변경. dist 산출물은 placeholder 가 렌더 후 사라지므로 byte
+    영향 없음 (단 home/index.html 은 새 `{{PAGE_STYLES}}` 라인이 1줄 추가됨 —
+    기본 styles 비어있어 trailing whitespace 줄 1 줄).
+
+  - **새 `template:` 키 (Level 2)** — `meta.yaml` 이 자기 페이지에 사용할
+    템플릿 파일을 명시. 키 부재 시 페이지 종류 기본 (글=article.html,
+    카테고리=category.html, 홈=home.html). 값 형식:
+      'name.html'   → templates/ 에서 검색.
+      './name.html' → meta.yaml 의 부모 폴더에서 검색 (글 폴더, 카테고리 폴더,
+                      Articles/ 루트 — "글 = 폴더" 원칙의 자연 연장).
+      절대 경로 / `..` 포함 / 존재하지 않는 파일 → BuildReport issue + 기본
+      페이지 종류 템플릿으로 폴백 (빌드는 계속).
+    검증 + 로드는 새 `_resolve_template` 메서드가 담당.
+  - **`_render_template` 후처리** — 마지막에 남은 `{{XXX}}` placeholder 를
+    빈 문자열로 strip + 각 미치환 이름마다 BuildReport 의 warning. author 가
+    페이지 종류를 가로지르는 템플릿 (예: 카테고리 meta 가 article.html 을
+    template 로 지정) 을 골랐을 때, 필요한 vars 가 안 들어와 발생하는 silent
+    leak 을 가드. 호출자가 warn_context=(scope, target, location) 로 알리고
+    싶으면 이를 넘기고, 시스템 페이지 (404 / search) 처럼 빌더가 직접
+    컨트롤하는 템플릿은 None 으로 호출 — strip 만 적용.
+
 v0.6.3 변경 — 글 단위 외부 CSS 파일 + use_common_css 토글:
   - `meta.yaml` 의 `styles:` 키가 두 채널을 동시에 가질 수 있게 확장. 정수
     키 (1, 2, 3, ...) 는 글 폴더 안의 외부 CSS 파일 상대 경로, 문자열 키
@@ -445,9 +486,35 @@ def _load_template(templates_dir: Path, name: str) -> str:
     return path.read_text(encoding='utf-8')
 
 
-def _render_template(template: str, vars: dict) -> str:
+_UNFILLED_PLACEHOLDER_RE = re.compile(r'\{\{([A-Z_][A-Z0-9_]*)\}\}')
+
+
+def _render_template(template: str, vars: dict, warn_context=None) -> str:
+    """Substitute `{{KEY}}` placeholders with `vars[KEY]`.
+
+    v0.6.4: 치환 후 남은 `{{XXX}}` 패턴을 빈 문자열로 strip + (warn_context 가
+    주어지면) 각 미치환 이름마다 BuildReport.warning 발생. author 가
+    `template:` 키로 페이지 종류를 가로지르는 템플릿을 선택했을 때 빌더의
+    vars dict 에 해당 키가 없어 발생하는 silent leak 을 가드. 시스템 페이지
+    (404 / search) 처럼 빌더가 컨트롤하는 템플릿은 None 으로 호출 — strip
+    만 적용.
+
+    warn_context 형식: (scope: str, target: str, location: Path|str|None).
+    """
     for k, v in vars.items():
         template = template.replace('{{' + k + '}}', str(v) if v is not None else '')
+    leftovers = sorted(set(_UNFILLED_PLACEHOLDER_RE.findall(template)))
+    if leftovers and warn_context is not None:
+        scope, target, location = warn_context
+        for name in leftovers:
+            _report.warning(
+                scope, target,
+                f"템플릿에 채우지 못한 placeholder 가 발견되어 빈 문자열로 "
+                f"strip 되었습니다: {{{{{name}}}}}.",
+                location,
+            )
+    if leftovers:
+        template = _UNFILLED_PLACEHOLDER_RE.sub('', template)
     return template
 
 
@@ -673,6 +740,171 @@ class Builder:
             )
             self.articles.append(article)
 
+    # ── v0.6.4: 공용 검증/해결 헬퍼 (글·카테고리·홈 공유) ─────────────
+
+    def _validate_stylesheets(self, raw_sheets, source_dir: Path,
+                              scope: str, target: str, meta_file: Path):
+        """v0.6.4: styles 정수 키 (CSS 파일 상대 경로) 리스트의 공용 검증기.
+
+        글의 _parse_frontmatter 와 카테고리/홈의 _parse_category_meta_file 이
+        같은 규칙으로 호출. 각 항목에 대해 — 정규화 (백슬래시→슬래시, leading
+        './' 제거), 절대 경로 거부, '..' 거부, 빈 경로 거부, 파일 존재 확인.
+        통과한 정규화 경로만 리스트로 반환. 거부된 항목마다 scope/target 의
+        issue 발생 (빌드는 계속).
+        """
+        validated = []
+        for rel in raw_sheets:
+            rel_norm = str(rel).replace('\\', '/').strip()
+            while rel_norm.startswith('./'):
+                rel_norm = rel_norm[2:]
+            if (not rel_norm
+                    or rel_norm.startswith('/')
+                    or '..' in rel_norm.split('/')):
+                issue(
+                    scope, target,
+                    f"meta.yaml: styles 의 CSS 파일 경로는 페이지 폴더 안의 "
+                    f"상대 경로여야 합니다 (받은 값: {rel!r}) — 이 항목 무시.",
+                    meta_file,
+                )
+                continue
+            css_path = source_dir / rel_norm
+            if not css_path.is_file():
+                issue(
+                    scope, target,
+                    f"meta.yaml: styles 에 명시한 CSS 파일이 페이지 폴더에 "
+                    f"없습니다: {rel!r} — link 출력 안 함.",
+                    meta_file,
+                )
+                continue
+            validated.append(rel_norm)
+        return validated
+
+    def _validate_template_ref(self, raw_template, source_dir: Path,
+                               scope: str, target: str, meta_file: Path):
+        """v0.6.4: meta.yaml 의 template 키 값을 검증 + 정규화.
+
+        반환: (None, None) — 키 부재/검증 실패 → 페이지 종류 기본 템플릿으로
+        폴백. (norm: str, origin: str) — origin 은 'templates_dir' (= templates/
+        에서) 또는 'page_folder' (= meta.yaml 의 부모 폴더에서).
+
+        검증:
+          - None 또는 누락 → (None, None), issue 없음 (정상 케이스).
+          - 문자열이 아님 / 빈 문자열 → issue + (None, None).
+          - 절대 경로 / '..' 포함 → issue + (None, None).
+          - './name' 으로 시작 → page_folder. 그 외 → templates_dir.
+        """
+        if raw_template is None:
+            return (None, None)
+        if not isinstance(raw_template, str):
+            issue(
+                scope, target,
+                f"meta.yaml: 'template' 은 문자열이어야 합니다 "
+                f"(받은 값: {raw_template!r}) — 기본 템플릿으로 폴백.",
+                meta_file,
+            )
+            return (None, None)
+        ref = raw_template.strip()
+        if not ref:
+            issue(
+                scope, target,
+                "meta.yaml: 'template' 이 빈 문자열입니다 — "
+                "기본 템플릿으로 폴백.",
+                meta_file,
+            )
+            return (None, None)
+        norm = ref.replace('\\', '/')
+        if norm.startswith('./'):
+            inner = norm[2:]
+            if (not inner
+                    or inner.startswith('/')
+                    or '..' in inner.split('/')):
+                issue(
+                    scope, target,
+                    f"meta.yaml: 'template' 의 페이지 폴더 상대 경로가 "
+                    f"유효하지 않습니다 ({ref!r}) — 기본 템플릿으로 폴백.",
+                    meta_file,
+                )
+                return (None, None)
+            return (norm, 'page_folder')
+        if norm.startswith('/') or '..' in norm.split('/'):
+            issue(
+                scope, target,
+                f"meta.yaml: 'template' 의 경로가 유효하지 않습니다 "
+                f"({ref!r}) — 기본 템플릿으로 폴백.",
+                meta_file,
+            )
+            return (None, None)
+        return (norm, 'templates_dir')
+
+    def _resolve_template(self, meta_template, source_dir: Path,
+                          default_name: str, scope: str, target: str,
+                          meta_file=None) -> str:
+        """v0.6.4: meta.yaml 의 template 키를 실제 템플릿 텍스트로 해결.
+
+        meta_template 형식 — _validate_template_ref 의 첫 반환값 (norm) 과
+        같은 형식. None 이면 default_name 으로 폴백.
+
+        파일이 없으면 issue + default_name 로 폴백. default_name 자체가
+        없으면 abort (시스템 결함).
+        """
+        if not meta_template:
+            return _load_template(self.templates_dir, default_name)
+        norm = meta_template
+        if norm.startswith('./'):
+            inner = norm[2:]
+            tpl_path = source_dir / inner
+            origin_label = '페이지 폴더'
+        else:
+            tpl_path = self.templates_dir / norm
+            origin_label = 'templates/'
+        if not tpl_path.is_file():
+            issue(
+                scope, target,
+                f"meta.yaml: 'template' 에 명시한 파일이 {origin_label}에 "
+                f"없습니다: {meta_template!r} — 기본 {default_name} 로 폴백.",
+                meta_file,
+            )
+            return _load_template(self.templates_dir, default_name)
+        return tpl_path.read_text(encoding='utf-8')
+
+    _COMMON_CSS_LINK = (
+        "<link href='/assets/common_template.css' "
+        "rel='stylesheet' type='text/css'>"
+    )
+
+    def _apply_css_placeholders(self, tpl: str, *,
+                                use_common_css: bool,
+                                stylesheets_html: str) -> str:
+        """v0.6.4: 세 페이지 종류 공용 — {{COMMON_CSS}} / {{PAGE_STYLESHEETS}}
+        의 line-eating + 치환을 한 군데서 처리.
+
+        - use_common_css=True → `<link href='/assets/common_template.css' …>` 치환.
+        - use_common_css=False → 그 라인 통째로 제거 (ROBOTS_META 와 동일).
+        - stylesheets_html 비어있지 않음 → 그대로 치환.
+        - stylesheets_html 비어있음 → 그 라인 통째로 제거.
+
+        {{PAGE_STYLES}} (인라인 룰) 은 빈 문자열일 때도 placeholder 라인을
+        통째로 제거하지 않음 (v0.6.3 동작 유지 — 4-space 들여쓰기 라인이 남음;
+        후처리 strip 대상은 아님 — _render_template 의 vars dict 으로 치환됨).
+        """
+        if use_common_css:
+            tpl = tpl.replace('{{COMMON_CSS}}', self._COMMON_CSS_LINK)
+        else:
+            tpl = re.sub(
+                r'^[ \t]*\{\{COMMON_CSS\}\}[ \t]*\r?\n',
+                '', tpl, flags=re.MULTILINE,
+            )
+        if stylesheets_html:
+            tpl = tpl.replace(
+                '{{PAGE_STYLESHEETS}}', stylesheets_html.lstrip(),
+            )
+        else:
+            tpl = re.sub(
+                r'^[ \t]*\{\{PAGE_STYLESHEETS\}\}[ \t]*\r?\n',
+                '', tpl, flags=re.MULTILINE,
+            )
+        return tpl
+
     # ── [3] Frontmatter parse ────────────────────────────────
 
     def _parse_frontmatter(self):
@@ -803,36 +1035,14 @@ class Builder:
                     nav_priority = 0
 
             # v0.6.3: styles 키가 두 채널로 분리 — 정수 키 = 외부 CSS 파일
-            # 상대 경로, 문자열 키 = 인라인 룰. normalize_styles 가 두 결과를
-            # (sheets, rules) 로 반환. 외부 CSS 는 글 폴더 안에 실제 존재해야
-            # 하므로 여기서 파일 존재 검증 + 글 폴더 이탈 거부.
+            # 상대 경로, 문자열 키 = 인라인 룰. v0.6.4 부터 공용 헬퍼
+            # _validate_stylesheets 가 검증 + 정규화 담당 (카테고리/홈도 동일
+            # 헬퍼 사용).
             raw_sheets, rules = normalize_styles(raw.get('styles'))
-            validated_sheets = []
-            for rel in raw_sheets:
-                rel_norm = str(rel).replace('\\', '/').strip()
-                while rel_norm.startswith('./'):
-                    rel_norm = rel_norm[2:]
-                # 글 폴더 이탈 거부 — 절대 경로, 상위 디렉터리, 빈 경로 모두 제거.
-                if (not rel_norm
-                        or rel_norm.startswith('/')
-                        or '..' in rel_norm.split('/')):
-                    issue(
-                        'article', slug,
-                        f"meta.yaml: styles 의 CSS 파일 경로는 글 폴더 안의 "
-                        f"상대 경로여야 합니다 (받은 값: {rel!r}) — 이 항목 무시.",
-                        meta_file,
-                    )
-                    continue
-                css_path = article.source_dir / rel_norm
-                if not css_path.is_file():
-                    issue(
-                        'article', slug,
-                        f"meta.yaml: styles 에 명시한 CSS 파일이 글 폴더에 "
-                        f"없습니다: {rel!r} — link 출력 안 함.",
-                        meta_file,
-                    )
-                    continue
-                validated_sheets.append(rel_norm)
+            validated_sheets = self._validate_stylesheets(
+                raw_sheets, article.source_dir,
+                scope='article', target=slug, meta_file=meta_file,
+            )
 
             # v0.6.3: use_common_css — common_template.css link 출력 여부.
             # 기본 True (= 모든 옛 글이 변경 의무 없음). False 면 link 태그
@@ -842,6 +1052,12 @@ class Builder:
                 use_common_css = True
             else:
                 use_common_css = bool(use_common_css_raw)
+
+            # v0.6.4: template 키 — 글이 사용할 템플릿 파일.
+            template_norm, _origin = self._validate_template_ref(
+                raw.get('template'), article.source_dir,
+                scope='article', target=slug, meta_file=meta_file,
+            )
 
             article.meta = ArticleMeta(
                 slug=slug,
@@ -854,6 +1070,7 @@ class Builder:
                 styles=rules,
                 stylesheets=validated_sheets,
                 use_common_css=use_common_css,
+                template=template_norm,
                 tags=tags,
                 nav_priority=nav_priority,
             )
@@ -1084,7 +1301,8 @@ class Builder:
         cat_dir = self.articles_dir.joinpath(*path_tuple)
         return self._parse_category_meta_file(cat_dir / 'meta.yaml')
 
-    def _parse_category_meta_file(self, meta_file: Path) -> CategoryMeta:
+    def _parse_category_meta_file(self, meta_file: Path,
+                                  scope: str = 'category') -> CategoryMeta:
         """임의 경로의 meta.yaml 을 CategoryMeta 로 파싱 (v0.4.6 helper).
 
         `Articles/meta.yaml` (루트 = 메인페이지) 와 카테고리 폴더의 meta.yaml
@@ -1096,15 +1314,28 @@ class Builder:
         함수로 들어와도 (`_scan_articles` 가 미리 거른 경우만) `slug` / `date`
         가 있으면 빈 CategoryMeta 로 폴백 (안전망). 단 `title` 만 있는 경우는
         카테고리/홈 페이지의 정상적인 title override 로 취급한다.
+
+        v0.6.4: scope 인자 추가 — 호출자가 'home' (홈 = Articles/meta.yaml) 또는
+        'category' (카테고리 폴더의 meta.yaml) 를 지정. issue 분류 일관성용.
+        styles 의 정수 키 (외부 CSS 파일 경로) 가 v0.6.4 부터 카테고리/홈에서도
+        유효해짐 — 글과 같은 _validate_stylesheets 헬퍼로 검증. use_common_css
+        토글과 template 키도 글과 같은 의미로 파싱.
         """
         if not meta_file.exists():
             return CategoryMeta()
+
+        # issue 의 target 은 페이지 종류 별로 다름 — home 은 '' (단일), category
+        # 는 폴더명. 동일 폴더 안의 모든 issue 가 한 헤더 아래 묶이도록 일관.
+        if scope == 'home':
+            target = ''
+        else:
+            target = str(meta_file.parent.name)
 
         try:
             raw = yaml_load(meta_file.read_text(encoding='utf-8'))
         except Exception as e:
             issue(
-                'category', str(meta_file.parent.name),
+                scope, target,
                 f'meta.yaml 파싱 오류 — 기본 CategoryMeta 로 폴백: {e}',
                 meta_file,
             )
@@ -1123,7 +1354,6 @@ class Builder:
 
         # v0.5.5: 카테고리 meta.yaml 의 형식 오류는 모두 폴백값으로 진행하고
         # 리포트만 기록 (빌드 중단 없음).
-        cat_target = str(meta_file.parent.name)
 
         per_page = raw.get('per_page')
         preview = raw.get('preview_per_page')
@@ -1139,7 +1369,7 @@ class Builder:
                 priority = int(priority_raw)
             except (TypeError, ValueError):
                 issue(
-                    'category', cat_target,
+                    scope, target,
                     f"meta.yaml: 'priority' 는 정수여야 합니다 "
                     f"(받은 값: {priority_raw!r}) — 0 으로 폴백.",
                     meta_file,
@@ -1155,7 +1385,7 @@ class Builder:
             excludes = [str(x) for x in excludes_raw]
         else:
             issue(
-                'category', cat_target,
+                scope, target,
                 f"meta.yaml: 'excludes_categories' 는 리스트여야 합니다 "
                 f"(받은 값: {excludes_raw!r}) — 빈 리스트로 폴백.",
                 meta_file,
@@ -1170,7 +1400,7 @@ class Builder:
         seo_raw = raw.get('seo') or {}
         if not isinstance(seo_raw, dict):
             issue(
-                'category', cat_target,
+                scope, target,
                 f"meta.yaml: 'seo' 는 매핑이어야 합니다 "
                 f"(받은 값: {seo_raw!r}) — 빈 seo 로 폴백.",
                 meta_file,
@@ -1202,25 +1432,38 @@ class Builder:
                 nav_priority = int(nav_priority_raw)
             except (TypeError, ValueError):
                 issue(
-                    'category', cat_target,
+                    scope, target,
                     f"meta.yaml: 'nav_priority' 는 정수여야 합니다 "
                     f"(받은 값: {nav_priority_raw!r}) — 0 으로 폴백.",
                     meta_file,
                 )
                 nav_priority = 0
 
-        # v0.6.3: 카테고리/홈은 외부 CSS 파일 (styles 의 정수 키) 을 지원하지
-        # 않음 — 사이트 공통 톤에서 벗어날 가능성이 매우 희박하다는 정책. author
-        # 가 실수로 적은 경우 알려준다 (인라인 룰은 정상 적용, 정수 키만 무시).
-        cat_sheets, cat_rules = normalize_styles(styles_raw)
-        if cat_sheets:
-            issue(
-                'category', cat_target,
-                f"meta.yaml: styles 의 외부 CSS 파일 매핑 (정수 키) 은 "
-                f"글에서만 지원됩니다 — 카테고리/홈에서는 무시됩니다 "
-                f"(무시된 항목: {cat_sheets!r}).",
-                meta_file,
-            )
+        # v0.6.4: styles 의 정수 키 (외부 CSS 파일 경로) + 문자열 키 (인라인
+        # 룰) 두 채널 — 글과 동일. 검증은 _validate_stylesheets 공용 헬퍼.
+        # source_dir 은 meta.yaml 의 부모 폴더 — 홈은 Articles/, 카테고리는
+        # Articles/<path>/.
+        raw_sheets, cat_rules = normalize_styles(styles_raw)
+        validated_sheets = self._validate_stylesheets(
+            raw_sheets, meta_file.parent,
+            scope=scope, target=target, meta_file=meta_file,
+        )
+
+        # v0.6.4: use_common_css 토글. 기본 True (= 모든 옛 페이지가 변경
+        # 의무 없음). 글의 ArticleMeta.use_common_css 와 같은 의미.
+        use_common_css_raw = raw.get('use_common_css')
+        if use_common_css_raw is None:
+            use_common_css = True
+        else:
+            use_common_css = bool(use_common_css_raw)
+
+        # v0.6.4: template 키 — 카테고리/홈도 자기 템플릿 선택 가능. 검증은
+        # 공용 _validate_template_ref. 페이지 종류 가로지르기 시 발생할 수
+        # 있는 silent leak 은 _render_template 후처리가 가드 (warning).
+        template_norm, _origin = self._validate_template_ref(
+            raw.get('template'), meta_file.parent,
+            scope=scope, target=target, meta_file=meta_file,
+        )
 
         return CategoryMeta(
             per_page=int(per_page) if per_page is not None else None,
@@ -1228,6 +1471,9 @@ class Builder:
             layout=str(layout),
             lang=str(lang_val) if lang_val else None,
             styles=cat_rules,
+            stylesheets=validated_sheets,
+            use_common_css=use_common_css,
+            template=template_norm,
             priority=priority,
             excludes_categories=excludes,
             title=title,
@@ -1243,7 +1489,8 @@ class Builder:
         로 들어가지 않는다 (루트는 카테고리가 아니라 사이트 자체).
         """
         self.home_meta = self._parse_category_meta_file(
-            self.articles_dir / 'meta.yaml'
+            self.articles_dir / 'meta.yaml',
+            scope='home',
         )
 
     # v0.4.6: Articles/meta.yaml 이 통째로 없거나 per_page 가 비어 있을 때
@@ -1427,7 +1674,7 @@ class Builder:
         return self.categories.get(top)
 
     def _render_articles(self):
-        tpl = _load_template(self.templates_dir, 'article.html')
+        # v0.6.4: 글마다 template 키가 다를 수 있어 per-article load. 기본 article.html.
         nav_links = self._nav_links_html()
 
         for article in self.articles:
@@ -1515,8 +1762,11 @@ class Builder:
             # v0.6.3: styles 키 분리 — 외부 CSS link 와 인라인 <style> 블록을
             # 각각 렌더. 로드 순서는 common_template.css → 외부 CSS → 인라인 —
             # 인라인이 마지막으로 발언해 "미세 override" 의도를 보장.
-            article_stylesheets = render_stylesheet_links(m.stylesheets, m.slug)
-            article_styles = render_inline_styles(m.styles)
+            # v0.6.4: render_stylesheet_links 의 두 번째 인자가 url_prefix.
+            page_stylesheets = render_stylesheet_links(
+                m.stylesheets, f'/{m.slug}/',
+            )
+            page_styles = render_inline_styles(m.styles)
 
             if self.site.warn_on_underscore_ref:
                 for pattern in [r'src="([^"]+)"', r'href="([^"]+)"']:
@@ -1551,6 +1801,14 @@ class Builder:
             crumb_parts.append((article.category_path[-1], None))
             nav_tracker = self._nav_tracker_for_path(crumb_parts)
 
+            # v0.6.4: 글 단위 template override. 폴백 = article.html.
+            tpl = self._resolve_template(
+                m.template, article.source_dir,
+                default_name='article.html',
+                scope='article', target=m.slug,
+                meta_file=article.source_dir / 'meta.yaml',
+            )
+
             # noindex 가 켜진 글은 robots meta 한 줄을 넣고, 꺼진 글은
             # placeholder 가 자리한 라인 자체를 통째로 제거 — 빈 줄 잔존 방지.
             # v0.4.2: 들여쓰기에 무관하게 라인 단위로 제거 (이전 버전은
@@ -1568,39 +1826,12 @@ class Builder:
                     flags=re.MULTILINE,
                 )
 
-            # v0.6.3: COMMON_CSS — use_common_css=False 면 placeholder 라인
-            # 통째로 제거 (= common_template.css link 출력 안 함). 기본 True
-            # 케이스는 정확히 v0.6.2 의 link 한 줄로 치환되어 회귀 0.
-            if m.use_common_css:
-                tpl_local = tpl_local.replace(
-                    '{{COMMON_CSS}}',
-                    "<link href='/assets/common_template.css' "
-                    "rel='stylesheet' type='text/css'>",
-                )
-            else:
-                tpl_local = re.sub(
-                    r'^[ \t]*\{\{COMMON_CSS\}\}[ \t]*\r?\n',
-                    '',
-                    tpl_local,
-                    flags=re.MULTILINE,
-                )
-
-            # v0.6.3: ARTICLE_STYLESHEETS — 외부 CSS 없는 글은 placeholder
-            # 라인 통째로 제거. 1+ 개면 link 들의 *내부 들여쓰기 + 줄바꿈* 이
-            # 이미 render_stylesheet_links 출력에 포함되므로 placeholder 자리에
-            # 그대로 치환.
-            if article_stylesheets:
-                tpl_local = tpl_local.replace(
-                    '{{ARTICLE_STYLESHEETS}}',
-                    article_stylesheets.lstrip(),
-                )
-            else:
-                tpl_local = re.sub(
-                    r'^[ \t]*\{\{ARTICLE_STYLESHEETS\}\}[ \t]*\r?\n',
-                    '',
-                    tpl_local,
-                    flags=re.MULTILINE,
-                )
+            # v0.6.4: COMMON_CSS + PAGE_STYLESHEETS line-eating 을 공용 헬퍼로.
+            tpl_local = self._apply_css_placeholders(
+                tpl_local,
+                use_common_css=m.use_common_css,
+                stylesheets_html=page_stylesheets,
+            )
 
             # v0.4.3: <title> 에 글 제목 사용. full_title 은
             # build_meta_tags 가 만든 `{prefix}{title}{suffix}` 문자열.
@@ -1612,7 +1843,7 @@ class Builder:
             vars_ = {
                 'LANG': escape_html(page_lang),
                 'META_TAGS': meta_tags,
-                'ARTICLE_STYLES': article_styles,
+                'PAGE_STYLES': page_styles,
                 'PAGE_TITLE': escape_html(page_title),
                 'MAIN_TITLE': escape_html(self.site.main_title),
                 'NAV_TRACKER': nav_tracker,
@@ -1621,7 +1852,11 @@ class Builder:
                 'COPYRIGHT_YEAR': self._copyright_year(),
                 'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
             }
-            page_html = _render_template(tpl_local, vars_)
+            page_html = _render_template(
+                tpl_local, vars_,
+                warn_context=('article', m.slug,
+                              article.source_dir / 'meta.yaml'),
+            )
 
             ext = 'php' if has_live_php(page_html) else 'html'
 
@@ -1903,12 +2138,12 @@ class Builder:
         )
 
     def _category_styles_html(self, cat: Category) -> str:
-        """카테고리 meta.yaml 의 styles → <style> 블록.
+        """카테고리 meta.yaml 의 인라인 styles → <style> 블록.
 
         section TAG 선택자로 글 styles 와 동일한 우선순위 정책 적용.
-        v0.6.3: 카테고리/홈은 외부 CSS 파일 (정수 키) 미지원 — meta.yaml
-        파싱 단계에서 정수 키가 제거되어 여기 도달하는 styles 는 인라인
-        룰 (문자열 키) 만 담는다.
+        v0.6.4: 카테고리/홈도 외부 CSS 파일 지원으로 일원화. 여기 도달하는
+        styles 는 *인라인 룰 (문자열 키) 만* 담는다 — 외부 CSS 파일 link 는
+        _build_category_page 가 별도 placeholder 로 처리.
         """
         return render_inline_styles(cat.meta.styles)
 
@@ -1921,10 +2156,22 @@ class Builder:
         - 서브카테고리: 자기 자신을 한 section 으로. 만약 더 깊은 자식이
                        있다면 (3+ depth) 자식별 section 도 추가로.
         - 페이지네이션: section 마다 독립 (data-pagination-group 으로 짝지음).
-        - styles: 이 카테고리의 meta.yaml 의 styles 가 head 의 <style> 로.
+        - styles: 이 카테고리의 meta.yaml 의 인라인 styles 가 head 의 <style> 로.
+        - stylesheets: v0.6.4 부터 외부 CSS link 도 지원 (글과 동일 메커니즘).
+        - use_common_css: v0.6.4 부터 토글 지원 (글과 동일).
+        - template: v0.6.4 부터 카테고리도 자기 템플릿 파일 선택 가능.
         - lang: 카테고리 meta.yaml 의 lang 우선, 없으면 site.lang.
         """
-        tpl = _load_template(self.templates_dir, 'category.html')
+        # v0.6.4: 카테고리 단위 template override. 폴백 = category.html.
+        cat_meta_file = (
+            self.articles_dir.joinpath(*cat.path) / 'meta.yaml'
+        )
+        tpl = self._resolve_template(
+            cat.meta.template, cat_meta_file.parent,
+            default_name='category.html',
+            scope='category', target='/'.join(cat.slug_path),
+            meta_file=cat_meta_file,
+        )
         nav_links = self._nav_links_html()
 
         is_top = len(cat.path) == 1
@@ -2044,6 +2291,17 @@ class Builder:
         # (search-index 의 category_slug 가 톱레벨 slug 만 갖기 때문.)
         search_cat = cat.slug_path[0]
 
+        # v0.6.4: 카테고리도 글과 동일한 CSS 처리 — COMMON_CSS / PAGE_STYLESHEETS
+        # line-eating + PAGE_STYLES 인라인.
+        page_stylesheets = render_stylesheet_links(
+            cat.meta.stylesheets, url_prefix,
+        )
+        tpl_local = self._apply_css_placeholders(
+            tpl,
+            use_common_css=cat.meta.use_common_css,
+            stylesheets_html=page_stylesheets,
+        )
+
         vars_ = {
             'LANG': escape_html(page_lang),
             'META_TAGS': meta_tags,
@@ -2053,11 +2311,14 @@ class Builder:
             'NAV_LINKS': nav_links,
             'NAV_SEARCH_CAT': escape_html(search_cat),
             'SUBCATEGORY_SECTIONS': subcategory_sections,
-            'CATEGORY_STYLES': self._category_styles_html(cat),
+            'PAGE_STYLES': self._category_styles_html(cat),
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
         }
-        page_html = _render_template(tpl, vars_)
+        page_html = _render_template(
+            tpl_local, vars_,
+            warn_context=('category', '/'.join(cat.slug_path), cat_meta_file),
+        )
 
         out_dir = self.dist.joinpath(*cat.slug_path)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -2080,7 +2341,14 @@ class Builder:
     # ── [8] Home page ─────────────────────────────────────────
 
     def _build_home(self):
-        tpl = _load_template(self.templates_dir, 'home.html')
+        # v0.6.4: 홈도 자기 template 키 가능. 폴백 = home.html.
+        home_meta_file = self.articles_dir / 'meta.yaml'
+        tpl = self._resolve_template(
+            self.home_meta.template, self.articles_dir,
+            default_name='home.html',
+            scope='home', target='',
+            meta_file=home_meta_file,
+        )
 
         # v0.4.6: 홈 전용 설정은 site.yaml 이 아니라 Articles/meta.yaml 에서.
         exclude_top = set(self.home_meta.excludes_categories)
@@ -2138,6 +2406,17 @@ class Builder:
 
         section_class = 'paginated listup-gallery' if home_layout == 'gallery' else 'paginated'
 
+        # v0.6.4: 홈도 글/카테고리와 같은 CSS 처리.
+        page_stylesheets = render_stylesheet_links(
+            self.home_meta.stylesheets, '/',
+        )
+        page_styles = render_inline_styles(self.home_meta.styles)
+        tpl_local = self._apply_css_placeholders(
+            tpl,
+            use_common_css=self.home_meta.use_common_css,
+            stylesheets_html=page_stylesheets,
+        )
+
         vars_ = {
             'LANG': escape_html(page_lang),
             'META_TAGS': meta_tags,
@@ -2148,10 +2427,14 @@ class Builder:
             'HOME_PER_PAGE': str(per_page),
             'ARTICLE_LIST': article_items,
             'PAGINATION_NAV': pagination_nav,
+            'PAGE_STYLES': page_styles,
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
         }
-        page_html = _render_template(tpl, vars_)
+        page_html = _render_template(
+            tpl_local, vars_,
+            warn_context=('home', '', home_meta_file),
+        )
         self.dist.mkdir(parents=True, exist_ok=True)
         (self.dist / 'index.html').write_text(page_html, encoding='utf-8')
 
@@ -2182,6 +2465,45 @@ class Builder:
                 )
             else:
                 _copy_if_newer(src_file, dst_file)
+
+    # ── [6b] Home/Category page CSS sync (v0.6.4) ──────────────
+
+    def _sync_page_css(self):
+        """v0.6.4: 카테고리/홈 meta.yaml 이 선언한 외부 CSS 파일을 dist 에 복사.
+
+        글 자산은 [5] `_sync_assets` 가 글 폴더를 통째로 복사하므로 별도
+        처리 불필요. 카테고리/홈은 폴더 전체 복사 없이 *명시 선언* 된 CSS
+        파일만 따로 복사 (자식 글 폴더를 휩쓸지 않으려는 의도).
+
+        복사 매핑:
+          - 홈: `Articles/<rel>` → `dist/<rel>` (URL = `/<rel>`).
+          - 카테고리: `Articles/<path>/<rel>` → `dist/<slug_path>/<rel>`
+            (URL = `/<slug_path>/<rel>`).
+
+        validated_sheets 만 도착하므로 (`_parse_frontmatter` /
+        `_parse_category_meta_file` 의 _validate_stylesheets 단계에서 파일
+        존재 확인 완료) 여기서 src 가 사라졌으면 빌드 중간의 race — 조용히
+        스킵 (issue 는 파싱 단계에서 이미 보고됨).
+        """
+        # 홈
+        for rel in self.home_meta.stylesheets:
+            src = self.articles_dir / rel
+            if not src.is_file():
+                continue
+            dst = self.dist / rel
+            _copy_if_newer(src, dst)
+        # 카테고리 (톱레벨 + 모든 서브)
+        for _path_tuple, cat in self.categories.items():
+            if not cat.meta.stylesheets:
+                continue
+            cat_src_dir = self.articles_dir.joinpath(*cat.path)
+            cat_dst_dir = self.dist.joinpath(*cat.slug_path)
+            for rel in cat.meta.stylesheets:
+                src = cat_src_dir / rel
+                if not src.is_file():
+                    continue
+                dst = cat_dst_dir / rel
+                _copy_if_newer(src, dst)
 
     # ── [10] 404 page ─────────────────────────────────────────
 
@@ -2509,6 +2831,7 @@ class Builder:
         self._validate()                       # [4]
         self._sync_assets()                    # [5] (v0.5.1: 옛 [6])
         self._copy_site_assets()               # [6] (v0.5.1: 옛 [9])
+        self._sync_page_css()                  # [6b] (v0.6.4) 카테고리/홈 CSS
         self._render_articles()                # [7] (v0.5.1: 옛 [5])
         self._build_categories()               # [8]
         self._build_home()                     # [9]

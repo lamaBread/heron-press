@@ -203,35 +203,56 @@ class StyleTests(unittest.TestCase):
         self.assertEqual(rules, {})
 
     def test_render_stylesheet_links_empty(self):
-        self.assertEqual(render_stylesheet_links([], 'slug'), '')
-        self.assertEqual(render_stylesheet_links(['a.css'], ''), '')
+        self.assertEqual(render_stylesheet_links([], '/slug/'), '')
+        self.assertEqual(render_stylesheet_links(['a.css'], None), '')
 
     def test_render_stylesheet_links_basic(self):
-        out = render_stylesheet_links(['style.css'], 'about')
+        out = render_stylesheet_links(['style.css'], '/about/')
         self.assertIn("href='/about/style.css'", out)
         self.assertIn("rel='stylesheet'", out)
         self.assertEqual(out.count('<link'), 1)
 
     def test_render_stylesheet_links_multiple_order_preserved(self):
-        out = render_stylesheet_links(['a.css', 'b.css'], 'slug')
+        out = render_stylesheet_links(['a.css', 'b.css'], '/slug/')
         pos_a = out.find('a.css')
         pos_b = out.find('b.css')
         self.assertGreater(pos_a, -1)
         self.assertGreater(pos_b, pos_a)
 
     def test_render_stylesheet_links_normalizes_dot_slash(self):
-        out = render_stylesheet_links(['./theme.css'], 'slug')
+        out = render_stylesheet_links(['./theme.css'], '/slug/')
         self.assertIn("href='/slug/theme.css'", out)
         self.assertNotIn('./theme.css', out)
 
     def test_render_stylesheet_links_subdir(self):
-        out = render_stylesheet_links(['css/main.css'], 'slug')
+        out = render_stylesheet_links(['css/main.css'], '/slug/')
         self.assertIn("href='/slug/css/main.css'", out)
 
     def test_render_stylesheet_links_backslash_to_slash(self):
         # Windows 경로 호환.
-        out = render_stylesheet_links(['css\\theme.css'], 'slug')
+        out = render_stylesheet_links(['css\\theme.css'], '/slug/')
         self.assertIn("href='/slug/css/theme.css'", out)
+
+    # v0.6.4: url_prefix 시그니처 일반화 — 카테고리/홈도 같은 함수 사용.
+    def test_render_stylesheet_links_home_root_prefix(self):
+        """홈의 외부 CSS — url_prefix='/' → URL=/<rel>."""
+        out = render_stylesheet_links(['theme.css'], '/')
+        self.assertIn("href='/theme.css'", out)
+
+    def test_render_stylesheet_links_category_prefix(self):
+        """카테고리 (서브 포함) — url_prefix='/blog/tutorials/' → URL 도 동일 접두."""
+        out = render_stylesheet_links(['style.css'], '/blog/tutorials/')
+        self.assertIn("href='/blog/tutorials/style.css'", out)
+
+    def test_render_stylesheet_links_prefix_without_trailing_slash(self):
+        """url_prefix 가 trailing '/' 없이 주어져도 자동 보정."""
+        out = render_stylesheet_links(['x.css'], '/blog')
+        self.assertIn("href='/blog/x.css'", out)
+
+    def test_render_stylesheet_links_prefix_without_leading_slash(self):
+        """url_prefix 가 leading '/' 없이 주어져도 자동 보정."""
+        out = render_stylesheet_links(['x.css'], 'blog/')
+        self.assertIn("href='/blog/x.css'", out)
 
 
 class HasLivePhpTests(unittest.TestCase):

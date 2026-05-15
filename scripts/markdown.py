@@ -532,30 +532,45 @@ def render_inline_styles(rules: dict) -> str:
     return '<style>\n' + '\n'.join(out_rules) + '\n  </style>'
 
 
-def render_stylesheet_links(sheets, slug: str) -> str:
-    """외부 CSS 파일 리스트를 head 의 `<link>` 태그들로 렌더 (v0.6.3 신설).
+def render_stylesheet_links(sheets, url_prefix: str) -> str:
+    """외부 CSS 파일 리스트를 head 의 `<link>` 태그들로 렌더.
 
-    각 항목은 글 폴더 기준 상대 경로. URL 은 v0.5.2 자산 경로 일원화 정책
-    (글 자산 = `/{slug}/...`) 에 맞춰 site-absolute (`/{slug}/<rel>`).
-    파일이 _sync_assets 에 의해 dist/{slug}/<rel> 로 자동 복사된다.
+    각 항목은 페이지의 source 폴더 기준 상대 경로. URL 은 페이지 종류 별
+    site-absolute 접두 + 상대 경로.
 
-    파일 존재 검증은 호출자 (Builder 의 _parse_frontmatter) 에서 수행되어
-    이 함수에 도달하는 sheets 는 *글 폴더에 실제로 존재한다고 가정한다*.
-    빈 sheets 면 빈 문자열을 반환 (head 의 placeholder 라인이 line-eating
-    되어 빈 줄이 남지 않도록 빌더가 별도 처리).
+    v0.6.4 변경 — 시그니처 일반화. v0.6.3 의 `(sheets, slug: str)` 는 글의
+    `/{slug}/<rel>` 만 만들 수 있었으나, v0.6.4 에서 카테고리/홈도 같은
+    함수를 쓰도록 두 번째 인자를 `url_prefix` 로 받는다. 호출 측이 페이지
+    종류에 맞게 접두를 구성:
+      - 글: f'/{m.slug}/'
+      - 카테고리: '/' + '/'.join(cat.slug_path) + '/'
+      - 홈: '/'
+
+    url_prefix 는 trailing '/' 을 가지고 있어야 한다 (없으면 자동 보정).
+
+    파일 존재 검증은 호출자 (Builder 의 _parse_frontmatter /
+    _parse_category_meta_file) 에서 수행되어 이 함수에 도달하는 sheets 는
+    *해당 페이지의 source 폴더에 실제로 존재한다고 가정한다*. 빈 sheets 면
+    빈 문자열 (head 의 placeholder 라인이 line-eating 되어 빈 줄이 남지
+    않도록 빌더가 별도 처리).
     """
     if not sheets:
         return ''
-    if not slug:
+    if url_prefix is None:
         return ''
+    prefix = url_prefix
+    if not prefix.endswith('/'):
+        prefix = prefix + '/'
+    if not prefix.startswith('/'):
+        prefix = '/' + prefix
     lines = []
     for rel in sheets:
         # 정규화 — Windows 경로 호환 + leading './' 제거.
         norm = str(rel).replace('\\', '/').strip()
         while norm.startswith('./'):
             norm = norm[2:]
-        # _parse_frontmatter 가 절대경로 / '..' 이탈을 미리 거부했으므로 여기
-        # 도달하는 norm 은 글 폴더 안의 깨끗한 상대 경로.
-        url = f'/{slug}/{norm}'
+        # 파서가 절대경로 / '..' 이탈을 미리 거부했으므로 여기 도달하는 norm
+        # 은 source 폴더 안의 깨끗한 상대 경로.
+        url = f'{prefix}{norm}'
         lines.append(f"    <link href='{url}' rel='stylesheet' type='text/css'>")
     return '\n'.join(lines)

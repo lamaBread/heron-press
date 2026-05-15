@@ -1,11 +1,11 @@
-# siheonlee.com v0.6.3 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.6.4 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 두 도메인 분량의 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.6.3 한 줄 요약:** *글 단위 외부 CSS 파일 지원 + 사이트 공통 CSS 비활성화 토글.* `meta.yaml` 의 `styles:` 키가 두 채널을 동시에 받도록 확장 — 정수 키 (1, 2, 3, ...) 는 글 폴더 안의 외부 CSS 파일 상대 경로, 문자열 키 (tag/selector) 는 기존 인라인 룰 (v0.5.x 동작 그대로). 글의 자기 디자인을 그 글의 폴더 안에 두는 자연스러운 위치를 제공하며, v0.5.2 자산 경로 일원화 정책에 따라 `dist/{slug}/<rel>` 로 자동 복사 + head 의 `<link href='/{slug}/<rel>'>` 로 자동 link. 로드 순서는 *common_template.css → 외부 CSS → 인라인 `<style>`* (인라인이 마지막 발언권 = "미세 override" 의도). 같이 도입된 `use_common_css: false` 토글은 사이트 공통 CSS link 자체를 head 에서 끊어 글에서 완전히 새로운 디자인/서비스를 제공할 수 있게 한다 (기본값 True 라 옛 글 변경 의무 없음). 카테고리/홈은 외부 CSS 미지원 (영구적 정책 — 카테고리/홈은 사이트 공통 톤에서 벗어날 가능성이 매우 희박). 단위 테스트 188 → 210. 외부 CSS 를 안 쓰는 모든 옛 글의 dist 산출물은 v0.6.2 와 *바이트 동일*. 자세한 내역은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
+> **v0.6.4 한 줄 요약:** *홈/카테고리도 글과 같은 CSS 자유도 (외부 CSS 파일 + use_common_css 토글) + meta.yaml 의 `template:` 키로 페이지 단위 템플릿 선택.* v0.6.3 의 비대칭 (글만 외부 CSS / 토글 지원, 홈·카테고리는 "영구 미지원") 해소 — 세 페이지 종류가 동일한 `styles:` 두 채널 (정수 키 = 외부 CSS, 문자열 키 = 인라인) + `use_common_css` 토글을 가진다. 외부 CSS URL 은 페이지 종류 별 접두 (글 `/<slug>/<rel>`, 카테고리 `/<cat_slug_path>/<rel>`, 홈 `/<rel>`). 새 `template:` 키는 페이지가 사용할 템플릿 파일을 명시 — `'name.html'` → `templates/` 에서, `'./name.html'` → meta.yaml 의 부모 폴더에서 (글 = 폴더 원칙 연장). 검증 실패 / 파일 없음 → BuildReport issue + 페이지 종류 기본 템플릿 폴백. 부수로 `_render_template` 가 미치환 `{{XXX}}` placeholder 를 빈 문자열로 strip + warning. 단위 테스트 210 → **227**. 외부 CSS 를 안 쓰는 글 6 개 / 카테고리 2 개 / search.php / sitemap 등은 v0.6.3 과 *바이트 동일*. dist 차이는 3 파일 — feed.atom/rss = generator 자동 갱신 + 홈 index.html = 신설 `{{PAGE_STYLES}}` placeholder 의 빈 치환 1 줄. 자세한 내역은 [§ 18 업데이트 로그](#18-업데이트-로그) 참조.
 
 | 핵심 가치 | 어떻게 보장하는가 |
 |---|---|
@@ -14,7 +14,7 @@
 | **이미지 자동 최적화** (v0.5.1) — SEO 직접 영향 항목을 빌드가 처리 | raster 이미지 자동 WebP 변환 + 다중 해상도 srcset + 모든 `<img>` 에 `loading="lazy"` 자동 부착. 글마다 별도 작업 없음. |
 | **서버 설정과 콘텐츠 분리** — 글을 추가해도 서버를 안 건든다 | `.htaccess` 미사용. 모든 라우팅 규칙은 Apache VirtualHost 메인 설정에 한 번만 등록. |
 | **두 도메인 동시 관리** — 신규 도메인과 구 도메인 리다이렉트를 한 번에 | 빌드 산출물이 `dist/`(siheonlee.com)와 `dist-legacy/`(lama.pe.kr 301 리다이렉트)로 분리됨. |
-| **글마다 표현 제어** — 사이트 전역 CSS 와 별도로 글 단위 미세 조정 + 본격 디자인 모두 가능 | `meta.yaml` 의 `styles:` 키 안의 *문자열 키* (태그/선택자) 로 본문 태그(p, h3, ul 등)의 CSS 속성을 글마다 독립적으로 미세 override. 더 큰 자유도 (at-rule / 중첩 / 변수 / 의사클래스 조합) 가 필요하면 글 폴더 안에 진짜 CSS 파일을 두고 같은 `styles:` 키 안의 *정수 키* (1, 2, 3, ...) 로 등록 (v0.6.3). 글에서 완전히 새로운 디자인을 제공할 때는 `use_common_css: false` 로 사이트 공통 CSS link 자체를 끊는 것도 가능 (v0.6.3). |
+| **페이지마다 표현 제어** — 사이트 전역 CSS 와 별도로 페이지 단위 미세 조정 + 본격 디자인 모두 가능 | `meta.yaml` 의 `styles:` 키 안의 *문자열 키* (태그/선택자) 로 본문 태그(p, h3, ul 등)의 CSS 속성을 페이지마다 독립적으로 미세 override. 더 큰 자유도 (at-rule / 중첩 / 변수 / 의사클래스 조합) 가 필요하면 페이지 폴더 안에 진짜 CSS 파일을 두고 같은 `styles:` 키 안의 *정수 키* (1, 2, 3, ...) 로 등록 (v0.6.3, **v0.6.4 부터 글/카테고리/홈 모두 지원**). 사이트 공통 톤에서 완전히 벗어나고 싶다면 `use_common_css: false` 로 공통 CSS link 자체를 끊고 (v0.6.3), 더 나아가 `template: 'mine.html'` 또는 `template: './mine.html'` 로 자기 템플릿 파일까지 골라 쓸 수 있습니다 (v0.6.4). |
 | **글마다 색인 정책** (v0.4.0) — 전역으론 검색 가능, 필요시 개별 비공개 | 전역 `<meta robots noindex>` 폐지. 비공개로 두려는 글은 그 글의 `meta.yaml` 에 `noindex: true` 한 줄. |
 | **사이트 내 검색** — 클라이언트 JS 없이 한국어 친화 부분검색 | 빌드 시 `dist/search.php` 한 파일에 검색 엔드포인트 + 토크나이저 + BM25 함수 + 정적 인덱스가 모두 인라인 (v0.6.0). 카테고리 페이지 검색은 자동으로 해당 카테고리 내부로 한정. v0.4.0 부터 1글자 한국어는 인덱싱/쿼리 대상에서 제외, Python↔PHP 토크나이저 패리티를 빌드마다 자동 검증. **v0.5.0 부터 Okapi BM25 + 필드 가중치 + phrase 부스트**, **v0.6.0 부터 메타데이터 3-필드 (title / description / tags) 만 색인** — 흔한 토큰 vs 희귀 토큰, 짧은 글 vs 긴 글, 흩어진 매치 vs 정확한 phrase 매치를 점수가 합리적으로 반영합니다. PHP OPcache 활성화 시 인덱스가 메모리에 상주해 JSON 파싱 / 디스크 IO 0. |
 
@@ -841,7 +841,9 @@ Articles/
 | `per_page` | site.yaml `category_per_page` (20) | 이 카테고리의 *자기 인덱스 페이지* 에서 한 페이지에 보여 줄 글 수. |
 | `preview_per_page` | site.yaml `category_preview_per_page` (5) | 이 카테고리가 *상위 카테고리의 인덱스 페이지* 에 section 으로 임베드될 때의 페이지당 글 수. |
 | `layout` | `list` | `list` (텍스트 한 줄) / `gallery` (이미지 타일, v0.5.3) 두 종을 기본 제공. 그 외 값은 빌드 통과 + `list` 로 폴백 — *추가 layout 이 필요하면 빌더 코드 (`_listup_items_html` / `_render_section` / CSS) 에 직접 등록*. |
-| `styles` | 빈 매핑 | 이 카테고리 인덱스 페이지에만 적용할 추가 CSS (글의 `styles:` 와 동일 포맷). |
+| `styles` | 빈 매핑 | 이 카테고리 인덱스 페이지에만 적용할 CSS. 두 채널 — 정수 키 (1, 2, 3, ...) 는 카테고리 폴더 안의 외부 CSS 파일 상대 경로, 문자열 키 (tag/selector) 는 인라인 룰. 글의 `styles:` 와 같은 포맷 (v0.6.4 부터 통일). |
+| `use_common_css` | `true` | v0.6.4. `false` 면 사이트 공통 CSS link 자체를 head 에서 끊고 외부/인라인만 적용. |
+| `template` | 없음 (`category.html`) | v0.6.4. 이 카테고리 인덱스 페이지에 사용할 템플릿 파일. `name.html` → `templates/` 에서, `./name.html` → 이 카테고리 폴더에서. |
 | `lang` | site.yaml `lang` | 이 카테고리 인덱스 페이지의 `<html lang>` 오버라이드. |
 
 `per_page > preview_per_page` 가 자연스러운 사용법입니다 — 소분류의 자기 페이지는 글을 더 많이 보여주고, 상위에 임베드된 section 은 미리보기 수준으로 적게 보여주는 정책.
@@ -1418,6 +1420,21 @@ layout: list
 
 # 메인페이지의 <html lang> 오버라이드 (비우면 site.yaml 의 lang).
 # lang: ko
+
+# v0.6.4: 메인페이지의 외부 CSS / 인라인 룰 — 글·카테고리와 같은 styles 두 채널.
+# 정수 키 = 외부 CSS 파일 (위치: Articles/<filename>, URL: /<filename>),
+# 문자열 키 = 인라인 룰 (글의 styles 와 동일 포맷).
+# styles:
+#   1: home.css
+#   p:
+#     line-height: 1.7em
+
+# v0.6.4: 사이트 공통 CSS link 출력 여부. 기본 true.
+# use_common_css: true
+
+# v0.6.4: 메인페이지에 사용할 템플릿 파일. 비우면 home.html.
+# template: my_landing.html      # templates/ 에서 검색.
+# template: ./local_home.html    # Articles/ 안의 파일에서 검색.
 
 # (참고용 — 루트는 상위가 없어 임베드되지 않음.)
 # preview_per_page: 5
@@ -2050,20 +2067,56 @@ python build.py --clean
 
     **`og_image` 의 본문 추출 폴백을 두지 않는 이유:** SNS / 메신저 미리보기는 `og:image` 가 없을 때 본문 첫 이미지나 favicon 을 임의로 긁어가 카드를 조합한다. 이는 author 의 의도와 무관한 부작용이며, 같은 행동을 SSG 가 빌드 시점에 자동화하는 것은 동일하게 무례한 일이다. `meta.yaml` 에 `og_image` 가 없으면 `site.default_og_image` 를 무조건 사용한다 — author 가 명시적으로 선택한 사이트 기본값이라는 점에서 본문 추출과 본질이 다르다.
 
-### 현재 버전(v0.6.3) 의 한계
+### 현재 버전(v0.6.4) 의 한계
 
-> 아래 표는 v0.6.3 시점에 여전히 유효한 한계만 모았습니다. v0.6.3 에서 해소된 항목 — *styles 의 at-rule / 중첩 / 변수 / 의사클래스 조합 미지원* — 은 인라인 채널의 의도된 한계이며, 더 큰 자유도가 필요한 글은 그 글의 폴더 안에 자기 CSS 파일을 두고 `styles:` 의 정수 키로 등록하면 모든 표준 CSS 문법이 자유롭게 동작합니다 (v0.6.3 신설). 결함이 아닌 *채널 분리* 이므로 한계 표에서 제거된 상태입니다.
+> 아래 표는 v0.6.4 시점에 여전히 유효한 한계만 모았습니다. v0.6.4 에서 해소된 항목 — *카테고리/홈의 외부 CSS / `use_common_css` 토글 미지원* — 은 페이지 종류 간 비대칭이었으나 v0.6.4 에서 글/카테고리/홈 모두 같은 메커니즘으로 통일 (`styles:` 정수 키 + `use_common_css` + `template:`). 한계 표에서 제거된 상태입니다. v0.6.3 에서 해소된 *styles 의 at-rule / 중첩 / 변수 / 의사클래스 조합* 은 인라인 채널의 의도된 한계이며, 더 큰 자유도가 필요하면 자기 CSS 파일을 두고 `styles:` 의 정수 키로 등록하면 표준 CSS 문법이 자유롭게 동작합니다.
 
 | 한계 | 내용 |
 |---|---|
-| 카테고리/홈의 외부 CSS 미지원 (영구적) | `Articles/meta.yaml` (홈) / `Articles/<카테고리>/meta.yaml` 의 `styles:` 에 정수 키 (외부 CSS 파일) 를 적어도 무시되고 issue 가 기록됩니다. *카테고리/홈은 사이트 공통 톤에서 벗어날 가능성이 매우 희박* 하다는 정책 — 외부 CSS 가 필요한 케이스는 글에 한정. 인라인 룰 (문자열 키) 은 카테고리/홈에서도 그대로 작동합니다. |
-| 카테고리/홈의 `use_common_css` 토글 부재 (영구적) | 사이트 공통 CSS 비활성화 토글은 글에만 존재합니다. 위와 같은 이유. |
 | 이미지 최적화는 정적 단일 프레임만 (v0.5.1) | animated GIF 는 첫 프레임만 WebP 로 인코딩되어 애니메이션이 사라집니다. 애니메이션을 보존하려면 그 글의 첨부를 webp 로 직접 만들거나, `<img>` 의 src 를 외부 URL 로 두면 후처리에서 src 가 변경되지 않습니다. 한 글 / 한 이미지에 대해서만 최적화를 끄는 옵션은 아직 없음 (사이트 전역 토글만). |
 | 빌드 증분 캐싱 없음 | 매 빌드마다 전체 글 재렌더 + 검색 인덱스 재구축. 글 자원만 mtime 기준 skip ([builder.py](scripts/builder.py) 의 `_copy_if_newer`) 이며 그 외 캐시 없음. 글 ≤ 수십 건 규모에선 무시 가능. |
+| 페이지 종류 가로지르는 `template:` 의 정합성은 author 책임 | meta.yaml 의 `template:` 으로 페이지 종류 (글/카테고리/홈) 와 짝지지 않는 템플릿을 골라도 빌드는 통과합니다 — 빌더가 채우지 않은 placeholder (예: 글 페이지에 `{{SUBCATEGORY_SECTIONS}}` 가 있는 템플릿) 는 후처리에서 빈 문자열로 strip + warning. 의도된 가로지르기일 수 있으므로 issue 가 아닌 warning. author 가 의도한 결과를 확인해야 합니다. |
 
 ---
 
 ## 18. 업데이트 로그
+
+### v0.6.4 (2026-05-15) — 홈/카테고리 CSS 일원화 + `template:` 키
+
+v0.6.3 에서 글 단위로 도입한 외부 CSS 파일 채널 + `use_common_css` 토글은 *카테고리/홈에서는 "영구 미지원"* 으로 못박혀 있었다 — "사이트 공통 톤에서 벗어날 가능성이 매우 희박" 이라는 논거. v0.6.4 작업 직전 재검토에서 *이 논거는 글에도 동일하게 적용 가능한데 글만 풀어준 비일관성* 으로 판명, "영구 미지원" 정책을 폐기하고 세 페이지 종류 모두 같은 메커니즘으로 일원화. 함께 도입된 `template:` 키는 페이지가 사용할 템플릿 파일을 자기 meta.yaml 에서 직접 명시하게 해, "글 = 폴더" 원칙을 템플릿 차원까지 연장한다. 새 폴더 [siheonlee.com_v0.6.4/](siheonlee.com_v0.6.4) 에서 작업.
+
+**사용자 결정 사항 (작업 전 합의):**
+1. **Level 1 (CSS 일원화) + Level 2 (template: 키) 동시 도입.** Level 1 만으로도 비일관성 해소 가능하나 같은 "페이지 = 자기 공간" 원칙을 두 차원에서 동시에 풀어줌.
+2. **홈 외부 CSS 파일 위치: `Articles/<filename>` → `dist/<filename>`** — 사이트 루트에 그대로 떨어뜨리는 가장 단순한 매핑. 명시 키 정책 (자동 발견 없음) 이라 author 가 의도적으로 적은 파일만 복사되어 예약 이름 (`sitemap.xml`, `robots.txt` 등) 과 충돌 위험은 author 책임.
+3. **placeholder 이름 통일** — `{{COMMON_CSS}}` / `{{PAGE_STYLESHEETS}}` / `{{PAGE_STYLES}}` 가 세 템플릿 모두에서 같은 이름. v0.6.3 의 `{{ARTICLE_STYLESHEETS}}` / `{{ARTICLE_STYLES}}` / `{{CATEGORY_STYLES}}` 일제히 변경.
+4. **template: 경로 해석 — 이중 출처** — `'name.html'` → `templates/` 에서, `'./name.html'` → meta.yaml 의 부모 폴더에서. CSS 와 같은 톤 (글/카테고리/홈 모두 자기 폴더에 자기 템플릿 둘 수 있음).
+5. **페이지 종류 가로지르기 — 허용 + 후처리 경고** — `_render_template` 가 마지막에 남은 `{{XXX}}` 를 빈 문자열로 strip + warning. author 책임.
+
+**변경 다섯 갈래:**
+
+| 변경 | 내용 |
+|---|---|
+| CategoryMeta 에 세 필드 신설 | [scripts/models.py](siheonlee.com_v0.6.4/scripts/models.py) 의 `CategoryMeta` 에 `stylesheets: list = []`, `use_common_css: bool = True`, `template: Optional[str] = None` 추가. v0.6.3 의 ArticleMeta 와 같은 구조. `styles` 필드의 의미는 v0.6.3 때처럼 *문자열 키 (인라인 룰) 만* 담는다. ArticleMeta 에는 `template` 필드만 추가 (다른 두 필드는 v0.6.3 에 이미 있음). |
+| `render_stylesheet_links` 시그니처 일반화 | [scripts/markdown.py](siheonlee.com_v0.6.4/scripts/markdown.py) 의 `render_stylesheet_links(sheets, slug)` → `render_stylesheet_links(sheets, url_prefix)`. 글은 `f'/{m.slug}/'`, 카테고리는 `'/' + '/'.join(slug_path) + '/'`, 홈은 `'/'`. 한 함수가 세 페이지 종류 모두 처리. |
+| 공용 헬퍼 추가 | [scripts/builder.py](siheonlee.com_v0.6.4/scripts/builder.py) 에 네 헬퍼 신설 — (a) `_validate_stylesheets(raw_sheets, source_dir, scope, target, meta_file)` 가 글/카테고리/홈의 styles 정수 키를 같은 규칙으로 검증 (절대 경로/'..'/빈 경로 거부 + 파일 존재 확인), (b) `_validate_template_ref(raw, source_dir, ...)` 가 template 키 값을 normalize/검증 + 출처 (templates_dir / page_folder) 판별, (c) `_resolve_template(meta_template, source_dir, default_name, ...)` 가 해결된 경로의 텍스트를 로드 (파일 없음 → issue + 기본 폴백), (d) `_apply_css_placeholders(tpl, use_common_css, stylesheets_html)` 가 `{{COMMON_CSS}}` + `{{PAGE_STYLESHEETS}}` 의 line-eating 을 한 군데서 처리. `_parse_frontmatter` / `_parse_category_meta_file` / `_render_articles` / `_build_home` / `_build_category_page` 가 이 헬퍼들을 공유. |
+| 새 빌드 단계 [6b] `_sync_page_css` | 카테고리/홈의 선언된 외부 CSS 파일을 dist 에 명시 복사. 글은 기존 [5] `_sync_assets` 가 폴더를 통째로 복사하므로 별도 처리 불필요. 매핑 — 홈: `Articles/<rel>` → `dist/<rel>`, 카테고리: `Articles/<path>/<rel>` → `dist/<slug_path>/<rel>`. |
+| `_render_template` 후처리 | 치환 후 남은 `{{XXX}}` placeholder 를 빈 문자열로 strip + warn_context 가 주어진 호출에서는 각 미치환 이름마다 BuildReport warning. author 가 페이지 종류를 가로지르는 템플릿을 골랐을 때 발생하는 silent leak 가드. 시스템 페이지 (404 / search) 처럼 빌더가 직접 컨트롤하는 템플릿은 warn_context=None 으로 호출 — strip 만 적용. |
+
+**검증:**
+- 빌드 6 글 / 2 카테고리 / 0 abort. description 누락 issue 4 건 = about / home / blog / blog/tutorials (v0.6.3 와 동일 — 콘텐츠 측 잔존).
+- 단위 테스트 210 → **227** (test_markdown.py 의 url_prefix 케이스 4 개 + test_builder.py 의 카테고리/홈 styles 케이스 7 개 + template 키 케이스 6 개 추가).
+- `diff -rq` v0.6.3/dist vs v0.6.4/dist: **3 파일 차이** — (a) `feed.atom` / `feed.rss` = generator v0.6.3 → v0.6.4 자동 갱신 (`__version__` 단일 source effect), (b) `index.html` (홈) = 신설 `{{PAGE_STYLES}}` placeholder 의 빈 치환으로 trailing whitespace 라인 1 줄 추가 (홈도 이제 인라인 styles 채널을 가짐). 글 6 개 / 카테고리 2 개 / search.php / sitemap / robots / 404 / dispatcher 등 모든 다른 산출물은 v0.6.3 과 *바이트 동일*.
+
+**적용 메모:**
+- 옛 글/카테고리/홈 `meta.yaml` 변경 의무 없음. 세 신규 키 (카테고리/홈의 `stylesheets` 정수 키 / `use_common_css` / `template`) 모두 기본값으로 옛 동작.
+- 카테고리/홈에서 외부 CSS 를 쓰려면 글과 같은 절차: (1) 그 페이지의 폴더 안에 `.css` 파일을 둔다 (홈은 `Articles/`, 카테고리는 `Articles/<카테고리>/`), (2) 같은 폴더의 meta.yaml 의 `styles:` 안에 `1: <파일명>` 줄 추가. dist 에는 페이지 종류 별 접두 (`/`, `/<cat_slug_path>/`, `/<slug>/`) 로 복사 + head 의 `<link>` 자동 출력.
+- `template:` 키 사용 — meta.yaml 최상위에 `template: my.html` (templates/ 에서) 또는 `template: ./my.html` (페이지 폴더에서). 글 = 폴더 원칙대로 자기 템플릿은 글 폴더에 두는 게 자연스럽다. 페이지 종류와 호환되지 않는 템플릿을 골랐을 때 — 미치환 placeholder 가 strip 되고 warning 이 나와 author 가 의도된 결과인지 확인하면 됨.
+
+**미수용 (차기 의제):**
+- 태그별 색인 페이지 (`/tag/foo/` URL).
+- 검색 결과의 카테고리·태그 필터 UI.
+- Parsedown PHP↔Python 동등성 비교 트리 동봉 (의도된 한계 — 사용자 정책).
+- 자기 폴더의 `template.html` 자동 발견 (= `./template.html` 없이 키 부재만으로 자기 폴더 템플릿 사용). 명시 키 정책 유지 — author 의 의도가 명시적으로 표현되는 안전한 동작.
 
 ### v0.6.3 (2026-05-15) — 글 단위 외부 CSS 파일 + use_common_css 토글
 

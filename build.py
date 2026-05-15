@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.6.3 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.6.4 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다. 사이트 전역 버전 문자열은
@@ -9,13 +9,52 @@ source of truth — 피드 generator 등이 이 값을 참조.
 Usage:
     python build.py           # full build
     python build.py --clean   # wipe dist/ + dist-legacy/ before build
-    python -m unittest discover -s tests   # 단위 테스트 (v0.6.3: 210개)
+    python -m unittest discover -s tests   # 단위 테스트 (v0.6.4: 227개)
     python tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
-빌드 의존성 (v0.6.3):
+빌드 의존성 (v0.6.4):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.6.4 변경 사항 (vs v0.6.3) — 홈/카테고리 CSS 일원화 + template: 키:
+  - v0.6.3 의 비대칭 (글만 외부 CSS / use_common_css 지원, 홈/카테고리는 영구
+    미지원) 해소. CategoryMeta 가 글의 ArticleMeta 와 같은 stylesheets +
+    use_common_css 필드를 가져 *세 페이지 종류 모두* 동일한 styles 두 채널
+    (정수 키 = 외부 CSS 파일 상대 경로, 문자열 키 = 인라인 룰) + 공통 CSS
+    토글을 지원한다.
+  - 외부 CSS URL 은 페이지 종류 별 접두 + 상대 경로:
+      글       : /<slug>/<rel>
+      카테고리 : /<cat_slug_path>/<rel>
+      홈       : /<rel> (사이트 루트)
+    파일 위치는 항상 meta.yaml 의 부모 폴더 (= 글 폴더 / 카테고리 폴더 /
+    Articles/). `render_stylesheet_links(sheets, url_prefix)` 시그니처
+    일반화로 한 함수가 세 페이지 종류 모두 처리.
+  - 새 빌드 단계 [6b] `_sync_page_css` — 카테고리/홈의 선언된 CSS 파일을
+    dist 에 명시 복사 (글은 기존 [5] `_sync_assets` 가 폴더 통째로 복사).
+  - 공용 검증 헬퍼 `_validate_stylesheets` — 글/카테고리/홈이 같은 규칙으로
+    절대 경로/'..'/빈 경로 거부 + 파일 존재 확인.
+  - **새 `template:` 키** — meta.yaml 이 자기 페이지에 사용할 템플릿 파일을
+    명시 (`'name.html'` → templates/ 에서, `'./name.html'` → meta.yaml 의
+    부모 폴더에서). 글/카테고리/홈 모두 같은 형식. 검증 실패 / 파일 없음 →
+    BuildReport issue + 페이지 종류 기본 템플릿 (article.html /
+    category.html / home.html) 으로 폴백.
+  - `_render_template` 후처리: 치환 후 남은 `{{XXX}}` placeholder 를 빈
+    문자열로 strip + warn_context 가 주어진 호출에서는 각 미치환 이름마다
+    BuildReport warning. author 가 페이지 종류를 가로지르는 템플릿을
+    골랐을 때 발생하는 silent leak 가드.
+  - 템플릿 placeholder 이름 통일: `{{COMMON_CSS}}` / `{{PAGE_STYLESHEETS}}` /
+    `{{PAGE_STYLES}}` 가 세 템플릿 모두에서 같은 이름. v0.6.3 의
+    `{{ARTICLE_STYLESHEETS}}` / `{{ARTICLE_STYLES}}` / `{{CATEGORY_STYLES}}` 는
+    일제히 변경 — dist 산출물은 placeholder 가 렌더 후 사라지므로 byte 영향
+    없음 (단 `home/index.html` 은 신설 `{{PAGE_STYLES}}` 라인 1줄 추가).
+  - 단위 테스트: 210 → **227** (test_markdown.py 의 url_prefix 케이스 4 개 +
+    test_builder.py 의 카테고리/홈 styles + template 키 케이스 13 개).
+  - 회귀 가드: v0.6.3 의 글 6 개 / 카테고리 2 개 / search.php / sitemap /
+    robots / 404 등 모두 v0.6.4 와 *바이트 동일*. dist 차이는 3 파일 — (a)
+    `feed.atom` / `feed.rss` = generator v0.6.3 → v0.6.4 자동, (b)
+    `index.html` (홈) = 신설 `{{PAGE_STYLES}}` placeholder 의 빈 치환 결과로
+    trailing whitespace 라인 1 줄 추가.
 
 v0.6.3 변경 사항 (vs v0.6.2) — 글 단위 외부 CSS 파일 + use_common_css 토글:
   - meta.yaml 의 `styles:` 키가 두 채널을 동시에 가질 수 있게 확장 — 정수

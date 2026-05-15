@@ -2,19 +2,38 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
-v0.6.3 변경:
+v0.6.4 변경 — CSS 일원화 + template 키:
+  - CategoryMeta 에 `stylesheets` (list[str]) 와 `use_common_css` (bool=True)
+    필드 추가. v0.6.3 의 글/카테고리·홈 비대칭 해소 — 이제 홈 (Articles/meta.yaml)
+    과 카테고리 (Articles/Cat/meta.yaml) 도 글과 같은 두 채널 styles + 토글을
+    가진다. CSS 파일은 meta.yaml 의 부모 폴더 기준 상대 경로 (홈은 Articles/,
+    카테고리는 그 폴더). 외부 CSS URL 은 페이지 종류 별 URL 접두 + 상대 경로
+    (홈=/<rel>, 카테고리=/<cat_slug_path>/<rel>, 글=/<slug>/<rel>).
+  - ArticleMeta + CategoryMeta 에 `template` (Optional[str]) 필드 추가. meta.yaml
+    이 자기 페이지가 어떤 템플릿 파일을 쓸지 명시. 키 부재 시 페이지 종류 기본
+    (글=article.html, 카테고리=category.html, 홈=home.html). 값 형식:
+      - 'name.html'    → templates/ 폴더에서 찾기.
+      - './name.html'  → meta.yaml 의 부모 폴더에서 찾기 (글 = 폴더 원칙 연장).
+      - '/abs' or '..' 포함 → BuildReport issue + 기본 폴백.
+      - 파일 없음 → issue + 기본 폴백.
+    페이지 종류를 가로지르는 선택 (글이 카테고리 템플릿 사용 등) 은 명시적
+    검증 없음 — _render_template 의 후처리가 미치환 placeholder 를 빈
+    문자열로 strip 하고 각 인스턴스마다 warning. author 책임.
+
+v0.6.3 변경 — 글 단위 외부 CSS 파일 + use_common_css 토글:
   - ArticleMeta 에 `stylesheets` (list[str]) 와 `use_common_css` (bool=True)
     필드 추가. `meta.yaml` 의 `styles:` 키가 두 종류의 자식을 동시에 가질
     수 있게 됨 — 정수 키 (1, 2, 3, ...) 는 글 폴더 안의 외부 CSS 파일
     상대 경로, 문자열 키 (tag/selector) 는 기존 인라인 룰 그대로. 파서
     (`scripts/markdown.py:normalize_styles`) 가 두 종류를 분리해 builder
     가 `stylesheets` (정수 키 오름차순 정렬 결과) 와 `styles` (인라인 룰
-    dict) 로 나눠 ArticleMeta 에 채운다. 카테고리/홈은 정수 키를 지원하지
-    않음 — `_parse_category_meta_file` 이 정수 키 존재 시 issue 로 기록.
+    dict) 로 나눠 ArticleMeta 에 채운다. **v0.6.4 에서 카테고리/홈도 동일 지원** —
+    v0.6.3 시점의 "카테고리/홈은 정수 키 미지원" 정책은 v0.6.4 에서 폐기.
   - `use_common_css` 가 False 면 `<link href='/assets/common_template.css'>`
     링크 태그 자체가 head 에서 출력되지 않음. 글에서 완전히 새로운 디자인을
     제공할 때 사이트 공통 톤 (header/nav/footer/pagination/gallery 기본 CSS)
     을 의도적으로 끊는 옵션. 기본값 True 라 모든 옛 글은 변경 의무 없음.
+    **v0.6.4 에서 카테고리/홈도 동일 지원**.
 
 v0.5.5 변경:
   - RenderResult 에서 `first_paragraph` / `first_image` 필드 제거. v0.5.4
@@ -187,10 +206,13 @@ class ArticleMeta:
     # 출력 여부. 기본 True (= 모든 옛 글이 변경 의무 없음). False 면 link
     # 태그 자체가 head 에서 출력되지 않아, 이 글은 사이트 공통 톤 (header /
     # nav / footer / pagination / gallery 기본 디자인) 을 완전히 끊고 자기
-    # 디자인만 적용. 글에서 완전히 새로운 서비스 / 랜딩페이지를 제공할 때
-    # 사용. 카테고리/홈은 이 옵션이 없다 (해당 페이지는 사이트 공통 톤에서
-    # 벗어날 가능성이 매우 희박하다는 정책).
+    # 디자인만 적용. 글에서 완전히 새로운 서비스 / 랜딩페이지를 제공할 때 사용.
+    # **v0.6.4: 카테고리/홈도 같은 토글 (CategoryMeta.use_common_css) 사용**.
     use_common_css: bool = True
+    # v0.6.4 신설: 이 글에 사용할 템플릿 파일. None 이면 templates/article.html
+    # (기본). 'name.html' → templates/ 에서, './name.html' → 글 폴더에서 찾는다
+    # (이중 출처). 검증은 _parse_frontmatter / _validate_template_ref 헬퍼.
+    template: Optional[str] = None
     # v0.5.3: 글 작성자가 직접 적는 주제어 목록. 산출물에서 두 곳에 쓰임 —
     # (1) feed.atom / feed.rss 의 <category>, (2) v0.6.0 부터 검색 인덱스의
     # 세 번째 BM25 필드 (w_tags=2.0, 정확매치 phrase boost ×2.5). meta.yaml
@@ -220,8 +242,19 @@ class CategoryMeta:
                         렌더 (CSS Grid + 4:3 강제 크롭). 둘 외의 값이 오면
                         빌드는 통과하되 'list' 로 폴백한다.
     lang              — 이 페이지의 <html lang> 오버라이드. 비우면 site.lang.
-    styles            — 이 페이지 head 에 inject 되는 CSS 규칙 매핑
-                        (글 단위 styles 와 동일 포맷).
+    styles            — 이 페이지 head 에 inject 되는 인라인 CSS 규칙 매핑
+                        (글 단위 styles 의 *문자열 키 채널* 과 동일 포맷).
+    stylesheets       — v0.6.4 신설. 이 페이지 head 에 link 될 외부 CSS 파일
+                        상대 경로 리스트. meta.yaml 의 styles 키의 *정수 자식
+                        키* (1, 2, 3, ...) 정수 오름차순 정렬 결과. 글의
+                        ArticleMeta.stylesheets 와 같은 의미.
+    use_common_css    — v0.6.4 신설. 사이트 공통 CSS (assets/common_template.css)
+                        link 출력 여부. 기본 True. False 면 head 에서 link
+                        라인이 제거된다. 글의 ArticleMeta.use_common_css 와
+                        같은 의미.
+    template          — v0.6.4 신설. 이 페이지에 사용할 템플릿 파일. None 이면
+                        페이지 종류의 기본 (홈=home.html, 카테고리=category.html).
+                        값 형식 + 검증 규칙은 ArticleMeta.template 과 동일.
 
     ── 카테고리 전용 (루트 = 홈 에서는 무의미) ─────────────────────────
     preview_per_page  — 이 카테고리가 *상위* 카테고리 인덱스 페이지에
@@ -263,7 +296,20 @@ class CategoryMeta:
     preview_per_page: Optional[int] = None
     layout: str = 'list'
     lang: Optional[str] = None
+    # v0.6.4: 의미가 좁아져 문자열 키 (인라인 룰) 만 담는다. 정수 키 (외부 CSS
+    # 파일 경로) 는 stylesheets 필드. 글의 ArticleMeta.styles 와 정확히 같은
+    # 의미 (페이지 = 글/홈/카테고리 통일 관점).
     styles: dict = field(default_factory=dict)
+    # v0.6.4 신설: 이 페이지 head 에 link 될 외부 CSS 상대 경로 리스트
+    # (정수 키 오름차순). 글의 ArticleMeta.stylesheets 와 같은 의미.
+    stylesheets: list = field(default_factory=list)
+    # v0.6.4 신설: 사이트 공통 CSS link 출력 여부. 글의
+    # ArticleMeta.use_common_css 와 같은 의미.
+    use_common_css: bool = True
+    # v0.6.4 신설: 이 페이지에 사용할 템플릿 파일. None 이면 페이지 종류 기본
+    # (홈=home.html, 카테고리=category.html). 글의 ArticleMeta.template 과
+    # 같은 형식/검증.
+    template: Optional[str] = None
     priority: int = 0
     excludes_categories: list = field(default_factory=list)
     # v0.5.4: `<title>` 폴백 체인을 글과 동일하게 작동시키기 위한 필드들.
