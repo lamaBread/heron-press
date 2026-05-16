@@ -1,5 +1,21 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.7.2 변경 — 빌드 진행 표시 + 빌드 리포트 문서화:
+  - **진행 헬퍼 3종 (`_emit` / `_live` / `_step`)** — `_emit` 은 마일스톤
+    한 줄을 터미널에 출력하면서 `self._console` 에 누적 (빌드 종료 시
+    build-report.md 의 "빌드 진행" 트랜스크립트). `_live` 는 무거운 루프
+    (`_sync_assets` 이미지 변환 / `_render_articles`) 의 in-place(`\\r`)
+    카운터 — `sys.stdout.isatty()` 가 False 면 no-op 이라 redirect 된
+    환경 (run_diagnostics / 단위 테스트) 의 캡처 로그가 깔끔하고 결정성에
+    영향이 없다. `_step` 은 `[ n/16]` 16 단계 헤더.
+  - **`build()` 가 16 단계 헤더 + 타이밍 + 리포트 문서 생성** — 단계 직전
+    `_step`, 종료 시 `_write_build_report()` 가 `self.base` 에
+    build-report.md 작성. 요약/완료 라인도 `_emit` 경유라 트랜스크립트에
+    포함. `# [n]` 주석은 v0.4.x~v0.6.4 의 역사적 파이프라인 id 라
+    유지하고, 사용자 대상 진행 번호만 1..16 단조.
+  - **결정성 불변** — 진행 출력·리포트 문서는 dist/ 밖. dist 산출물은
+    v0.7.1 과 byte 동일 (feed generator 문자열만 자동 갱신).
+
 v0.7.0 변경 — 빌드 증분 캐싱 (글 단위, fine-grained):
   - **scripts/cache.py 신설** — `BuildCache` + `CachedArticle` + `replay_*` 헬퍼.
     `_render_articles` 가 글마다 `compute_article_hash` 로 해시를 만들고
@@ -628,6 +644,84 @@ class Builder:
         # v0.7.0: 빌드 종료 시 출력할 캐시 히트/미스 카운트.
         self._cache_hits: int = 0
         self._cache_misses: int = 0
+        # v0.7.2: 진행 표시 + 리포트 콘솔 트랜스크립트.
+        #   _console      — _emit() 한 마일스톤 라인 누적. 빌드 종료 시
+        #                    build-report.md 의 "빌드 진행" 트랜스크립트.
+        #   _live_*        — _live() 의 in-place(\r) 진행 라인 상태.
+        #                    TTY 가 아니면 (run_diagnostics / 단위 테스트가
+        #                    stdout 을 StringIO 로 redirect) _live() 는 no-op
+        #                    이라 캡처 로그가 깔끔하고 결정성에 영향 없음.
+        self._console: list = []
+        self._live_pending: bool = False
+        self._live_lastlen: int = 0
+        self._live_cols: int = 78
+        try:
+            self._stdout_isatty: bool = bool(sys.stdout.isatty())
+        except Exception:
+            self._stdout_isatty = False
+
+    # ── 진행 표시 / 콘솔 로그 (v0.7.2) ─────────────────────────
+    #
+    # v0.7.2: 큰 사이트에서 빌드가 오래 걸려도 "지금 무엇이 진행 중인지" 가
+    # 보이도록 16 단계 헤더 + 무거운 루프 (자산 동기화 / 글 렌더) 의 라이브
+    # 카운터를 출력한다. 동시에 _emit() 한 줄들을 _console 에 모아 빌드 종료
+    # 시 build-report.md 트랜스크립트로 직렬화한다 (터미널에만 뜨던 안내를
+    # 파일로도 남겨달라는 요구). _emit 은 산출물 (dist/) 에 한 글자도 쓰지
+    # 않으므로 빌드 결정성에 무관하다.
+
+    @staticmethod
+    def _console_print(msg: str, *, end: str = '\n'):
+        """콘솔 전용 안전 출력 — 인코딩 깨짐으로 빌드가 죽지 않게 한다.
+
+        Windows 기본 콘솔은 cp949 (`python -m unittest` 처럼 stdout 을
+        reconfigure 하지 않으면 cp949) 라 cp949 밖 문자를 print 하면
+        UnicodeEncodeError 로 빌드 전체가 중단된다. 진행 라인에는 글
+        파일명 (`_live` 의 rel) 처럼 작성자가 통제하는 임의 유니코드가
+        섞일 수 있으므로, 인코딩 불가 문자는 'replace' 로 떨어뜨리고
+        진행은 계속한다. 리포트 .md 파일은 별도로 utf-8 로 쓰므로 (원문
+        보존) 여기 sanitize 는 터미널 표시에만 영향.
+
+        고정 문자열 (`_step` 라벨 등) 은 cp949 안전 문자 (한글 + ASCII +
+        U+2500 박스 드로잉) 로만 적어 정상 콘솔에서 '?' 가 안 뜨게 한다.
+        """
+        try:
+            print(msg, end=end, flush=True)
+        except UnicodeEncodeError:
+            enc = getattr(sys.stdout, 'encoding', None) or 'utf-8'
+            safe = msg.encode(enc, 'replace').decode(enc, 'replace')
+            sys.stdout.write(safe + end)
+            sys.stdout.flush()
+
+    def _emit(self, msg: str = ''):
+        """마일스톤 한 줄 — 터미널 + 리포트 콘솔 트랜스크립트에 기록.
+
+        _console 에는 원문(rich)을 그대로 쌓는다 — build-report.md 는
+        utf-8 이라 콘솔 sanitize 와 무관하게 원문이 보존된다.
+        """
+        if self._live_pending:
+            # 진행 중이던 in-place 라인을 줄바꿈으로 마감.
+            self._console_print('')
+            self._live_pending = False
+        self._console_print(msg)
+        self._console.append(msg)
+
+    def _live(self, msg: str):
+        """무거운 루프의 in-place(\\r) 진행 표시 — 터미널(TTY) 전용.
+
+        stdout 이 redirect 된 환경에서는 isatty()=False → no-op. 단계별
+        요약은 _emit() 가 항상 남기므로 캡처 로그·리포트는 깔끔하게 유지된다.
+        리포트 트랜스크립트에는 남기지 않는다 (_console 에 append 안 함).
+        """
+        if not self._stdout_isatty:
+            return
+        line = msg[:self._live_cols]
+        self._console_print(line.ljust(self._live_lastlen), end='\r')
+        self._live_lastlen = len(line)
+        self._live_pending = True
+
+    def _step(self, n: int, label: str):
+        """`[ n/16] label` 단계 헤더 (총 16 단계 파이프라인)."""
+        self._emit(f'[{n:2d}/16] {label}')
 
     # ── [1] Config load ──────────────────────────────────────
 
@@ -1760,9 +1854,13 @@ class Builder:
                 version=_SITE_VERSION,
             )
 
-        for article in self.articles:
+        _n = len(self.articles)
+        for _i, article in enumerate(self.articles, 1):
             m = article.meta
             content_path = article.content_file
+            # v0.7.2: in-place 진행 (TTY 전용). slug 은 meta 가 채워진 뒤라
+            # 항상 존재. 캐시 hit/miss 총계는 빌드 종료 요약에서 보고된다.
+            self._live(f'  글 {_i}/{_n}  {m.slug}')
 
             if not content_path or not content_path.exists():
                 issue(
@@ -2016,6 +2114,12 @@ class Builder:
                     warnings=cache_warnings,
                 )
 
+        # v0.7.2: 단계 요약 (리포트 트랜스크립트에 한 줄로 남는다).
+        if _n:
+            self._emit(f'        {_n} 글 처리 '
+                       f'(캐시 {self._cache_hits} hit / '
+                       f'{self._cache_misses} miss).')
+
     # ── [6] Asset sync ────────────────────────────────────────
 
     def _sync_assets(self):
@@ -2032,7 +2136,12 @@ class Builder:
 
         SVG / WebP / 비이미지 파일은 v0.5.0 과 동일하게 그대로 복사.
         """
-        for article in self.articles:
+        # v0.7.2: 이미지 최적화가 빌드 시간의 대부분 — 글마다 + 이미지마다
+        # in-place 진행 (TTY 전용). 사진이 많은 사이트에서 "멈춘 게 아니라
+        # 변환 중" 이 보이게 한다.
+        _n = len(self.articles)
+        img_done = 0
+        for _i, article in enumerate(self.articles, 1):
             m = article.meta
             src_root = article.source_dir
             dst_root = self.dist / m.slug
@@ -2048,6 +2157,9 @@ class Builder:
                 dst_file = dst_root / rel
 
                 if self._should_optimize_image(src_file):
+                    img_done += 1
+                    self._live(f'  자산 글 {_i}/{_n}  {m.slug}  '
+                               f'(이미지 {img_done} 변환  {rel})')
                     self._optimize_and_register(
                         src_file=src_file,
                         dst_file=dst_file,
@@ -2055,9 +2167,15 @@ class Builder:
                         rel_path=rel,
                     )
                 else:
+                    self._live(f'  자산 글 {_i}/{_n}  {m.slug}  ({rel})')
                     _copy_if_newer(src_file, dst_file)
 
             self._prune_article_assets(article)
+
+        # v0.7.2: 단계 요약 (리포트 트랜스크립트 한 줄).
+        if _n:
+            self._emit(f'        {_n} 글 자산 동기화 '
+                       f'(이미지 {img_done} 변환).')
 
     def _should_optimize_image(self, src: Path) -> bool:
         """이 파일이 WebP 변환 대상인지."""
@@ -2927,7 +3045,17 @@ class Builder:
     # ── Build entry point ─────────────────────────────────────
 
     def build(self):
-        print('빌드 시작...', flush=True)
+        # v0.7.2: 진행 트랜스크립트는 build() 호출마다 새로 시작 (한 인스턴스를
+        # 재사용해 build() 를 두 번 불러도 누적되지 않도록 — _report 의
+        # reset_report() 와 같은 의도).
+        self._console = []
+        self._live_pending = False
+        self._live_lastlen = 0
+        self._build_started = datetime.datetime.now()
+        self._emit(f'빌드 시작 - siheonlee.com v{_SITE_VERSION} '
+                   f'({self._build_started.strftime("%Y-%m-%d %H:%M:%S")})')
+        if not self.cache.enabled:
+            self._emit('  (증분 캐시 비활성 - --no-cache)')
 
         # v0.6.5: 한 프로세스에서 Builder().build() 가 여러 번 호출돼도
         # _report 가 누적되지 않도록 빌드 시작 시 자동 초기화. v0.6.4 까지는
@@ -2940,21 +3068,42 @@ class Builder:
         # 먼저 와야 한다. asset 단계가 raster 이미지를 webp 변종으로 만들고
         # self.image_variants 를 채우면, _render_articles 가 그 정보로
         # 글 본문 HTML 의 <img> 를 webp + srcset + lazy 로 치환한다.
+        # v0.7.2: 16 단계 헤더를 단계 직전에 _emit. 단계 안의 무거운 루프
+        # (_sync_assets / _render_articles) 는 _live() 로 in-place 카운터를
+        # 추가로 보여준다. `# [n]` 주석은 v0.4.x ~ v0.6.4 의 역사적 파이프라인
+        # id (재배치 흔적) 라 그대로 두고, 사용자 대상 진행 번호는 1..16 으로
+        # 단조 증가한다.
+        self._step(1, '설정 로드 (site.yaml / 토크나이저 패리티)')
         self._load_config()                    # [1]
+        self._step(2, '글 폴더 스캔 (Articles/)')
         self._scan_articles()                  # [2]
+        self._step(3, 'meta.yaml 파싱')
         self._parse_frontmatter()              # [3]
+        self._step(4, '검증 / 카테고리 트리 구축')
         self._validate()                       # [4]
+        self._step(5, '자산 동기화 / 이미지 최적화 (WebP)')
         self._sync_assets()                    # [5] (v0.5.1: 옛 [6])
+        self._step(6, '사이트 공통 자산 복사')
         self._copy_site_assets()               # [6] (v0.5.1: 옛 [9])
+        self._step(7, '카테고리/홈 CSS 복사')
         self._sync_page_css()                  # [6b] (v0.6.4) 카테고리/홈 CSS
+        self._step(8, '글 렌더링')
         self._render_articles()                # [7] (v0.5.1: 옛 [5])
+        self._step(9, '카테고리 페이지')
         self._build_categories()               # [8]
+        self._step(10, '홈 페이지')
         self._build_home()                     # [9]
+        self._step(11, '404 페이지')
         self._build_404()                      # [10]
+        self._step(12, 'robots.txt')
         self._build_robots()                   # [11]
+        self._step(13, 'sitemap.xml')
         self._build_sitemap()                  # [12]
+        self._step(14, 'RSS / Atom 피드')
         self._build_feeds()                    # [12b] (v0.5.3) RSS/Atom
+        self._step(15, '검색 인덱스 (dist/search.php)')
         self._build_search()                   # [13]
+        self._step(16, '고아 산출물 정리')
         self._prune_orphans()                  # [14]
 
         # v0.7.0: 캐시 매니페스트 commit. 캐시 비활성 시 no-op.
@@ -2964,19 +3113,89 @@ class Builder:
         cat_count = len(self.categories)
         issue_count = _report.issue_count()
         warn_count = _report.warning_count()
-        print(
-            f'\n빌드 완료: {art_count} 글, {cat_count} 카테고리, '
-            f'{issue_count} 보완 필요, {warn_count} 살펴볼 사항.',
+        elapsed = (datetime.datetime.now() - self._build_started).total_seconds()
+        self._emit()
+        self._emit(
+            f'빌드 완료: {art_count} 글, {cat_count} 카테고리, '
+            f'{issue_count} 보완 필요, {warn_count} 살펴볼 사항. '
+            f'({elapsed:.1f}s)'
         )
         if self.cache.enabled:
             total_attempts = self._cache_hits + self._cache_misses
             if total_attempts > 0:
-                print(
+                self._emit(
                     f'증분 캐시: {self._cache_hits} 히트 / '
                     f'{self._cache_misses} 미스 (글 {total_attempts}건).'
                 )
-        print(f'산출물: dist/ (siheonlee.com).')
+        self._emit('산출물: dist/ (siheonlee.com).')
 
         # v0.5.5: 빌드 종료 시 일원화 리포트 출력. meta.yaml 의 필드 부족 /
         # 빈 문자열 / 형식 오류 등 모든 콘텐츠 결함이 여기 모아진다.
         _report.render()
+
+        # v0.7.2: 터미널에만 뜨던 안내를 파일로도 — build.py 가 있는 폴더
+        # (self.base) 에 build-report.md 를 생성. 진행 트랜스크립트 + 요약 +
+        # 보완 필요/살펴볼 사항을 마크다운으로 서식화. dist/ 밖이라 빌드
+        # 결정성 (run_diagnostics [2]) 과 무관.
+        self._write_build_report(art_count, cat_count, elapsed)
+
+    # ── 빌드 리포트 문서 (v0.7.2) ──────────────────────────────
+
+    def _write_build_report(self, art_count: int, cat_count: int,
+                            elapsed: float):
+        """build-report.md 를 self.base 에 작성.
+
+        구성:
+          # siheonlee.com 빌드 리포트
+          - 메타 (버전 / 시각 / 소요 / 글·카테고리 수 / 캐시)
+          ## 빌드 진행            — _emit 트랜스크립트 (코드 블록)
+          ## 보완이 필요한 항목   — BuildReport.render_markdown() 의 issue 절
+          ## 살펴볼 사항          — 〃 warning 절
+        파일 쓰기 실패는 빌드를 중단시키지 않는다 (리포트 부재는 콘텐츠
+        결함이 아니므로 — abort 가 아니라 stderr 경고 + 진행).
+        """
+        report_path = self.base / 'build-report.md'
+        finished = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cache_line = '비활성 (--no-cache)'
+        if self.cache.enabled:
+            attempts = self._cache_hits + self._cache_misses
+            if attempts:
+                cache_line = (f'{self._cache_hits} 히트 / '
+                              f'{self._cache_misses} 미스 (글 {attempts}건)')
+            else:
+                cache_line = '활성 (대상 글 없음)'
+
+        lines = []
+        lines.append('# siheonlee.com 빌드 리포트')
+        lines.append('')
+        lines.append(f'- **버전**: v{_SITE_VERSION}')
+        lines.append(f'- **빌드 시각**: {finished}')
+        lines.append(f'- **소요**: {elapsed:.1f}s')
+        lines.append(f'- **결과**: {art_count} 글 · {cat_count} 카테고리')
+        lines.append(f'- **보완 필요**: {_report.issue_count()}건 · '
+                     f'**살펴볼 사항**: {_report.warning_count()}건')
+        lines.append(f'- **증분 캐시**: {cache_line}')
+        lines.append('')
+        lines.append('## 빌드 진행')
+        lines.append('')
+        lines.append('```')
+        lines.extend(self._console)
+        lines.append('```')
+        lines.append('')
+        lines.append(_report.render_markdown())
+        lines.append('')
+        lines.append('---')
+        lines.append('')
+        lines.append('_이 문서는 매 빌드마다 자동 생성·갱신됩니다 '
+                     '(build.py 가 있는 폴더). dist/ 산출물에는 포함되지 '
+                     '않습니다._')
+        doc = '\n'.join(lines) + '\n'
+
+        try:
+            report_path.write_text(doc, encoding='utf-8')
+            self._emit(f'리포트 문서: {report_path.name} 생성 '
+                       f'({report_path}).')
+        except OSError as e:
+            # 파일 쓰기 실패는 콘텐츠 결함이 아니므로 abort 하지 않는다.
+            print(f'[경고] build-report.md 작성 실패: {e}',
+                  file=sys.stderr, flush=True)

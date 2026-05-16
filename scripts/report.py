@@ -155,6 +155,54 @@ class BuildReport:
             file=out,
         )
 
+    # ── 마크다운 직렬화 (v0.7.2) ───────────────────────────
+
+    def render_markdown(self) -> str:
+        """render() 와 같은 그룹화/정렬을 마크다운 문자열로 (v0.7.2).
+
+        터미널에만 뜨던 리포트를 build-report.md 로도 남기기 위한 직렬화.
+        구조는 render() 와 1:1 — issue 절 → warning 절 → 요약. 항목이 하나도
+        없으면 한 줄 안내. 반환값은 호출자 (Builder._write_build_report) 가
+        문서의 한 블록으로 끼워 넣는다 (앞뒤 빈 줄은 호출자가 관리).
+
+        message 는 사람이 쓴 한국어 산문이라 별도 escape 하지 않고 (render()
+        와 parity), location 만 인라인 코드 (`...`) 로 감싸 경로가 깨지지
+        않게 한다.
+        """
+        issues = [e for e in self.entries if e.severity == 'issue']
+        warnings = [e for e in self.entries if e.severity == 'warning']
+
+        if not issues and not warnings:
+            return '_빌드 리포트: 보완 필요 / 살펴볼 사항 없음._'
+
+        out = []
+
+        def _emit_group(entries: list):
+            for header, grp in _group_by_target(entries):
+                out.append(f'### {header}')
+                out.append('')
+                for e in grp:
+                    out.append(f'- {e.message}')
+                    if e.location:
+                        out.append(f'  - 위치: `{e.location}`')
+                out.append('')
+
+        if issues:
+            out.append('## 보완이 필요한 항목 (산출물 일부 누락 가능)')
+            out.append('')
+            _emit_group(issues)
+
+        if warnings:
+            out.append('## 살펴볼 사항 (산출물 정상)')
+            out.append('')
+            _emit_group(warnings)
+
+        out.append(
+            f'> **빌드 리포트 요약**: 보완 필요 {self.issue_count()}건, '
+            f'살펴볼 사항 {self.warning_count()}건.'
+        )
+        return '\n'.join(out)
+
 
 def _group_by_target(entries: list) -> list:
     """리포트 항목을 (scope, target) 기준으로 그룹화 — 같은 글의 여러 issue 가

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.7.1 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.7.2 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `scripts/` 패키지 안에 모듈별로 나뉘어 있다. 사이트 전역 버전 문자열은
@@ -11,13 +11,41 @@ Usage:
     python build.py --clean        # wipe dist/, .build_cache/ 후 빌드
     python build.py --clean-cache  # .build_cache/ 만 폐기 후 빌드 (dist 는 유지)
     python build.py --no-cache     # 증분 캐시 비활성 (v0.6.5 동작)
-    python -m unittest discover -s tests   # 단위 테스트 (v0.7.1: 258개)
+    python -m unittest discover -s tests   # 단위 테스트 (v0.7.2: 258개)
     python tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
-빌드 의존성 (v0.7.1):
+빌드가 끝나면 build.py 가 있는 폴더에 `build-report.md` 가 생성/갱신된다 —
+터미널 진행·요약·보완 필요/살펴볼 사항을 마크다운으로 서식화한 문서
+(v0.7.2 신설). dist/ 산출물에는 포함되지 않으므로 빌드 결정성과 무관.
+
+빌드 의존성 (v0.7.2):
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.7.2 변경 사항 (vs v0.7.1) — 빌드 진행 표시 + 빌드 리포트 문서화:
+  - **16 단계 진행 헤더** — `build()` 가 각 파이프라인 단계 직전에
+    `[ n/16] <설명>` 을 출력. 큰 사이트에서 빌드가 오래 걸려도 "지금 무엇이
+    진행 중인지" 가 보인다 (v0.7.1 까지는 시작/완료 두 줄뿐이라 사진이
+    많은 글을 빌드하면 멈춘 듯 보였다).
+  - **무거운 루프의 라이브 카운터** — 자산 동기화 (이미지 WebP 변환) /
+    글 렌더 단계가 글·이미지마다 같은 줄을 `\r` 로 in-place 갱신
+    (`Builder._live`). 터미널(TTY) 전용 — stdout 이 redirect 된 환경
+    (run_diagnostics / 단위 테스트) 에서는 no-op 이라 캡처 로그가 깔끔하고
+    결정성·테스트에 영향이 없다. 단계 요약은 항상 한 줄 남는다.
+  - **build-report.md 자동 생성** — 빌드 완료 시 `build.py` 가 있는 폴더
+    (`Builder.base`) 에 마크다운 리포트를 쓴다. 메타 (버전/시각/소요/글·
+    카테고리 수/캐시) + "빌드 진행" 트랜스크립트 (코드 블록) + "보완이
+    필요한 항목" / "살펴볼 사항" 절. 그동안 터미널에만 뜨던
+    `BuildReport` 출력을 파일로도 남겨, 빌드 후 무엇을 보완해야 하는지
+    문서로 확인 가능. 새 `BuildReport.render_markdown()` 가 `render()`
+    와 1:1 구조로 마크다운 직렬화. 파일 쓰기 실패는 콘텐츠 결함이
+    아니므로 abort 하지 않고 stderr 경고 후 빌드 정상 종료.
+  - **결정성 불변** — 진행 출력·리포트 문서는 dist/ 밖이라 한 글자도
+    산출물에 새지 않는다. dist 산출물은 v0.7.1 과 *바이트 동일*
+    (`feed.atom` / `feed.rss` 의 generator 문자열만 v0.7.1 → v0.7.2 자동
+    갱신 — `__version__` 단일 source 효과). 단위 테스트 258 그대로,
+    진단 5/5 PASS.
 
 v0.7.1 변경 사항 (vs v0.7.0) — 안정화 패치 (정합성 회복, 코드 동작 변경 0):
   - v0.7.0 에서 lama.pe.kr 마이그레이션 인프라 일괄 제거 직후 누적된 문서·주석

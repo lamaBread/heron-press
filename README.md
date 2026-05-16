@@ -1,11 +1,11 @@
-# siheonlee.com v0.7.1 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.7.2 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
 
 이 시스템은 **글마다 폴더 하나**를 만들어 본문과 첨부파일을 관리하고, `python build.py` 한 번으로 사이트를 만들어내는 **PHP 기반 경량 웹 사이트 생성기** 입니다.
 
-> **v0.7.1 한 줄 요약:** *v0.7.0 직후 누적된 문서·주석 drift 안정화 (회귀 0).* lama.pe.kr 마이그레이션 인프라 일괄 제거 직후 빌더 docstring 의 파이프라인 헤더가 `_sync_page_css` ([6b]) 를 빠뜨리고 있던 부분, README §2 빌드 단계 표가 v0.5.1 의 asset/render 순서 역전과 v0.5.3 의 `_build_feeds` / v0.6.4 의 `_sync_page_css` 를 누락하고 있던 부분, §5 갤러리 썸네일 / §13b 피드 entry 가 v0.5.5 폐기된 본문 폴백 ("본문 첫 이미지" / "본문 첫 단락") 을 여전히 안내하던 부분, 그리고 옛 마이그레이션 절 제거에 따른 § 번호 시프트가 코드 docstring 에 따라잡지 못한 부분을 일괄 정정. dist 산출물은 v0.7.0 과 **바이트 동일** (`feed.atom` / `feed.rss` generator 문자열만 v0.7.0 → v0.7.1 자동 갱신 — `__version__` 단일 source 효과). 단위 테스트 258 그대로. 자세한 내역은 [§ 17 업데이트 로그](#17-업데이트-로그) 참조.
+> **v0.7.2 한 줄 요약:** *빌드 진행 표시 + 빌드 리포트 문서화.* 빌드가 시작/완료 두 줄만 출력하던 v0.7.1 까지의 동작을 보완 — `build()` 가 16 단계 헤더 (`[ n/16] …`) 를 출력하고, 무거운 단계 (이미지 WebP 변환 / 글 렌더) 는 글·이미지마다 같은 줄을 `\r` 로 갱신하는 라이브 카운터를 보여준다 (사진 많은 사이트가 멈춘 듯 보이던 문제 해소). 또한 그동안 터미널에만 뜨던 보완 필요/살펴볼 사항을 `build.py` 가 있는 폴더의 **`build-report.md`** 로도 남긴다 — 진행 트랜스크립트 + 요약 + 보완 항목을 마크다운으로 서식화. 진행 출력·리포트 문서는 모두 `dist/` 밖이라 dist 산출물은 v0.7.1 과 **바이트 동일** (`feed.atom` / `feed.rss` generator 문자열만 v0.7.1 → v0.7.2 자동 갱신 — `__version__` 단일 source 효과). 단위 테스트 258 그대로. 자세한 내역은 [§ 17 업데이트 로그](#17-업데이트-로그) 참조.
 
 > **v0.7.0 한 줄 요약:** *빌드 증분 캐싱 도입.* 매 빌드마다 모든 글을 재렌더하던 동작이, 변경되지 않은 글은 캐시된 HTML/PHP 를 그대로 dist 에 복원하는 방식으로 전환됩니다. 글이 많아질수록 빌드 시간이 *변경된 글 수* 에 비례 — 한 글의 content 만 바꾸면 그 글만 재렌더, 나머지는 캐시 hit. 캐시 키는 fine-grained 라 site.yaml / 템플릿 / 빌더 코드가 바뀌면 모든 글이 정확히 invalidate 됩니다. CLI 신설 3 종: `--no-cache` (캐시 비활성, v0.6.5 동작), `--clean-cache` (`.build_cache/` 만 폐기 후 빌드), `--clean` 확장 (dist/ 외에 `.build_cache/` 도 함께 폐기). 단위 테스트 231 → **258** (`tests/test_cache.py` 27 케이스 신설).
 
@@ -55,7 +55,7 @@
 
 ### 빌드
 
-이 폴더(`siheonlee.com_v0.7.1/`) 에서 터미널을 열고:
+이 폴더(`siheonlee.com_v0.7.2/`) 에서 터미널을 열고:
 
 ```bash
 python build.py                # 평소 빌드 (캐시 사용 — v0.7.0 신설)
@@ -158,7 +158,7 @@ python -m http.server 8000
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.7.1/
+siheonlee.com_v0.7.2/
 │
 ├── build.py              ← 빌드 진입점 (이것을 실행합니다)
 ├── site.yaml             ← 사이트 전역 설정
@@ -186,6 +186,7 @@ siheonlee.com_v0.7.1/
 │   ├── sitemap.py            ← sitemap.xml 빌더 (v0.4.4)
 │   ├── images.py             ← (v0.5.1) WebP 다중 해상도 변환 + <img> 후처리 (srcset, sizes, loading=lazy)
 │   ├── cache.py              ← (v0.7.0) 글 단위 빌드 증분 캐시 (BuildCache)
+│   ├── report.py             ← (v0.5.5) BuildReport — 보완 필요/살펴볼 사항 수집·렌더 (v0.7.2: render_markdown)
 │   └── builder.py            ← 빌드 파이프라인 (Builder 클래스)
 │
 ├── templates/            ← 각 페이지 유형의 HTML 틀 + PHP 모듈
@@ -224,6 +225,10 @@ siheonlee.com_v0.7.1/
 │
 ├── dist/                 ← 빌드 산출물 (siheonlee.com 에 배포)
 │   └── ...               ← build.py 가 자동 생성. 직접 수정 금지.
+│
+├── build-report.md       ← (v0.7.2) 매 빌드 자동 생성/갱신. 진행 트랜스크립트 +
+│                            요약 + 보완 필요/살펴볼 사항을 마크다운으로 서식화.
+│                            dist/ 밖이라 배포·결정성과 무관. .gitignore 권장.
 │
 └── .build_cache/         ← (v0.7.0) 글 단위 증분 캐시 — build.py 가 자동 관리
     ├── manifest.json         ← {version, global_hash, articles: {slug: {hash, ...}}}
@@ -1293,7 +1298,7 @@ def hello():
 
 > **v0.4.6 의 변경:** 옛 site.yaml 의 메인페이지 전용 키 3개 (`home_per_page` / `home_excludes_categories` / `home_sort`) 가 모두 `Articles/meta.yaml` 로 이전되었습니다 (`home_sort` 는 빌더가 사용한 적 없는 dead field 라 그대로 폐기). 옛 키를 site.yaml 에 그대로 두면 빌드는 진행되지만 무시되며 워닝이 출력됩니다.
 
-### 11-2. site.yaml 예시 (v0.7.1 기준)
+### 11-2. site.yaml 예시 (v0.7.2 기준)
 
 ```yaml
 # 도메인
@@ -1959,9 +1964,9 @@ python build.py --clean
 
     **issue (보완해야 할 결함) 가 아니라 warning (의도 확인) 인 이유:** 가로지름은 author 의 의도일 수 있다 — 예를 들어 어떤 카테고리에 글 템플릿을 입혀 인덱스 섹션을 의도적으로 비운 랜딩 페이지를 만들거나, 글 하나에 홈 템플릿을 빌려 와 최근 글 목록이 빠진 정적 페이지를 만드는 등. 빌더가 정합성을 자동 거부하면 이 의도된 가로지름이 막힌다. 그래서 SSG 는 **알리기만 하고 판정은 author 의 몫으로 둔다** — 본문 ↔ 메타데이터 분리 (#10) 와 같은 톤의 "추측 안 함" 원칙. silent strip 도 (의도와 무관하게 산출물이 조용히 깨지므로), 자동 거부도 (의도된 사용을 막으므로) 아닌, *알림 + author 확인* 이 정답.
 
-### 현재 버전(v0.7.1) 의 한계
+### 현재 버전(v0.7.2) 의 한계
 
-> 아래 표는 v0.7.1 시점에 여전히 유효한 한계만 모았습니다. v0.6.5 에서 해소된 항목 — *사용자 본문의 `{{XXX}}` placeholder silent strip* / *_report 누적* / *og_type 디폴트 강제* — 은 모두 안정화 패치로 사라졌습니다. v0.6.4 의 *카테고리/홈 외부 CSS 미지원* 비대칭도 해소된 상태 (글/카테고리/홈 모두 같은 메커니즘). v0.7.0 에서 새로 해소된 항목 — *빌드 증분 캐싱 없음* — 도 한계 표에서 빠집니다. 글 단위 캐시 (`.build_cache/`) 가 도입되어 변경되지 않은 글은 캐시 hit 로 재렌더 없이 dist 에 복원됩니다 (검색 인덱스 / sitemap / feed / 홈 / 카테고리는 모든 글이 입력이라 매 빌드 재구축 — 의도된 범위). **v0.7.1 은 안정화 패치 (회귀 0)** 라 한계 목록 자체에는 변동이 없습니다.
+> 아래 표는 v0.7.2 시점에 여전히 유효한 한계만 모았습니다. v0.6.5 에서 해소된 항목 — *사용자 본문의 `{{XXX}}` placeholder silent strip* / *_report 누적* / *og_type 디폴트 강제* — 은 모두 안정화 패치로 사라졌습니다. v0.6.4 의 *카테고리/홈 외부 CSS 미지원* 비대칭도 해소된 상태 (글/카테고리/홈 모두 같은 메커니즘). v0.7.0 에서 새로 해소된 항목 — *빌드 증분 캐싱 없음* — 도 한계 표에서 빠집니다. 글 단위 캐시 (`.build_cache/`) 가 도입되어 변경되지 않은 글은 캐시 hit 로 재렌더 없이 dist 에 복원됩니다 (검색 인덱스 / sitemap / feed / 홈 / 카테고리는 모든 글이 입력이라 매 빌드 재구축 — 의도된 범위). v0.7.1 까지 한계로 잡혀 있던 *빌드 진행 표시 없음 (시작/완료 두 줄뿐) / 보완 안내가 터미널 휘발성* 은 **v0.7.2 에서 해소** — 16 단계 헤더 + 무거운 루프 라이브 카운터 + `build-report.md` 영속 리포트. 진행 출력·리포트는 모두 dist/ 밖이라 산출물·결정성에는 변동이 없습니다.
 
 | 한계 | 내용 |
 |---|---|
@@ -1971,6 +1976,17 @@ python build.py --clean
 ---
 
 ## 17. 업데이트 로그
+
+### v0.7.2 (2026-05-17) — 빌드 진행 표시 + 빌드 리포트 문서화
+
+v0.7.1 까지 `build()` 는 `빌드 시작...` 과 완료 요약 두 줄만 출력했다. 사진이 많은 글을 실제로 빌드하면 이미지 WebP 변환 (`_sync_assets`) 에서 수십 초~분 단위로 아무 출력 없이 멈춘 듯 보였고, 보완이 필요한 항목 (`BuildReport`) 도 터미널에만 휘발성으로 떠 빌드 후 다시 확인할 수 없었다. v0.7.2 는 두 가지를 보완한다 — **진행 표시** 와 **빌드 리포트 문서화**. 빌더 *산출 로직* 은 무변경 — `dist/` 의 모든 파일이 v0.7.1 과 byte 동일 (`feed.atom` / `feed.rss` 의 generator 문자열만 `v0.7.1` → `v0.7.2` 자동 갱신, `__version__` 단일 source 효과).
+
+- **16 단계 진행 헤더.** [scripts/builder.py](scripts/builder.py) 의 `build()` 가 각 파이프라인 단계 직전에 `[ n/16] <설명>` 한 줄을 출력 (`Builder._step`). 16 단계는 docstring 의 파이프라인 표와 동일 순서 (`# [n]` 주석은 v0.4.x~v0.6.4 의 역사적 재배치 id 라 그대로 두고, 사용자 대상 진행 번호만 1..16 단조 증가).
+- **무거운 루프의 라이브 카운터.** 이미지 변환 (`_sync_assets`) / 글 렌더 (`_render_articles`) 가 글·이미지마다 같은 줄을 `\r` 로 in-place 갱신 (`Builder._live`). `sys.stdout.isatty()` 가 False 인 환경 (`tests/run_diagnostics.py` / 단위 테스트는 stdout 을 `StringIO` 로 redirect) 에서는 no-op 이라 캡처 로그가 깨끗하고 결정성·테스트에 영향이 없다. 단계 요약 한 줄은 TTY 여부와 무관하게 항상 남는다.
+- **`build-report.md` 자동 생성.** 빌드 완료 시 [build.py](build.py) 가 있는 폴더 (`Builder.base`) 에 마크다운 리포트를 쓴다 (`Builder._write_build_report`). 구성 — 메타 (버전 / 시각 / 소요 / 글·카테고리 수 / 캐시) + `## 빌드 진행` 트랜스크립트 (코드 블록) + `## 보완이 필요한 항목` / `## 살펴볼 사항` 절. 새 [scripts/report.py](scripts/report.py) 의 `BuildReport.render_markdown()` 가 기존 `render()` 와 1:1 구조로 마크다운 직렬화 (issue 절 → warning 절 → 요약). 파일 쓰기 실패는 콘텐츠 결함이 아니므로 `abort` 하지 않고 stderr 경고 후 빌드 정상 종료. 매 빌드 덮어쓰기 (누적 안 함), `dist/` 밖이라 배포·결정성과 무관 — `.gitignore` 권장.
+- **버전 표기 일괄 갱신.** [scripts/\_\_init\_\_.py](scripts/__init__.py) 의 `__version__` `0.7.1` → `0.7.2`. README 헤더 / 빠른 시작 폴더 예시 / 폴더 트리 / §11-2 site.yaml 예시 헤더 / 현재 한계 표 / 푸터 캡션 + [build.py](build.py)·[scripts/builder.py](scripts/builder.py) docstring 헤더·usage·의존성 표기도 v0.7.2 로 갱신. 단 *changelog 본문* 안의 옛 버전 표기는 *기능 도입 시점* 을 가리키는 역사 기록이라 그대로 보존.
+
+**검증:** 단위 테스트 258 / 0 (v0.7.1 과 동일 — 진행 출력은 stdout, 리포트는 dist/ 밖이라 기존 단언 무영향). 빌드 진단 (`tests/run_diagnostics.py`) 5/5 PASS. `python build.py --clean` 1 회 + 2 회차 빌드 sha256 동일 (결정성). v0.7.1/dist 대비 byte 차이는 feed.atom / feed.rss 2 파일 한정 (generator 문자열만 갱신).
 
 ### v0.7.1 (2026-05-16) — 안정화 패치 (정합성 회복, 코드 동작 변경 0)
 
@@ -2119,4 +2135,4 @@ Python stdlib only SSG 첫 동작 버전. YAML 파서·마크다운 파서·HTML
 
 ---
 
-*이 문서는 siheonlee.com v0.7.1 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력; 글/카테고리/홈 모두 외부 CSS 파일 + `use_common_css` 토글 + `template:` 키 지원 v0.6.4; v0.6.4 의 큰 변경 직후 발견된 누적 회귀 4 건 안정화 v0.6.5; 빌드 증분 캐싱 (글 단위, fine-grained) 도입 v0.7.0; **v0.7.0 직후 누적된 문서·주석·README §2 빌드 단계 표 / §5 갤러리 썸네일 / §13b 피드 entry / 코드의 § cross-ref 정합성 회복 v0.7.1**) 기준으로 작성되었습니다. (2026-05-16)*
+*이 문서는 siheonlee.com v0.7.2 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력; 글/카테고리/홈 모두 외부 CSS 파일 + `use_common_css` 토글 + `template:` 키 지원 v0.6.4; v0.6.4 의 큰 변경 직후 발견된 누적 회귀 4 건 안정화 v0.6.5; 빌드 증분 캐싱 (글 단위, fine-grained) 도입 v0.7.0; v0.7.0 직후 누적된 문서·주석·코드 정합성 회복 v0.7.1; **빌드 16 단계 진행 표시 + 무거운 루프 라이브 카운터 + `build-report.md` 영속 리포트 문서화 v0.7.2**) 기준으로 작성되었습니다. (2026-05-17)*
