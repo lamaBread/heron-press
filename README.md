@@ -1,4 +1,4 @@
-# siheonlee.com v0.7.2 — 사용설명서 & 시스템 문서
+# siheonlee.com v0.8.0 — 사용설명서 & 시스템 문서
 
 > **이 문서는 처음 이 시스템을 접하는 사람을 위해 작성되었습니다.**
 > 기술적인 사전 지식 없이도 읽을 수 있도록, 모든 개념을 처음 등장하는 시점에 설명합니다.
@@ -55,7 +55,7 @@
 
 ### 빌드
 
-이 폴더(`siheonlee.com_v0.7.2/`) 에서 터미널을 열고:
+이 폴더(`siheonlee.com_v0.8.0/`) 에서 터미널을 열고:
 
 ```bash
 python build.py                # 평소 빌드 (캐시 사용 — v0.7.0 신설)
@@ -64,16 +64,35 @@ python build.py --clean-cache  # 캐시만 폐기, dist 는 유지
 python build.py --no-cache     # 캐시 비활성 (v0.6.5 동작)
 ```
 
-성공하면 다음과 같이 출력됩니다 (실제 글 수/카테고리 수는 `Articles/` 트리에 따라 다름):
+성공하면 다음과 같이 출력됩니다 (실제 글 수/카테고리 수/소요는 `Articles/` 트리에 따라 다름):
 
 ```
-빌드 시작...
+빌드 시작 - siheonlee.com v0.8.0 (2026-05-17 14:24:15)
+[ 1/16] 설정 로드 (site.yaml / 토크나이저 패리티)
 [search] tokenizer parity OK (18 fixtures)
-빌드 리포트: 보완 필요 / 살펴볼 사항 없음.
+[ 2/16] 글 폴더 스캔 (Articles/)
+[ 3/16] meta.yaml 파싱
+[ 4/16] 검증 / 카테고리 트리 구축
+[ 5/16] 자산 동기화 / 이미지 최적화 (WebP)
+        <N> 글 자산 동기화 (이미지 <K> 변환).
+[ 6/16] 사이트 공통 자산 복사
+[ 7/16] 카테고리/홈 CSS 복사
+[ 8/16] 글 렌더링
+        <N> 글 처리 (캐시 <H> hit / <M> miss).
+[ 9/16] 카테고리 페이지
+[10/16] 홈 페이지
+[11/16] 404 페이지
+[12/16] robots.txt
+[13/16] sitemap.xml
+[14/16] RSS / Atom 피드
+[15/16] 검색 인덱스 (dist/search.php)
+[16/16] 고아 산출물 정리
 
-빌드 완료: <N> 글, <M> 카테고리, 0 보완 필요, 0 살펴볼 사항.
+빌드 완료: <N> 글, <M> 카테고리, 0 보완 필요, 0 살펴볼 사항. (<T>s)
 증분 캐시: <H> 히트 / <M> 미스 (글 <N>건).
 산출물: dist/ (siheonlee.com).
+빌드 리포트: 보완 필요 / 살펴볼 사항 없음.
+리포트 문서: build-report.md 생성 (…/siheonlee.com_v0.8.0/build-report.md).
 ```
 
 첫 빌드는 항상 모든 글이 miss (캐시 비어있음). 두 번째 빌드부터 변경되지 않은 글은 hit — `Articles/` 의 한 글 content.md 만 바꾸면 그 글만 miss, 나머지는 hit. site.yaml / 템플릿 / 빌더 코드 변경 시 모든 글 invalidate.
@@ -158,7 +177,7 @@ python -m http.server 8000
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.7.2/
+siheonlee.com_v0.8.0/
 │
 ├── build.py              ← 빌드 진입점 (이것을 실행합니다)
 ├── site.yaml             ← 사이트 전역 설정
@@ -824,7 +843,7 @@ Articles/
 
 ### 카테고리 폴더의 meta.yaml (v0.4.5 신설)
 
-각 카테고리 폴더 (대분류·소분류) 마다 `meta.yaml` 을 둘 수 있습니다. **글의 meta.yaml 과 형식이 다릅니다** (slug/title/date 없음).
+각 카테고리 폴더 (대분류·소분류) 마다 `meta.yaml` 을 둘 수 있습니다. **글의 meta.yaml 과 형식이 다릅니다** — 글 전용인 `slug` / `date` / `updated` 는 없지만, `title` / `seo` 는 글과 동일하게 *선택* 지원합니다 (아래 표).
 
 ```
 Articles/
@@ -853,6 +872,10 @@ Articles/
 | `use_common_css` | `true` | v0.6.4. `false` 면 사이트 공통 CSS link 자체를 head 에서 끊고 외부/인라인만 적용. |
 | `template` | 없음 (`category.html`) | v0.6.4. 이 카테고리 인덱스 페이지에 사용할 템플릿 파일. `name.html` → `templates/` 에서, `./name.html` → 이 카테고리 폴더에서. |
 | `lang` | site.yaml `lang` | 이 카테고리 인덱스 페이지의 `<html lang>` 오버라이드. |
+| `title` | 카테고리 폴더명 | v0.5.4. 이 카테고리 인덱스의 `<title>` 본문. 비우면 폴더명 폴백. 양옆은 `seo.title_prefix` / `seo.title_suffix` (→ site `default_title_prefix` / `default_title_suffix`) 로 감싸짐. 글의 `title` 과 같은 자리. |
+| `seo` | 빈 매핑 | v0.5.4. 글의 `seo:` 와 같은 `SeoMeta` 블록 (`description` / `og_*` / `twitter_*` / `canonical` / `title_prefix` / `title_suffix` …). v0.6.2 부터 카테고리 페이지에도 글과 동일한 메타 태그 묶음으로 출력 (§ 10 폴백 표 동일 적용). |
+| `priority` | `0` | v0.4.6. 이 카테고리가 *상위 카테고리 인덱스에 형제 section 으로 임베드* 될 때의 정렬 키. 큰 값이 먼저 (100 → 1 → 0), 동률은 폴더명 알파벳 순. |
+| `nav_priority` | `0` | v0.5.4. 톱레벨 nav 항목의 정렬 키. `priority` 와 별개 축 — `priority` 는 부모 인덱스 안 sibling section 정렬, `nav_priority` 는 사이트 전역 nav 정렬. |
 
 `per_page > preview_per_page` 가 자연스러운 사용법입니다 — 소분류의 자기 페이지는 글을 더 많이 보여주고, 상위에 임베드된 section 은 미리보기 수준으로 적게 보여주는 정책.
 
@@ -956,13 +979,16 @@ python build.py --clean
 
 ### 빌드 성공 예시
 
-```
-빌드 시작...
-[search] tokenizer parity OK (18 fixtures)
-빌드 리포트: 보완 필요 / 살펴볼 사항 없음.
+v0.7.2 부터 시작줄(버전·시각) → `[ n/16]` 16 단계 진행 헤더 → 완료 요약(elapsed 포함) → `build-report.md` 생성 줄 순으로 출력됩니다. 16 단계 전체 형태는 [§ 1 의 빌드 절](#빌드) 참조. 완료 묶음만 발췌:
 
-빌드 완료: 5 글, 3 카테고리, 0 보완 필요, 0 살펴볼 사항.
+```
+[16/16] 고아 산출물 정리
+
+빌드 완료: 47 글, 19 카테고리, 0 보완 필요, 0 살펴볼 사항. (261.5s)
+증분 캐시: 0 히트 / 47 미스 (글 47건).
 산출물: dist/ (siheonlee.com).
+빌드 리포트: 보완 필요 / 살펴볼 사항 없음.
+리포트 문서: build-report.md 생성 (…/siheonlee.com_v0.8.0/build-report.md).
 ```
 
 v0.4.1 부터 마크다운 파서는 [scripts/parsedown.py](scripts/parsedown.py) 하나만 사용되므로 별도 표기는 없습니다. (v0.4.0 까지의 `[markdown] using parser: parsedown` 줄은 사라졌습니다.)
@@ -1046,7 +1072,8 @@ dist/
 |---|---|---|
 | 홈 | `/` | `https://siheonlee.com/` |
 | 글 | `/{slug}/` | `https://siheonlee.com/mask-intake-3d-printing/` |
-| 카테고리 (톱레벨만) | `/{cat-slug}/` | `https://siheonlee.com/blog/` |
+| 카테고리 (톱레벨) | `/{cat-slug}/` | `https://siheonlee.com/blog/` |
+| 카테고리 (서브, v0.4.5) | `/{top}/{sub}/…/` | `https://siheonlee.com/blog/tutorials/` |
 | 글 첨부파일 (v0.5.2) | `/{slug}/{경로}` (글 index.html 과 같은 폴더) | `https://siheonlee.com/mask-intake-3d-printing/imgs/photo.jpg` |
 | 사이트 전역 자산 | `/assets/{경로}` (CSS/JS/공용 이미지 등) | `https://siheonlee.com/assets/common_template.css` |
 | 공용 자원 | `/assets/{파일명}` | `https://siheonlee.com/assets/common_template.css` |
@@ -1273,7 +1300,7 @@ def hello():
 >
 > `<meta name="keywords">` 는 v0.4.0 에서 제거되었습니다 — 주요 검색엔진이 무시하는 태그입니다.
 >
-> **v0.4.4 변경:** [sitemap.xml](sitemap.xml) 자동 생성. 모든 non-noindex 글 + 톱레벨 카테고리 + 홈을 sitemaps.org 0.9 스키마로 출력합니다. lastmod 는 `updated` (없으면 `date`). robots.txt 의 `Sitemap:` 디렉티브가 자동 활성화되어 검색엔진이 sitemap 을 자동 발견합니다.
+> **v0.4.4 변경:** [sitemap.xml](sitemap.xml) 자동 생성. 모든 non-noindex 글 + **톱레벨·서브카테고리** (글이 있는 카테고리 전체) + 홈을 sitemaps.org 0.9 스키마로 출력합니다. lastmod 는 `updated` (없으면 `date`). robots.txt 의 `Sitemap:` 디렉티브가 자동 활성화되어 검색엔진이 sitemap 을 자동 발견합니다.
 >
 > **v0.5.5 변경:** SEO description / og_image / 갤러리 썸네일 / 피드 summary 의 **본문 폴백 폐기** ([§ 16 의 설계 원칙 10](#16-설계-원칙과-한계) 참조). author 가 `meta.yaml` 의 `seo:` 블록에 명시한 값만 사용. `seo.description` 누락 시 빌드는 통과하지만 BuildReport 의 issue 에 기록되어 작성자가 보완할 수 있도록 안내.
 >
@@ -1298,7 +1325,7 @@ def hello():
 
 > **v0.4.6 의 변경:** 옛 site.yaml 의 메인페이지 전용 키 3개 (`home_per_page` / `home_excludes_categories` / `home_sort`) 가 모두 `Articles/meta.yaml` 로 이전되었습니다 (`home_sort` 는 빌더가 사용한 적 없는 dead field 라 그대로 폐기). 옛 키를 site.yaml 에 그대로 두면 빌드는 진행되지만 무시되며 워닝이 출력됩니다.
 
-### 11-2. site.yaml 예시 (v0.7.2 기준)
+### 11-2. site.yaml 예시 (v0.8.0 기준)
 
 ```yaml
 # 도메인
@@ -1964,9 +1991,9 @@ python build.py --clean
 
     **issue (보완해야 할 결함) 가 아니라 warning (의도 확인) 인 이유:** 가로지름은 author 의 의도일 수 있다 — 예를 들어 어떤 카테고리에 글 템플릿을 입혀 인덱스 섹션을 의도적으로 비운 랜딩 페이지를 만들거나, 글 하나에 홈 템플릿을 빌려 와 최근 글 목록이 빠진 정적 페이지를 만드는 등. 빌더가 정합성을 자동 거부하면 이 의도된 가로지름이 막힌다. 그래서 SSG 는 **알리기만 하고 판정은 author 의 몫으로 둔다** — 본문 ↔ 메타데이터 분리 (#10) 와 같은 톤의 "추측 안 함" 원칙. silent strip 도 (의도와 무관하게 산출물이 조용히 깨지므로), 자동 거부도 (의도된 사용을 막으므로) 아닌, *알림 + author 확인* 이 정답.
 
-### 현재 버전(v0.7.2) 의 한계
+### 현재 버전(v0.8.0) 의 한계
 
-> 아래 표는 v0.7.2 시점에 여전히 유효한 한계만 모았습니다. v0.6.5 에서 해소된 항목 — *사용자 본문의 `{{XXX}}` placeholder silent strip* / *_report 누적* / *og_type 디폴트 강제* — 은 모두 안정화 패치로 사라졌습니다. v0.6.4 의 *카테고리/홈 외부 CSS 미지원* 비대칭도 해소된 상태 (글/카테고리/홈 모두 같은 메커니즘). v0.7.0 에서 새로 해소된 항목 — *빌드 증분 캐싱 없음* — 도 한계 표에서 빠집니다. 글 단위 캐시 (`.build_cache/`) 가 도입되어 변경되지 않은 글은 캐시 hit 로 재렌더 없이 dist 에 복원됩니다 (검색 인덱스 / sitemap / feed / 홈 / 카테고리는 모든 글이 입력이라 매 빌드 재구축 — 의도된 범위). v0.7.1 까지 한계로 잡혀 있던 *빌드 진행 표시 없음 (시작/완료 두 줄뿐) / 보완 안내가 터미널 휘발성* 은 **v0.7.2 에서 해소** — 16 단계 헤더 + 무거운 루프 라이브 카운터 + `build-report.md` 영속 리포트. 진행 출력·리포트는 모두 dist/ 밖이라 산출물·결정성에는 변동이 없습니다.
+> 아래 표는 v0.8.0 시점에 여전히 유효한 한계만 모았습니다. v0.6.5 에서 해소된 항목 — *사용자 본문의 `{{XXX}}` placeholder silent strip* / *_report 누적* / *og_type 디폴트 강제* — 은 모두 안정화 패치로 사라졌습니다. v0.6.4 의 *카테고리/홈 외부 CSS 미지원* 비대칭도 해소된 상태 (글/카테고리/홈 모두 같은 메커니즘). v0.7.0 에서 새로 해소된 항목 — *빌드 증분 캐싱 없음* — 도 한계 표에서 빠집니다. 글 단위 캐시 (`.build_cache/`) 가 도입되어 변경되지 않은 글은 캐시 hit 로 재렌더 없이 dist 에 복원됩니다 (검색 인덱스 / sitemap / feed / 홈 / 카테고리는 모든 글이 입력이라 매 빌드 재구축 — 의도된 범위). v0.7.1 까지 한계로 잡혀 있던 *빌드 진행 표시 없음 (시작/완료 두 줄뿐) / 보완 안내가 터미널 휘발성* 은 **v0.7.2 에서 해소** — 16 단계 헤더 + 무거운 루프 라이브 카운터 + `build-report.md` 영속 리포트. 진행 출력·리포트는 모두 dist/ 밖이라 산출물·결정성에는 변동이 없습니다.
 
 | 한계 | 내용 |
 |---|---|
@@ -1976,6 +2003,18 @@ python build.py --clean
 ---
 
 ## 17. 업데이트 로그
+
+### v0.8.0 (2026-05-17) — README 코드 정합성 정정 (문서 결함 5 건, 코드 동작 변경 0)
+
+v0.7.2 베이스를 두 독립 검토본 — v0.7.2.1 (v0.7.1 복사본) · v0.7.2.2 (v0.7.2 복사본) — 으로 교차 검증한 결과, **코드는 v0.4.5 / v0.4.6 / v0.5.4 / v0.7.0 / v0.7.2 의도대로 정상 동작하나 README 서술만 뒤처진** 문서 결함 5 건이 확인됐다. 두 검토본은 같은 `Articles/` 트리로 빌드했고 dist 785 파일 중 `feed.atom` / `feed.rss` 의 generator 문자열 (`v0.7.1` ↔ `v0.7.2`) 만 다르고 나머지 byte 동일 — 증분 캐싱 경로가 전체 빌드와 동등한 산출물을 냄을 재확인. v0.8.0 은 그 검토에서 합의된 정정을 본문에 반영한다 (검토 콜아웃은 릴리스 문서에 남기지 않고 정정 결과만 수록). 빌더 *산출 로직* 무변경 — dist 산출물은 v0.7.2 와 동등.
+
+- **§ 5 카테고리 meta.yaml — `title` / `seo` / `priority` / `nav_priority` 누락 정정.** 도입부가 `(slug/title/date 없음)` 으로 `title` 까지 미지원이라 서술하고 필드 표에서 네 필드 행이 빠져 있던 부분 정정. 실제 [scripts/models.py](scripts/models.py) `CategoryMeta` + [scripts/builder.py](scripts/builder.py) `_parse_category_meta_file` 는 `title` / `seo` (v0.5.4) · `priority` (v0.4.6) · `nav_priority` (v0.5.4) 를 모두 파싱한다 (`slug`+`date` 동시 존재 시에만 글로 간주). 같은 README § 10 · § 11-1 은 이미 옳게 기술 중이라 § 5 만 stale 했던 사례.
+- **§ 8 산출물 URL 표 — 서브카테고리 행 추가.** `카테고리 (톱레벨만)` 한 행뿐이던 표에 `카테고리 (서브, v0.4.5)` `/{top}/{sub}/…/` 행 추가. v0.4.5 부터 [scripts/builder.py](scripts/builder.py) `_build_categories` 가 글이 있는 모든 (톱·서브) 카테고리 인덱스를 생성하고 [scripts/sitemap.py](scripts/sitemap.py) 도 서브 URL 을 포함 — 같은 절 dist 트리 도식 · § 5 와 이미 일관.
+- **§ 10 v0.4.4 sitemap 회고 줄 — 서브카테고리 반영.** `톱레벨 카테고리` 만 출력한다던 v0.4.4 회고 줄을 `톱레벨·서브카테고리 (글이 있는 카테고리 전체)` 로 정정. v0.4.5 의 서브 추가가 이 회고 줄에 반영 안 됐던 사례.
+- **§ 1 · § 7 빌드 출력 예시 블록 — v0.7.0 / v0.7.2 출력 형태 반영.** `빌드 시작...` 2~3 줄짜리 옛 예시를, 시작줄(버전·시각) → `[ n/16]` 16 단계 진행 헤더 → 완료 요약 (elapsed `(<T>s)`) → `증분 캐시:` (v0.7.0) → `리포트 문서: build-report.md 생성` (v0.7.2) 까지 실제 `python build.py` 출력 형태로 정정. 라이브 카운터는 TTY 전용이라 캡처 로그에서는 단계 요약 한 줄로 남는다는 단서도 명시.
+- **버전 표기 갱신 (README 한정).** README 헤더 / 빠른 시작 폴더 예시 / 폴더 트리 / §11-2 site.yaml 예시 헤더 / 현재 한계 표 / 푸터 캡션 + 빌드 예시 블록의 폴더 경로를 `v0.7.2` → `v0.8.0` 으로 갱신. *changelog 본문* 안의 옛 버전 표기 (`v0.7.2 부터` 등) 는 *기능 도입 시점* 을 가리키는 역사 기록이라 그대로 보존. **단 [scripts/\_\_init\_\_.py](scripts/__init__.py) `__version__` 등 코드 측 버전 상수 갱신은 본 릴리스 범위에서 제외** — 그 전까지 `dist/` 의 `feed.atom` / `feed.rss` generator 문자열은 `v0.7.2` 로 남는다 (코드 버전 bump + 재빌드 시 `__version__` 단일 source 효과로 자동 갱신).
+
+**검증:** 코드 (scripts/ · build.py · templates/) 가 v0.7.2 와 byte 동일 → 단위 테스트 258 / 0 · 빌드 진단 (`tests/run_diagnostics.py`) 5/5 PASS 결과 그대로 승계. README 변경은 문서 한정이라 dist 산출물·결정성에 무영향 (dist 는 v0.7.2 복사본 그대로). v0.7.2.1 ↔ v0.7.2.2 dist 대조 = 785 파일 중 feed.atom / feed.rss generator 문자열만 상이, 그 외 byte 동일.
 
 ### v0.7.2 (2026-05-17) — 빌드 진행 표시 + 빌드 리포트 문서화
 
@@ -2135,4 +2174,4 @@ Python stdlib only SSG 첫 동작 버전. YAML 파서·마크다운 파서·HTML
 
 ---
 
-*이 문서는 siheonlee.com v0.7.2 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력; 글/카테고리/홈 모두 외부 CSS 파일 + `use_common_css` 토글 + `template:` 키 지원 v0.6.4; v0.6.4 의 큰 변경 직후 발견된 누적 회귀 4 건 안정화 v0.6.5; 빌드 증분 캐싱 (글 단위, fine-grained) 도입 v0.7.0; v0.7.0 직후 누적된 문서·주석·코드 정합성 회복 v0.7.1; **빌드 16 단계 진행 표시 + 무거운 루프 라이브 카운터 + `build-report.md` 영속 리포트 문서화 v0.7.2**) 기준으로 작성되었습니다. (2026-05-17)*
+*이 문서는 siheonlee.com v0.8.0 (PHP 기반 경량 웹 사이트 생성기 — 빌드는 Python + Pillow, 런타임은 PHP; 검색은 Okapi BM25 메타데이터 3-필드 색인 + PHP 정적 배열 인라인; 이미지는 WebP 다중 해상도 자동 변환; 글/홈/카테고리 모두 통일된 SEO 메타 태그 묶음 출력; 글/카테고리/홈 모두 외부 CSS 파일 + `use_common_css` 토글 + `template:` 키 지원 v0.6.4; v0.6.4 의 큰 변경 직후 발견된 누적 회귀 4 건 안정화 v0.6.5; 빌드 증분 캐싱 (글 단위, fine-grained) 도입 v0.7.0; v0.7.0 직후 누적된 문서·주석·코드 정합성 회복 v0.7.1; 빌드 16 단계 진행 표시 + 무거운 루프 라이브 카운터 + `build-report.md` 영속 리포트 문서화 v0.7.2; **README 코드 정합성 정정 (문서 결함 5 건, 코드 동작 변경 0) v0.8.0**) 기준으로 작성되었습니다. (2026-05-17)*
