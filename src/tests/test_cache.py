@@ -460,8 +460,9 @@ def _scaffold_site():
     """최소 단일-글 사이트를 임시 디렉터리에 만든다."""
     tmp = Path(tempfile.mkdtemp(prefix='ssg-v070-int-'))
     (tmp / 'site.yaml').write_text(SITE_YAML_MIN, encoding='utf-8')
-    shutil.copytree(ROOT / 'templates', tmp / 'templates')
-    shutil.copytree(ROOT / 'assets', tmp / 'assets')
+    # v0.8.1: Builder 가 base/src/templates · base/src/assets 를 읽는다.
+    shutil.copytree(ROOT / 'templates', tmp / 'src' / 'templates')
+    shutil.copytree(ROOT / 'assets', tmp / 'src' / 'assets')
 
     art = tmp / 'Articles' / 'Demo'
     art.mkdir(parents=True)
@@ -558,8 +559,8 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
         builder_module.reset_report()
         Builder(base_dir=self.tmp, enable_cache=True).build()  # warm
 
-        # 글 템플릿 약간 수정 — global_hash 변동.
-        tpl_path = self.tmp / 'templates' / 'article.html'
+        # 글 템플릿 약간 수정 — global_hash 변동. (v0.8.1: src/ 아래)
+        tpl_path = self.tmp / 'src' / 'templates' / 'article.html'
         tpl_path.write_text(
             tpl_path.read_text(encoding='utf-8') + '\n<!-- bump -->\n',
             encoding='utf-8',

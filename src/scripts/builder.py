@@ -617,9 +617,15 @@ class Builder:
 
     def __init__(self, base_dir: Path, *, enable_cache: bool = True):
         self.base = base_dir
+        # v0.8.1: 빌더 일체(scripts/·templates/·assets/·tests/)가 src/ 아래로
+        # 재배치됐다. 글 소스(Articles/)·산출물(dist/)·전역 설정(site.yaml)·
+        # 캐시(.build_cache/)·리포트(build-report.md)는 그대로 프로젝트 루트
+        # (= base_dir) 기준. templates/assets 만 src/ 아래에서 해석한다 —
+        # 산출물 경로·내용은 v0.8.0 과 불변.
+        self.src_dir = base_dir / 'src'
         self.articles_dir = base_dir / 'Articles'
-        self.assets_dir = base_dir / 'assets'
-        self.templates_dir = base_dir / 'templates'
+        self.assets_dir = self.src_dir / 'assets'
+        self.templates_dir = self.src_dir / 'templates'
         self.dist = base_dir / 'dist'
 
         self.site: SiteConfig = None
@@ -1847,7 +1853,7 @@ class Builder:
         if self.cache.enabled and self.cache.global_hash is None:
             self.cache.compute_global_hash(
                 site_yaml=self.base / 'site.yaml',
-                scripts_dir=self.base / 'scripts',
+                scripts_dir=self.src_dir / 'scripts',  # v0.8.1: src/ 아래로
                 templates_dir=self.templates_dir,
                 assets_dir=self.assets_dir,
                 articles_dir=self.articles_dir,

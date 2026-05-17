@@ -36,7 +36,12 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 
+# v0.8.1: 테스트는 src/tests/ 로 이동했다. ROOT = src/ (import 경로 +
+# 단위 테스트 discover + 진단 리포트 출력의 기준). PROJECT_ROOT =
+# 프로젝트 루트 (Articles/·dist/·site.yaml 이 있는 build.py 폴더) —
+# Builder(base_dir) 와 dist/ 경로는 이쪽을 기준으로 한다.
 ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = ROOT.parent
 sys.path.insert(0, str(ROOT))
 
 
@@ -114,18 +119,18 @@ def section_build_determinism(report) -> bool:
     report.section('[2] Build determinism (dist sha256 stability)')
 
     from scripts.builder import Builder
-    dist = ROOT / 'dist'
+    dist = PROJECT_ROOT / 'dist'
 
     # 1차 빌드
     buf = io.StringIO()
     with redirect_stdout(buf), redirect_stderr(buf):
-        Builder(ROOT).build()
+        Builder(PROJECT_ROOT).build()
     snap_a = _dist_sha256(dist)
 
     # 2차 빌드 (캐시 위에 그대로)
     buf2 = io.StringIO()
     with redirect_stdout(buf2), redirect_stderr(buf2):
-        Builder(ROOT).build()
+        Builder(PROJECT_ROOT).build()
     snap_b = _dist_sha256(dist)
 
     report.line(f'  files (1st build): {len(snap_a)}')
@@ -162,7 +167,7 @@ def section_php_lint(report, php_bin) -> bool:
         report.status(True, skipped=True)
         return True
     proc = subprocess.run(
-        [php_bin, '-l', str(ROOT / 'dist' / 'search.php')],
+        [php_bin, '-l', str(PROJECT_ROOT / 'dist' / 'search.php')],
         capture_output=True, text=True, encoding='utf-8',
     )
     report.line(f'  exit code   : {proc.returncode}')
@@ -195,7 +200,7 @@ def section_score_parity(report, php_bin) -> bool:
     from scripts.search import bm25_score, build_search_index
 
     # 빌더로 articles / rendered_bodies 준비
-    b = Builder(ROOT)
+    b = Builder(PROJECT_ROOT)
     buf = io.StringIO()
     with redirect_stdout(buf), redirect_stderr(buf):
         b._load_config()
@@ -222,7 +227,7 @@ def section_score_parity(report, php_bin) -> bool:
         q_esc = q.replace("'", "\\'")
         php_code = (
             'ob_start(); $_GET = ["q" => "' + q_esc + '"]; '
-            'include "' + str(ROOT / "dist" / "search.php").replace('\\', '/') + '"; '
+            'include "' + str(PROJECT_ROOT / "dist" / "search.php").replace('\\', '/') + '"; '
             'ob_end_clean(); '
             '$r = bm25_search($INDEX, "' + q_esc + '", null); '
             '$out = new stdClass(); '
@@ -265,7 +270,7 @@ def section_index_shape(report, php_bin) -> bool:
         return True
     code = (
         'ob_start(); $_GET = ["q" => ""]; '
-        'include "' + str(ROOT / "dist" / "search.php").replace('\\', '/') + '"; '
+        'include "' + str(PROJECT_ROOT / "dist" / "search.php").replace('\\', '/') + '"; '
         'ob_end_clean(); '
         'echo json_encode([\n'
         '  "version" => $INDEX["version"] ?? null,\n'

@@ -1,18 +1,30 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.7.2 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.8.1 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
-`scripts/` 패키지 안에 모듈별로 나뉘어 있다. 사이트 전역 버전 문자열은
-[scripts/__init__.py](scripts/__init__.py) 의 `__version__` 이 단일
-source of truth — 피드 generator 등이 이 값을 참조.
+`src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
+폴더 구조 참조). 사이트 전역 버전 문자열은
+[src/scripts/__init__.py](src/scripts/__init__.py) 의 `__version__` 이
+단일 source of truth — 피드 generator 등이 이 값을 참조.
+
+폴더 구조 (v0.8.1):
+    Articles/    글 소스 (최초엔 참고용 자료들)
+    dist/        빌드 산출물 (최초엔 빈 폴더)
+    src/         빌더 일체 — scripts/ (Python 패키지) · templates/ ·
+                 assets/ · tests/
+    build.py     빌드 진입점 (이 파일)
+    README.md    문서
+    site.yaml    전역 설정
+  최상위에는 위 6 개만 보인다. build.py 가 자기 폴더의 src/ 를 sys.path
+  맨 앞에 올려 `import scripts...` 가 src/scripts/ 를 가리킨다.
 
 Usage:
     python build.py                # full build (캐시 사용)
     python build.py --clean        # wipe dist/, .build_cache/ 후 빌드
     python build.py --clean-cache  # .build_cache/ 만 폐기 후 빌드 (dist 는 유지)
     python build.py --no-cache     # 증분 캐시 비활성 (v0.6.5 동작)
-    python -m unittest discover -s tests   # 단위 테스트 (v0.7.2: 258개)
-    python tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
+    python -m unittest discover -s src/tests   # 단위 테스트 (v0.7.2: 258개)
+    python src/tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
 빌드가 끝나면 build.py 가 있는 폴더에 `build-report.md` 가 생성/갱신된다 —
 터미널 진행·요약·보완 필요/살펴볼 사항을 마크다운으로 서식화한 문서
@@ -22,6 +34,28 @@ Usage:
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.8.1 변경 사항 (vs v0.8.0) — 폴더 구조 정리 (코드 동작·산출물 불변):
+  - **최상위 6 항목으로 축약** — 시스템에 들어갔을 때 보이는 것을
+    `Articles/` · `dist/` · `src/` · `build.py` · `README.md` ·
+    `site.yaml` 만으로 정리. 빌더 일체 (`scripts/` Python 패키지,
+    `templates/`, `assets/`, `tests/`) 를 `src/` 한 폴더 아래로 이동.
+  - **src/ 내부 계층** — `src/scripts/` (빌드 파이프라인 모듈),
+    `src/templates/` (HTML/PHP 템플릿), `src/assets/` (사이트 공통
+    CSS/JS), `src/tests/` (단위 테스트 + run_diagnostics). 각 역할이
+    한 폴더로 분리돼 평면적이던 최상위가 2 단 계층으로 구조화.
+  - **경로 해석 일원화** — `build.py` 가 자기 폴더의 `src/` 를 sys.path
+    맨 앞에 올려 `import scripts...` 가 `src/scripts/` 를 가리킨다.
+    `Builder` 는 `self.src_dir = base/src` 를 두고 templates/assets,
+    캐시 global_hash 의 scripts_dir 을 그 아래에서 해석. `Articles/`
+    `dist/` `site.yaml` `.build_cache/` `build-report.md` 는 그대로
+    프로젝트 루트(= build.py 폴더) 기준 — 글 소스·산출물 위치 불변.
+  - **결정성·산출물 불변** — 이동은 *파일 위치* 만 바꾸고 빌드 로직은
+    한 줄도 바꾸지 않았다. `__version__` 도 `'0.7.2'` 그대로 (별도
+    범위). dist/ 산출물은 v0.8.0 과 **byte 동일** — 정본 Articles 클린
+    재빌드로 sha256 전수 검증. 단위 테스트 258 그대로 (테스트 하네스의
+    템플릿/자산 복사 대상 경로만 `tmp/src/...` 로 따라 이동), 진단
+    5/5 PASS.
 
 v0.7.2 변경 사항 (vs v0.7.1) — 빌드 진행 표시 + 빌드 리포트 문서화:
   - **16 단계 진행 헤더** — `build()` 가 각 파이프라인 단계 직전에
@@ -518,8 +552,14 @@ import shutil
 import sys
 from pathlib import Path
 
-from scripts.builder import Builder
-from scripts.cache import CACHE_DIR_NAME
+# v0.8.1: 빌더 패키지(scripts/)·템플릿·자산·테스트는 모두 src/ 아래로
+# 재배치됐다. build.py 가 자기 폴더의 src/ 를 import 경로 맨 앞에 올려
+# `import scripts...` 가 src/scripts/ 를 가리키게 한다. 빌드 동작·산출물은
+# 불변 — dist 는 v0.8.0 과 byte 동일 (구조만 정리).
+sys.path.insert(0, str(Path(__file__).parent / 'src'))
+
+from scripts.builder import Builder  # noqa: E402
+from scripts.cache import CACHE_DIR_NAME  # noqa: E402
 
 
 if __name__ == '__main__':

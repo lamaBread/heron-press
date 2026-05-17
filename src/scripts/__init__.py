@@ -1,6 +1,8 @@
-"""siheonlee.com v0.7.2 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v0.8.1 — 빌더 내부 모듈 묶음.
 
-루트의 build.py 가 이 패키지를 import 한다.
+이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
+일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
+를 sys.path 에 올린 뒤 이 패키지를 import 한다.
 모듈:
   - yaml_parser  — stdlib only YAML 부분 구현
   - models       — dataclass 정의 (SiteConfig, ArticleMeta, SeoMeta, ...)

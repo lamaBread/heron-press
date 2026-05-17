@@ -123,6 +123,9 @@ class WrapPageTitleTests(unittest.TestCase):
 # v0.6.3 — frontmatter 의 styles 분리 + use_common_css 토글
 # ════════════════════════════════════════════════════════════════
 
+# v0.8.1: 테스트는 src/tests/ 로 이동 → REPO_ROOT = src/ (templates/ ·
+# assets/ 의 실제 위치). Builder(base_dir=tmp) 는 tmp/src/templates ·
+# tmp/src/assets 를 읽으므로 아래 하네스들이 거기로 복사한다.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -165,10 +168,10 @@ class StylesFrontmatterTests(unittest.TestCase):
         """임시 사이트 트리를 만들고 Builder 를 돌려 dist Path 반환."""
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v063-'))
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        # templates/ + assets/ 는 v0.6.3 폴더의 실 파일을 임시 디렉터리로 복사
-        # (Builder 가 base/templates, base/assets 만 받기 때문).
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
+        # templates/ + assets/ 의 실 파일을 임시 디렉터리로 복사
+        # (v0.8.1: Builder 가 base/src/templates · base/src/assets 를 읽음).
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
 
         # Articles/<slug>/ 글 한 개.
         article_dir = tmp / 'Articles' / 'Demo'
@@ -311,8 +314,8 @@ class PageCssUnificationTests(unittest.TestCase):
         """
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v064-'))
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
 
         # Articles/meta.yaml (홈)
         articles_dir = tmp / 'Articles'
@@ -437,12 +440,12 @@ class TemplateRefTests(unittest.TestCase):
                   templates_extra=None):
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v064-tpl-'))
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
 
         if templates_extra:
             for rel, content in templates_extra.items():
-                p = tmp / 'templates' / rel
+                p = tmp / 'src' / 'templates' / rel
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(content, encoding='utf-8')
 
@@ -571,8 +574,8 @@ class BodyPlaceholderPreservationTests(unittest.TestCase):
     def _scaffold(self, *, content_md: str):
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v065-body-'))
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
 
         articles_dir = tmp / 'Articles'
         articles_dir.mkdir(parents=True)
@@ -633,8 +636,8 @@ class BuildReportResetTests(unittest.TestCase):
     def _make_site(self):
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v065-reset-'))
         (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'assets')
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
         articles_dir = tmp / 'Articles'
         articles_dir.mkdir(parents=True)
         # 홈에 description 없음 → 1 issue.
