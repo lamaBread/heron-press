@@ -21,7 +21,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from scripts import builder as builder_module  # noqa: E402
 from scripts.builder import Builder  # noqa: E402
 from scripts.cache import (  # noqa: E402
     BuildCache,
@@ -490,24 +489,20 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
         return out
 
     def test_second_build_hits_all_articles(self):
-        builder_module.reset_report()
         b1 = Builder(base_dir=self.tmp, enable_cache=True)
         b1.build()
         self.assertEqual(b1._cache_hits, 0)
         self.assertEqual(b1._cache_misses, 1)
 
-        builder_module.reset_report()
         b2 = Builder(base_dir=self.tmp, enable_cache=True)
         b2.build()
         self.assertEqual(b2._cache_hits, 1)
         self.assertEqual(b2._cache_misses, 0)
 
     def test_cached_dist_byte_identical(self):
-        builder_module.reset_report()
         Builder(base_dir=self.tmp, enable_cache=True).build()
         snap_a = self._read_dist_sha()
 
-        builder_module.reset_report()
         Builder(base_dir=self.tmp, enable_cache=True).build()
         snap_b = self._read_dist_sha()
 
@@ -526,7 +521,6 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
         )
         (art2 / 'content.md').write_text('# Other\n', encoding='utf-8')
 
-        builder_module.reset_report()
         Builder(base_dir=self.tmp, enable_cache=True).build()  # warm
 
         # 첫 글만 수정.
@@ -534,21 +528,18 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
             '# Demo body\n\nUPDATED.\n', encoding='utf-8'
         )
 
-        builder_module.reset_report()
         b = Builder(base_dir=self.tmp, enable_cache=True)
         b.build()
         self.assertEqual(b._cache_hits, 1, '안 바뀐 글은 hit')
         self.assertEqual(b._cache_misses, 1, '바뀐 글만 miss')
 
     def test_site_yaml_change_invalidates_everything(self):
-        builder_module.reset_report()
         Builder(base_dir=self.tmp, enable_cache=True).build()  # warm
 
         # site.yaml 의 name 변경 — global_hash 변동.
         new_site = SITE_YAML_MIN.replace('name: Example', 'name: Example2')
         (self.tmp / 'site.yaml').write_text(new_site, encoding='utf-8')
 
-        builder_module.reset_report()
         b = Builder(base_dir=self.tmp, enable_cache=True)
         b.build()
         self.assertEqual(b._cache_hits, 0,
@@ -556,7 +547,6 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
         self.assertEqual(b._cache_misses, 1)
 
     def test_template_change_invalidates_everything(self):
-        builder_module.reset_report()
         Builder(base_dir=self.tmp, enable_cache=True).build()  # warm
 
         # 글 템플릿 약간 수정 — global_hash 변동. (v0.8.1: src/ 아래)
@@ -566,17 +556,14 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
             encoding='utf-8',
         )
 
-        builder_module.reset_report()
         b = Builder(base_dir=self.tmp, enable_cache=True)
         b.build()
         self.assertEqual(b._cache_hits, 0,
                          '템플릿 변경은 모든 글 캐시를 무효화해야 함')
 
     def test_no_cache_flag_disables_caching(self):
-        builder_module.reset_report()
         Builder(base_dir=self.tmp, enable_cache=True).build()  # warm
 
-        builder_module.reset_report()
         b = Builder(base_dir=self.tmp, enable_cache=False)
         b.build()
         self.assertEqual(b._cache_hits, 0,
@@ -594,22 +581,22 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
             encoding='utf-8',
         )
 
-        builder_module.reset_report()
-        Builder(base_dir=self.tmp, enable_cache=True).build()
+        # v0.8.2: per-Builder report — 각 인스턴스의 self.report 를 검사.
+        b1 = Builder(base_dir=self.tmp, enable_cache=True)
+        b1.build()
         # 첫 빌드는 issue 1 건 (description 누락).
         first_issues = [
-            e for e in builder_module.report().entries
+            e for e in b1.report.entries
             if e.severity == 'issue' and e.scope == 'article' and e.target == 'demo'
         ]
         self.assertGreaterEqual(len(first_issues), 1)
         first_msg = first_issues[0].message
 
-        builder_module.reset_report()
         b = Builder(base_dir=self.tmp, enable_cache=True)
         b.build()
         self.assertEqual(b._cache_hits, 1)
         second_issues = [
-            e for e in builder_module.report().entries
+            e for e in b.report.entries
             if e.severity == 'issue' and e.scope == 'article' and e.target == 'demo'
         ]
         self.assertGreaterEqual(len(second_issues), 1)

@@ -20,7 +20,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from scripts import builder as builder_module  # noqa: E402
 from scripts.builder import Builder  # noqa: E402
 from scripts.models import (  # noqa: E402
     SiteConfig, SeoMeta,
@@ -188,9 +187,11 @@ class StylesFrontmatterTests(unittest.TestCase):
                 p.write_text(content, encoding='utf-8')
 
         # 다른 테스트와 격리 — 전역 _report 초기화.
-        builder_module.reset_report()
+        # v0.8.2: per-Builder 리포트 — 모듈 전역 reset_report() 폐지.
+        # 인스턴스를 self 에 보관해 테스트가 self._builder.report 로 검사.
         b = Builder(base_dir=tmp)
         b.build()
+        self._builder = b
         return tmp, tmp / 'dist'
 
     def test_no_stylesheets_keeps_v062_output(self):
@@ -252,7 +253,7 @@ class StylesFrontmatterTests(unittest.TestCase):
         _, dist = self._scaffold('styles:\n  1: ghost.css\n')
         html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
         self.assertNotIn('ghost.css', html)
-        entries = builder_module.report().entries
+        entries = self._builder.report.entries
         joined = '\n'.join(e.message for e in entries if e.severity == 'issue')
         self.assertIn('ghost.css', joined)
 
@@ -353,9 +354,11 @@ class PageCssUnificationTests(unittest.TestCase):
         )
         (art_dir / 'content.md').write_text('# Hello\n', encoding='utf-8')
 
-        builder_module.reset_report()
+        # v0.8.2: per-Builder 리포트 — 모듈 전역 reset_report() 폐지.
+        # 인스턴스를 self 에 보관해 테스트가 self._builder.report 로 검사.
         b = Builder(base_dir=tmp)
         b.build()
+        self._builder = b
         return tmp, tmp / 'dist'
 
     # ── 홈 ────────────────────────────────────────────────────────
@@ -395,7 +398,7 @@ class PageCssUnificationTests(unittest.TestCase):
         html = (dist / 'index.html').read_text(encoding='utf-8')
         self.assertNotIn('missing.css', html)
         joined = '\n'.join(
-            e.message for e in builder_module.report().entries
+            e.message for e in self._builder.report.entries
             if e.severity == 'issue'
         )
         self.assertIn('missing.css', joined)
@@ -468,9 +471,11 @@ class TemplateRefTests(unittest.TestCase):
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(content, encoding='utf-8')
 
-        builder_module.reset_report()
+        # v0.8.2: per-Builder 리포트 — 모듈 전역 reset_report() 폐지.
+        # 인스턴스를 self 에 보관해 테스트가 self._builder.report 로 검사.
         b = Builder(base_dir=tmp)
         b.build()
+        self._builder = b
         return tmp, tmp / 'dist'
 
     def test_no_template_key_uses_default(self):
@@ -518,7 +523,7 @@ class TemplateRefTests(unittest.TestCase):
         # 기본으로 폴백 → header/footer 등 정상.
         self.assertIn('imgslidebox.js', html)
         joined = '\n'.join(
-            e.message for e in builder_module.report().entries
+            e.message for e in self._builder.report.entries
             if e.severity == 'issue'
         )
         self.assertIn('ghost.html', joined)
@@ -531,7 +536,7 @@ class TemplateRefTests(unittest.TestCase):
         html = (dist / 'demo' / 'index.html').read_text(encoding='utf-8')
         self.assertIn('imgslidebox.js', html)  # 기본 폴백
         joined = '\n'.join(
-            e.message for e in builder_module.report().entries
+            e.message for e in self._builder.report.entries
             if e.severity == 'issue'
         )
         self.assertIn("'template'", joined)
@@ -552,7 +557,7 @@ class TemplateRefTests(unittest.TestCase):
         self.assertNotIn('{{SUBCATEGORY_SECTIONS}}', html)
         self.assertIn('<x></x>', html)  # strip 후 빈 문자열.
         warnings = [
-            e.message for e in builder_module.report().entries
+            e.message for e in self._builder.report.entries
             if e.severity == 'warning'
         ]
         joined = '\n'.join(warnings)
@@ -591,9 +596,11 @@ class BodyPlaceholderPreservationTests(unittest.TestCase):
         )
         (art_dir / 'content.md').write_text(content_md, encoding='utf-8')
 
-        builder_module.reset_report()
+        # v0.8.2: per-Builder 리포트 — 모듈 전역 reset_report() 폐지.
+        # 인스턴스를 self 에 보관해 테스트가 self._builder.report 로 검사.
         b = Builder(base_dir=tmp)
         b.build()
+        self._builder = b
         return tmp, tmp / 'dist'
 
     def test_body_preserves_unknown_uppercase_placeholder(self):
@@ -627,8 +634,14 @@ class BodyPlaceholderPreservationTests(unittest.TestCase):
 
 
 class BuildReportResetTests(unittest.TestCase):
-    """v0.6.5: Builder().build() 호출 시 _report 가 자동 초기화되어 한 프로세스
-    안에서 여러 번 빌드를 돌려도 issue/warning 카운트가 누적되지 않는다.
+    """v0.6.5→v0.8.2: build() 가 self.report 를 새로 교체해, 한 인스턴스를
+    재사용해 여러 번 빌드를 돌려도 issue/warning 이 누적되지 않는다.
+
+    v0.6.5 ~ v0.8.1 은 모듈 전역 `_report` + build() 진입 시 reset_report()
+    였다. v0.8.2 부터 리포트가 per-Builder 라 (a) 같은 인스턴스 재사용 시
+    build() 의 self.report 재생성으로 누적 방지, (b) 서로 다른 인스턴스는
+    리포트를 공유하지 않는다 (동시 빌드의 전제 — 본 클래스가 두 성질을
+    각각 가드).
     """
 
     SITE_YAML = StylesFrontmatterTests.SITE_YAML
@@ -652,18 +665,38 @@ class BuildReportResetTests(unittest.TestCase):
         (art_dir / 'content.md').write_text('# Demo\n', encoding='utf-8')
         return tmp
 
-    def test_consecutive_builds_do_not_accumulate_issues(self):
+    def test_same_instance_reuse_does_not_accumulate_issues(self):
+        """같은 Builder 인스턴스로 build() 를 두 번 — build() 가 self.report
+        를 새로 교체하므로 issue 카운트가 누적되지 않아야 한다 (v0.6.5
+        자동 reset 의 per-Builder 판)."""
         tmp = self._make_site()
-        builder_module.reset_report()
-        Builder(base_dir=tmp).build()
-        count_after_first = builder_module.report().issue_count()
-        # 두 번째 빌드 — reset_report() 를 호출자가 안 해도 build() 가 자동
-        # 초기화해야 한다.
-        Builder(base_dir=tmp).build()
-        count_after_second = builder_module.report().issue_count()
+        b = Builder(base_dir=tmp)
+        b.build()
+        count_after_first = b.report.issue_count()
+        b.build()  # 같은 인스턴스 재사용 — reset 은 build() 가 자동.
+        count_after_second = b.report.issue_count()
         self.assertEqual(count_after_first, count_after_second,
                          '두 번째 빌드 후 issue 카운트가 같아야 한다 '
                          '(누적되면 안 됨)')
+
+    def test_distinct_instances_have_independent_reports(self):
+        """v0.8.2 핵심: 서로 다른 Builder 인스턴스는 리포트를 공유하지
+        않는다 (모듈 전역 폐지 → 동시 빌드 봉쇄 해제의 전제). 두 인스턴스를
+        각각 빌드해도 한쪽의 issue 가 다른 쪽 리포트에 새지 않는다."""
+        tmp = self._make_site()
+        b1 = Builder(base_dir=tmp)
+        b1.build()
+        b2 = Builder(base_dir=tmp)
+        b2.build()
+        # 두 리포트는 별개 객체.
+        self.assertIsNot(b1.report, b2.report)
+        # 같은 사이트라 카운트는 같지만, 누적이 아니라 각자 독립 집계.
+        self.assertEqual(b1.report.issue_count(), b2.report.issue_count())
+        # b2 빌드가 b1.report 항목 수를 바꾸지 않았다.
+        self.assertEqual(
+            len(b1.report.entries),
+            b1.report.issue_count() + b1.report.warning_count(),
+        )
 
 
 if __name__ == '__main__':

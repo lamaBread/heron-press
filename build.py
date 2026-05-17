@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.8.1 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.8.2 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -23,8 +23,13 @@ Usage:
     python build.py --clean        # wipe dist/, .build_cache/ 후 빌드
     python build.py --clean-cache  # .build_cache/ 만 폐기 후 빌드 (dist 는 유지)
     python build.py --no-cache     # 증분 캐시 비활성 (v0.6.5 동작)
-    python -m unittest discover -s src/tests   # 단위 테스트 (v0.7.2: 258개)
+    python build.py --help         # 인자 도움말 (v0.8.2: argparse)
+    python -m unittest discover -s src/tests   # 단위 테스트 (v0.8.2: 266개)
     python src/tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
+
+v0.8.2 부터 인자 파싱이 argparse 라 미지/오타 인자 (`--clena` 등) 는 조용히
+무시되지 않고 즉시 거부된다 (exit 2 + usage). 유효 인자의 빌드 동작은
+v0.8.1 과 1:1 동일.
 
 빌드가 끝나면 build.py 가 있는 폴더에 `build-report.md` 가 생성/갱신된다 —
 터미널 진행·요약·보완 필요/살펴볼 사항을 마크다운으로 서식화한 문서
@@ -34,6 +39,36 @@ Usage:
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.8.2 변경 사항 (vs v0.8.1) — 코드 건전성 (버전 디커플링 / CLI / 리포트):
+  - **(1) `__version__` 디커플링 (B1)** — v0.8.1 까지 `__version__` 이
+    dist 로 새는 경로는 feed.atom/feed.rss 의 `<generator>` 한 줄뿐이었다.
+    그 때문에 문서·구조 전용 릴리스 (v0.7.2→v0.8.0→v0.8.1) 는 byte-동일
+    검증을 위해 `__version__` 을 '0.7.2' 에 동결해야 했다. v0.8.2 는
+    generator 문자열에서 버전 토큰을 제거 (`siheonlee.com v0.7.2 — …`
+    → `siheonlee.com — …`) — `__version__` 의 dist 영향이 영구히 0 이
+    되고, 드디어 릴리스를 자유롭게 추종한다 (`'0.7.2'` → `'0.8.2'`).
+    이후 문서 릴리스는 진짜 byte-동일 (동결 불필요·무비용).
+  - **(2) CLI argparse 견고화** — v0.8.1 까지 raw `'--clean' in sys.argv`
+    라 오타 (`--clena`) 가 경고 없이 일반 빌드로 흘러가는 silent footgun
+    이었다. argparse (allow_abbrev=False) 로 전환 — `--help` 제공 +
+    미지/오타/약어 인자 즉시 거부 (SystemExit 2 + usage). run_diagnostics
+    .py 와 같은 idiom 으로 통일. 유효 인자의 빌드 동작은 v0.8.1 과 1:1.
+  - **(3) 빌드 리포트 per-Builder** — scripts/report.py docstring 이
+    v0.5.5 부터 명세해 온 "Builder 가 self.report 보유, self._issue /
+    self._warning 라우팅" 을 실제로 구현. v0.6.5~v0.8.1 은 모듈 전역
+    `_report` + build() 진입 시 reset 이라 동시 빌드(멀티스레드/프로세스)
+    가 원천 봉쇄돼 있었다. 부수적으로 `build()` 멱등성 결함 1건 수정 —
+    옛 코드는 self.report/_console 만 리셋하고 데이터 컬렉션
+    (articles/slug_to_article/categories/...) 은 __init__ 에서만 초기화
+    돼, 같은 인스턴스로 두 번째 build() 시 'slug 중복' 을 잘못 보고했다
+    (옛 테스트가 매번 새 인스턴스를 써서 가려짐).
+  - **결정성·산출물** — (2)(3) 은 dist 0. (1) 은 feed.atom/feed.rss 의
+    `<generator>` 한 줄만 v0.8.0 과 차이 (의도된 1회성, 그 외 783 파일
+    byte-동일 · 0 missing/extra · 결정성 2회 빌드 동일). 단위 테스트
+    258 → **266** (test_build_cli.py 7 + per-Builder 격리/멱등 2). 진단
+    5/5 PASS. 이번 릴리스 무결성 = "결정성 + v0.8.0 기준 열거된 2파일
+    1줄 diff" (v0.5.1 식 프레이밍 — 문서 전용 sha256 동치가 아님).
 
 v0.8.1 변경 사항 (vs v0.8.0) — 폴더 구조 정리 (코드 동작·산출물 불변):
   - **최상위 6 항목으로 축약** — 시스템에 들어갔을 때 보이는 것을
@@ -548,6 +583,7 @@ v0.4.0 변경 사항 (vs v0.3.2):
 
 자세한 내용은 README.md 의 § 17 (업데이트 로그) 참조.
 """
+import argparse
 import shutil
 import sys
 from pathlib import Path
@@ -562,25 +598,59 @@ from scripts.builder import Builder  # noqa: E402
 from scripts.cache import CACHE_DIR_NAME  # noqa: E402
 
 
-if __name__ == '__main__':
+# v0.8.2: CLI 견고화. v0.8.1 까지는 raw `'--clean' in sys.argv` 검사라
+# 오타 (`--clena`) 가 경고 없이 일반 빌드로 흘러가는 silent footgun 이
+# 있었다. argparse 로 전환해 (a) `--help`, (b) 미지/오타 인자 즉시 거부
+# (exit 2), (c) run_diagnostics.py 와 같은 idiom 으로 통일. allow_abbrev=
+# False 라 `--clean` 이 `--clean-cache` 의 약어로 잘못 흡수되지 않고 오타도
+# 약어로 통과하지 않는다. 빌드 로직·산출물은 불변 — 유효 인자의 동작은
+# v0.8.1 과 1:1.
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog='build.py',
+        description='siheonlee.com 정적 사이트 빌드 (런타임 PHP 대상).',
+        epilog=('관련 명령:\n'
+                '  python -m unittest discover -s src/tests   # 단위 테스트\n'
+                '  python src/tests/run_diagnostics.py        # 통합 진단'),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        '--clean', action='store_true',
+        help='dist/ 와 .build_cache/ 를 모두 지운 뒤 빌드 (완전 재빌드).')
+    parser.add_argument(
+        '--clean-cache', action='store_true',
+        help='.build_cache/ 만 폐기한 뒤 빌드 (dist/ 는 유지).')
+    parser.add_argument(
+        '--no-cache', action='store_true',
+        help='증분 캐시 lookup/store 비활성 (v0.6.5 동작).')
+    return parser
+
+
+def main(argv=None) -> None:
+    args = _build_arg_parser().parse_args(argv)
     base = Path(__file__).parent
 
     # v0.7.0: --clean 은 dist/ 외에 .build_cache/ 도 함께 지운다 (사용자
     # 결정 — '--clean = 완전 재빌드' 의도).
-    if '--clean' in sys.argv:
+    if args.clean:
         for d in (base / 'dist', base / CACHE_DIR_NAME):
             if d.exists():
                 shutil.rmtree(d)
                 print(f'Cleaned: {d}')
 
-    # v0.7.0: --clean-cache 만 — dist 는 유지하고 캐시만 폐기.
-    if '--clean-cache' in sys.argv:
+    # v0.7.0: --clean-cache 만 — dist 는 유지하고 캐시만 폐기. --clean 과
+    # 함께 주면 .build_cache/ 가 위에서 이미 사라져 여기선 no-op (무해 —
+    # v0.8.1 의 두 독립 if 문과 동일 결과).
+    if args.clean_cache:
         cache_dir = base / CACHE_DIR_NAME
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
             print(f'Cleaned: {cache_dir}')
 
     # v0.7.0: --no-cache — 캐시 lookup/store 비활성. v0.6.5 동작 그대로.
-    enable_cache = '--no-cache' not in sys.argv
+    Builder(base, enable_cache=not args.no_cache).build()
 
-    Builder(base, enable_cache=enable_cache).build()
+
+if __name__ == '__main__':
+    main()

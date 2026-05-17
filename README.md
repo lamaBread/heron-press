@@ -1,4 +1,4 @@
-# siheonlee.com v0.8.1 — 사용설명서
+# siheonlee.com v0.8.2 — 사용설명서
 
 **글마다 폴더 하나**를 만들어 본문·첨부를 관리하고, `python build.py` 한 번으로 사이트를 만드는 **PHP 기반 경량 웹 사이트 생성기**입니다.
 
@@ -12,7 +12,7 @@
 | **글 단위 색인 제어** | 기본 색인 허용. 빼고 싶은 글만 `noindex: true` 한 줄. |
 | **사이트 내 검색** | 클라이언트 JS 0. BM25 + 토크나이저 + 인덱스가 `search.php` 한 파일에 인라인. |
 
-> **v0.8.1 한 줄 요약:** *폴더 구조 정리 (코드 동작·산출물 불변).* 최상위에 `Articles/` · `dist/` · `src/` · `build.py` · `README.md` · `site.yaml` **6 개만** 보이도록, 빌더 일체(`scripts/`·`templates/`·`assets/`·`tests/`)를 `src/` 아래로 이동. `build.py` 가 자기 폴더의 `src/` 를 `sys.path` 에 올려 import 가 그대로 동작. dist 산출물은 v0.8.0 과 byte 동일, `__version__` 은 `'0.7.2'` 그대로. 자세한 내역은 [§ 16](#16-업데이트-로그).
+> **v0.8.2 한 줄 요약:** *코드 건전성 — 버전 디커플링 + CLI 견고화 + per-Builder 리포트.* (1) feed `<generator>` 에서 버전 토큰을 빼 `__version__` 이 dist 에 새는 경로를 영구 제거 — 이후 문서 릴리스는 진짜 byte-동일 (무비용). `__version__` 은 드디어 릴리스를 추종 (`'0.8.2'`). (2) `build.py` 를 argparse 로 — `--help` + 미지/오타 인자 거부 (옛 `--clena` silent footgun 제거). (3) 빌드 리포트를 모듈 전역 → **per-Builder** 로 (동시 빌드 봉쇄 해제 + `build()` 멱등성 결함 1건 수정). **dist 산출물은 v0.8.0 과 `feed.atom`/`feed.rss` 의 `<generator>` 한 줄만 차이** (의도된 1회성 변경, 그 외 783 파일 byte-동일 · 0 missing/extra). 단위 258→266. 자세한 내역은 [§ 16](#16-업데이트-로그).
 
 ## 목차
 
@@ -55,7 +55,7 @@ python build.py --no-cache     # 캐시 비활성
 성공 시 출력 형태 (글/카테고리/소요는 `Articles/` 에 따라 다름):
 
 ```
-빌드 시작 - siheonlee.com v0.8.1 (2026-05-17 14:24:15)
+빌드 시작 - siheonlee.com v0.8.2 (2026-05-18 01:46:51)
 [ 1/16] 설정 로드 (site.yaml / 토크나이저 패리티)
 [ 2/16] 글 폴더 스캔 (Articles/)
    …  (각 단계 [ n/16] 헤더, 무거운 단계는 \r 라이브 카운터)
@@ -117,7 +117,7 @@ cd dist && python -m http.server 8000   # → http://localhost:8000/
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.8.1/        ← 보이는 것은 아래 6 개뿐
+siheonlee.com_v0.8.2/        ← 보이는 것은 아래 6 개뿐
 │
 ├── Articles/                ← ★ 모든 글 (최초엔 참고 자료)
 │   ├── About/                   ← 톱레벨 글 (meta.yaml + content.html + 자산)
@@ -154,7 +154,7 @@ siheonlee.com_v0.8.1/        ← 보이는 것은 아래 6 개뿐
 │   ├── assets/                  ← 사이트 전역 자산 (/assets/ 로 로드)
 │   │   ├── common_template.css / imgslidebox.js / pagination.js
 │   │
-│   └── tests/                   ← 단위 테스트 (258) + run_diagnostics.py (5 항목)
+│   └── tests/                   ← 단위 테스트 (266) + run_diagnostics.py (5 항목)
 │
 ├── build.py                 ← 빌드 진입점 (자기 폴더의 src/ 를 sys.path 에 올림)
 ├── README.md                ← 이 문서
@@ -165,7 +165,9 @@ siheonlee.com_v0.8.1/        ← 보이는 것은 아래 6 개뿐
   .build_cache/     ← 글 단위 증분 캐시 (manifest.json + articles/)
 ```
 
-> **v0.8.1:** 빌더 일체를 `src/` 한 폴더로 옮겨 최상위는 6 개뿐. `build.py` 가 자기 폴더의 `src/` 를 `sys.path` 맨 앞에 올리므로 `import scripts...` 가 그대로 동작. **빌드 동작·산출물은 불변** (dist 는 v0.8.0 과 byte 동일). 아래 [§ 16](#16-업데이트-로그) changelog 의 `scripts/…`·`templates/…` 경로는 도입 시점의 역사 기록 — v0.8.1 부터 실제 위치는 모두 `src/` 접두.
+> **v0.8.1:** 빌더 일체를 `src/` 한 폴더로 옮겨 최상위는 6 개뿐. `build.py` 가 자기 폴더의 `src/` 를 `sys.path` 맨 앞에 올리므로 `import scripts...` 가 그대로 동작. 아래 [§ 16](#16-업데이트-로그) changelog 의 `scripts/…`·`templates/…` 경로는 도입 시점의 역사 기록 — v0.8.1 부터 실제 위치는 모두 `src/` 접두.
+>
+> **v0.8.2:** 코드 건전성 릴리스 (구조 동일). `__version__` 디커플링 + CLI argparse + per-Builder 리포트. dist 산출물은 v0.8.0 과 `feed.atom`/`feed.rss` 의 `<generator>` **한 줄만** 차이 (버전 토큰 1회성 제거 — 의도) 이고 그 외 783 파일 byte-동일. 이후 문서 릴리스는 진짜 byte-동일 (무비용).
 
 > **중요:** `dist/` 안의 파일은 매 빌드마다 덮어씌워집니다. 수정은 `Articles/`·`src/templates/`·`src/assets/`·`site.yaml` 에서 하고 다시 빌드하세요.
 
@@ -637,7 +639,7 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 10. **본문 ↔ 메타데이터 분리 (v0.5.5)** — SEO/OG/피드 카피는 본문이 아니라 author 가 `seo:` 블록에 직접 쓴 값에서만. 본문=독자용, 메타=SERP/소셜용 — 다른 글이어야 함. SSG 는 추측하지 않음. `seo.description` 필수(누락 시 issue, 빌드는 통과). `og_image` 부재 시 본문 추출이 아니라 `site.default_og_image`.
 11. **`template:` 가로지르기 — 허용하되 알린다 (v0.6.4)** — 페이지 종류와 다른 템플릿 지정 가능. 빌더가 못 채우는 placeholder 는 strip + warning (자동 거부도 silent strip 도 아닌, 알림 + author 판정).
 
-**현재 한계 (v0.8.1)** — v0.8.1 은 폴더 정리뿐이라 한계 가감 없음.
+**현재 한계 (v0.8.2)** — v0.8.2 는 코드 건전성 (버전 디커플링 / CLI / per-Builder 리포트) 뿐이라 한계 가감 없음.
 
 | 한계 | 내용 |
 |---|---|
@@ -649,11 +651,13 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 ## 16. 업데이트 로그
 
 > changelog 본문의 `scripts/…`·`templates/…`·`tests/…` 경로는 도입 시점 역사 기록. v0.8.1 부터 실제 위치는 모두 `src/` 접두 (§ 3).
-> 코드 정합성 검증 관례: 문서 전용 릴리스는 정본 `Articles/` 클린 재빌드 후 `dist/` sha256 이 직전 코드 복사본과 동일함을 확인 (단위 258 / 진단 5/5 승계).
+> 코드 정합성 검증 관례: **문서 전용 릴리스** 는 정본 `Articles/` 클린 재빌드 후 `dist/` sha256 이 직전 코드 복사본과 동일함을 확인 (단위 266 / 진단 5/5 승계). **코드 릴리스** 는 결정성(2회 빌드 동일) + v0.8.0 기준 *열거된* diff 로 검증.
+> v0.8.2 가 버전 디커플링 분기점 — 이전엔 `__version__` bump 이 feed `<generator>` 를 통해 dist 를 바꿔 문서 릴리스가 `__version__` 을 동결해야 했으나, v0.8.2 부터 generator 가 버전-free 라 `__version__` 의 dist 영향이 0. 따라서 v0.8.2 이후 문서 릴리스는 진짜 byte-동일 (무비용).
 
 | 버전 | 날짜 | 요약 |
 |---|---|---|
-| **v0.8.1** | 2026-05-17 | 폴더 구조 정리 — 빌더 일체를 `src/` 아래로, 최상위 6 항목. 코드 동작·산출물 불변 (dist v0.8.0 과 byte 동일, `__version__` 0.7.2). |
+| **v0.8.2** | 2026-05-18 | 코드 건전성 — (1) `__version__` 디커플링: feed `<generator>` 에서 버전 토큰 제거 → `__version__` 의 dist 영향 0, `'0.7.2'`→`'0.8.2'`. (2) `build.py` argparse: `--help` + 미지/오타 인자 거부. (3) 빌드 리포트 모듈 전역 → per-Builder + `build()` 멱등성 결함 1건 수정. dist 는 v0.8.0 과 `feed.atom`/`feed.rss` generator 한 줄만 차이 (의도). 단위 258→266. |
+| v0.8.1 | 2026-05-17 | 폴더 구조 정리 — 빌더 일체를 `src/` 아래로, 최상위 6 항목. 코드 동작·산출물 불변 (dist v0.8.0 과 byte 동일, `__version__` 0.7.2). |
 | v0.8.0 | 2026-05-17 | README 코드 정합성 정정 (문서 결함 5건: §5 카테고리 필드 / §8 서브 URL 행 / §10 sitemap 회고 / 빌드 출력 예시 / 버전 표기). 코드·dist 무변경. |
 | v0.7.2 | 2026-05-17 | 16 단계 진행 헤더 + 무거운 루프 라이브 카운터 + `build-report.md` 영속 리포트. 산출 로직 무변경. |
 | v0.7.1 | 2026-05-16 | 안정화 — 파이프라인 docstring/§2 표/본문 폴백 잔존/§ cross-ref 정정. 코드 동작 무변경. |
@@ -686,4 +690,4 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 
 ---
 
-*siheonlee.com v0.8.1 — 빌드 Python + Pillow, 런타임 PHP. 검색 Okapi BM25 메타데이터 3-필드 인라인 인덱스, 이미지 WebP 다중 해상도 자동, 글/홈/카테고리 통일 SEO 메타 + 외부 CSS·`template:` 지원. v0.8.1 은 폴더 구조 정리 (코드 동작·산출물 불변). (2026-05-17)*
+*siheonlee.com v0.8.2 — 빌드 Python + Pillow, 런타임 PHP. 검색 Okapi BM25 메타데이터 3-필드 인라인 인덱스, 이미지 WebP 다중 해상도 자동, 글/홈/카테고리 통일 SEO 메타 + 외부 CSS·`template:` 지원. v0.8.2 는 코드 건전성 (버전 디커플링 + CLI argparse + per-Builder 리포트 — dist 는 v0.8.0 과 generator 한 줄만 차이). (2026-05-18)*

@@ -1,5 +1,24 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.8.2 변경 — per-Builder 리포트 + build() 멱등성 + 버전 디커플링:
+  - **모듈 전역 `_report` 폐지 → `self.report`** — scripts/report.py 가
+    v0.5.5 부터 docstring 으로 명세해 온 "Builder 가 self.report 보유,
+    self._issue / self._warning 로 라우팅" 을 실제 구현. v0.6.5~v0.8.1 은
+    모듈 전역 `_report` + build() 진입 reset 이라 동시 빌드가 봉쇄됐다.
+    모듈 함수 warn()/issue()/report()/reset_report() 제거. 모듈 레벨
+    `_render_template` 은 self 가 없어 `report=` 인자로 받는다.
+  - **`build()` 멱등성 결함 수정** — v0.6.5/v0.7.2 가 _report/_console 만
+    리셋했고 데이터 컬렉션 (articles/slug_to_article/categories/...) 은
+    __init__ 에서만 초기화돼, 같은 인스턴스로 두 번째 build() 시
+    `_validate` 가 'slug 중복' 을 잘못 보고했다 (옛 테스트가 매번 새
+    인스턴스를 써서 가려짐 — v0.8.2 의 재사용 테스트가 노출). build()
+    진입 시 누적 상태 전부 초기화. 캐시 디스크 매니페스트는 빌드 간
+    의도적 영속이라 범위 밖.
+  - **버전 디커플링 (B1)** — `_build_feeds` 의 generator 문자열에서
+    `v{__version__}` 토큰 제거. `__version__` 의 dist 영향이 영구히 0
+    (이전엔 이 한 줄이 유일 누수). dist 는 v0.8.0 과 generator 한 줄만
+    차이 (의도). 단위 258→266, 진단 5/5.
+
 v0.7.2 변경 — 빌드 진행 표시 + 빌드 리포트 문서화:
   - **진행 헬퍼 3종 (`_emit` / `_live` / `_step`)** — `_emit` 은 마일스톤
     한 줄을 터미널에 출력하면서 `self._console` 에 누적 (빌드 종료 시
@@ -479,48 +498,24 @@ from . import __version__ as _SITE_VERSION
 # ════════════════════════════════════════════════════════════════
 # Build / Error helpers
 #
-# v0.5.5: 모든 경고/검증 실패는 모듈 전역 BuildReport 로 라우팅된다.
-# 빌드 종료 시 self.report.render() 가 정렬된 리포트를 stderr 에 표시.
+# v0.8.2: 리포트는 **per-Builder 인스턴스** 다 (모듈 전역 `_report` 폐지).
+# scripts/report.py 의 docstring 이 v0.5.5 부터 명세해 온 설계 —
+# "Builder 가 self.report 를 보유, self._issue / self._warning 로 라우팅" —
+# 가 실제로 구현된 시점이 v0.8.2. v0.6.5 ~ v0.8.1 은 모듈 전역 `_report`
+# + build() 진입 시 자동 reset() 으로 누적을 가렸으나, 전역 상태라 동시
+# 빌드(멀티스레드/프로세스)가 원천 봉쇄돼 있었다. v0.8.2 부터:
 #
-#   - warn(msg)               → 사이트 전역 'warning' (산출물 정상, 조언).
-#   - issue(scope, target, …) → 글/카테고리 단위 'issue' (산출물 일부 누락).
-#                                호출자가 적절히 진행 (글 skip 등) 해야 함.
-#   - abort(msg)              → 시스템 결함. 즉시 sys.exit(1).
+#   - Builder.__init__ 가 self.report = BuildReport() 보유.
+#   - self._issue(scope, target, …) → 글/카테고리 단위 'issue'.
+#   - self._warning(scope, target, …) → 'warning' (산출물 정상, 조언).
+#   - build() 진입 시 self.report = BuildReport() (인스턴스 재사용 시
+#     누적 방지 — v0.6.5 자동 reset 과 같은 의도, 이제 인스턴스 단위).
+#   - abort(msg) (report.py) → 시스템 결함. 즉시 sys.exit(1) (전역 무관).
 #
-# die() 는 더 이상 모듈 전역에 존재하지 않는다. abort() 로 의도가 명확한
-# 호출만 시스템 결함 경로로 가고, 나머지는 issue() 로 분류된다.
+# 모듈 레벨 `_render_template` 은 self 가 없으므로 report 를 인자로 받는다
+# (호출자가 report=self.report 전달). die()/warn()/issue()/reset_report()
+# 모듈 전역 함수는 v0.8.2 에서 제거 — 두 빌드가 상태를 공유하지 않는다.
 # ════════════════════════════════════════════════════════════════
-
-_report = BuildReport()
-
-
-def warn(msg: str):
-    """v0.5.5: 사이트 전역 조언으로 BuildReport 에 기록 (산출물 정상)."""
-    _report.warning('site', '', msg)
-
-
-def issue(scope: str, target: str, msg: str, location=None):
-    """v0.5.5: 글/카테고리 단위 보완 항목으로 BuildReport 에 기록.
-
-    호출자는 issue() 후 산출물에서 해당 글/카테고리를 적절히 처리해야 한다
-    (글 단위 skip, 폴백 값 사용 등). issue() 자체는 빌드 흐름을 끊지 않는다.
-    """
-    _report.issue(scope, target, msg, location)
-
-
-def report() -> BuildReport:
-    """현재 빌드 세션의 BuildReport 인스턴스 접근자."""
-    return _report
-
-
-def warning_count() -> int:
-    return _report.warning_count()
-
-
-def reset_report():
-    """단위 테스트 등에서 빌드를 여러 번 돌릴 때 리포트를 초기화."""
-    global _report
-    _report = BuildReport()
 
 
 def _copy_if_newer(src: Path, dst: Path):
@@ -552,7 +547,7 @@ _UNFILLED_PLACEHOLDER_RE = re.compile(r'\{\{([A-Z_][A-Z0-9_]*)\}\}')
 
 
 def _render_template(template: str, vars: dict, *,
-                     content_vars=None, warn_context=None) -> str:
+                     content_vars=None, warn_context=None, report=None) -> str:
     """Substitute `{{KEY}}` placeholders with `vars[KEY]`.
 
     v0.6.4: 치환 후 남은 `{{XXX}}` 패턴을 빈 문자열로 strip + (warn_context 가
@@ -587,10 +582,13 @@ def _render_template(template: str, vars: dict, *,
         name for name in _UNFILLED_PLACEHOLDER_RE.findall(template)
         if name not in content_vars
     })
-    if leftovers and warn_context is not None:
+    # v0.8.2: report 는 per-Builder BuildReport (모듈 전역 폐지). 호출자가
+    # report=self.report 로 전달. warn_context 가 주어졌는데 report 가
+    # None 이면 (이론상 없음) leftover 경고만 생략 — strip 은 그대로 수행.
+    if leftovers and warn_context is not None and report is not None:
         scope, target, location = warn_context
         for name in leftovers:
-            _report.warning(
+            report.warning(
                 scope, target,
                 f"템플릿에 채우지 못한 placeholder 가 발견되어 빈 문자열로 "
                 f"strip 되었습니다: {{{{{name}}}}}.",
@@ -627,6 +625,12 @@ class Builder:
         self.assets_dir = self.src_dir / 'assets'
         self.templates_dir = self.src_dir / 'templates'
         self.dist = base_dir / 'dist'
+
+        # v0.8.2: per-Builder 빌드 리포트 (모듈 전역 폐지). build() 진입 시
+        # 새 BuildReport 로 교체되므로 한 인스턴스를 재사용해 build() 를
+        # 여러 번 불러도 issue/warning 이 누적되지 않는다. 두 Builder 가
+        # 상태를 공유하지 않아 동시 빌드(멀티스레드/프로세스)가 가능하다.
+        self.report: BuildReport = BuildReport()
 
         self.site: SiteConfig = None
         self.articles: list = []
@@ -665,6 +669,29 @@ class Builder:
             self._stdout_isatty: bool = bool(sys.stdout.isatty())
         except Exception:
             self._stdout_isatty = False
+
+    # ── 빌드 리포트 라우팅 (v0.8.2: per-Builder) ───────────────
+    #
+    # scripts/report.py 의 docstring 이 v0.5.5 부터 명세한 self._issue /
+    # self._warning 라우팅을 실제로 구현. 옛 모듈 전역 issue()/warn() 의
+    # 1:1 대체 — 시그니처·의미 동일, 대상만 self.report.
+
+    def _issue(self, scope: str, target: str, msg: str, location=None):
+        """글/카테고리 단위 보완 항목으로 self.report 에 기록.
+
+        호출자는 _issue() 후 산출물에서 해당 글/카테고리를 적절히 처리해야
+        한다 (글 단위 skip, 폴백 값 사용 등). _issue() 자체는 빌드 흐름을
+        끊지 않는다 (콘텐츠 결함 fail-soft — 시스템 결함만 abort()).
+        """
+        self.report.issue(scope, target, msg, location)
+
+    def _warning(self, scope: str, target: str, msg: str, location=None):
+        """산출물은 정상이지만 살펴볼 사항으로 self.report 에 기록.
+
+        옛 모듈 전역 warn(msg) 의 사이트 전역 조언은
+        self._warning('site', '', msg) 로 표현한다 (scope='site').
+        """
+        self.report.warning(scope, target, msg, location)
 
     # ── 진행 표시 / 콘솔 로그 (v0.7.2) ─────────────────────────
     #
@@ -776,21 +803,24 @@ class Builder:
         # 못한 채 무시될 수 있으므로 한 번 경고 — 마이그레이션 가이드 역할.
         for legacy_key in ('home_per_page', 'home_excludes_categories', 'home_sort'):
             if legacy_key in raw:
-                warn(f"site.yaml: '{legacy_key}' 는 v0.4.6 부터 Articles/meta.yaml "
+                self._warning('site', '', f"site.yaml: '{legacy_key}' 는 v0.4.6 부터 Articles/meta.yaml "
                      f"로 이전되었습니다. site.yaml 에서 제거하고 Articles/meta.yaml "
                      f"의 해당 필드를 사용하세요.")
 
         # 토크나이저 패리티 검증 (PHP 없으면 워닝만)
         # v0.5.5: 패리티 검증 실패는 시스템 결함 (Py/PHP 토크나이저 동등성
         # 위배 — 검색 인덱스 신뢰도에 직결) 이라 abort 경로로 보낸다.
+        # v0.8.2: warn_fn 은 이제 per-Builder report 로 라우팅 (옛 모듈 전역
+        # warn(msg) == _report.warning('site','',msg) 의 1:1 어댑터).
         run_parity_test(self.templates_dir, php_bin='php',
-                        warn_fn=warn, die_fn=abort)
+                        warn_fn=lambda m: self._warning('site', '', m),
+                        die_fn=abort)
 
         # v0.5.1: 이미지 최적화가 켜져 있는데 Pillow 가 없으면 워닝 (die 가 아닌
         # 워닝 — 이미지가 한 장도 없는 사이트는 빌드가 통과해야 하므로 _sync_assets
         # 단계에서 실제 raster 이미지를 만났을 때 die 한다).
         if self.site.images.enabled and not _HAS_PIL:
-            warn('이미지 최적화가 켜져 있지만 Pillow 가 설치되지 않았습니다. '
+            self._warning('site', '', '이미지 최적화가 켜져 있지만 Pillow 가 설치되지 않았습니다. '
                  'raster 이미지를 만나면 빌드가 중단됩니다. '
                  "pip install Pillow 로 설치하거나 site.yaml 의 "
                  "images.enabled 를 false 로 두세요.")
@@ -894,7 +924,7 @@ class Builder:
 
             if content_md.exists() and content_html.exists():
                 # 어느 쪽을 우선할지 결정 불가 → 글을 건너뛰고 리포트 기록.
-                issue(
+                self._issue(
                     'article', '/'.join(category_path + [article_folder]),
                     'content.md 와 content.html 이 둘 다 존재합니다 '
                     '(한 글에 하나만 두세요).',
@@ -932,7 +962,7 @@ class Builder:
             if (not rel_norm
                     or rel_norm.startswith('/')
                     or '..' in rel_norm.split('/')):
-                issue(
+                self._issue(
                     scope, target,
                     f"meta.yaml: styles 의 CSS 파일 경로는 페이지 폴더 안의 "
                     f"상대 경로여야 합니다 (받은 값: {rel!r}) — 이 항목 무시.",
@@ -941,7 +971,7 @@ class Builder:
                 continue
             css_path = source_dir / rel_norm
             if not css_path.is_file():
-                issue(
+                self._issue(
                     scope, target,
                     f"meta.yaml: styles 에 명시한 CSS 파일이 페이지 폴더에 "
                     f"없습니다: {rel!r} — link 출력 안 함.",
@@ -968,7 +998,7 @@ class Builder:
         if raw_template is None:
             return (None, None)
         if not isinstance(raw_template, str):
-            issue(
+            self._issue(
                 scope, target,
                 f"meta.yaml: 'template' 은 문자열이어야 합니다 "
                 f"(받은 값: {raw_template!r}) — 기본 템플릿으로 폴백.",
@@ -977,7 +1007,7 @@ class Builder:
             return (None, None)
         ref = raw_template.strip()
         if not ref:
-            issue(
+            self._issue(
                 scope, target,
                 "meta.yaml: 'template' 이 빈 문자열입니다 — "
                 "기본 템플릿으로 폴백.",
@@ -990,7 +1020,7 @@ class Builder:
             if (not inner
                     or inner.startswith('/')
                     or '..' in inner.split('/')):
-                issue(
+                self._issue(
                     scope, target,
                     f"meta.yaml: 'template' 의 페이지 폴더 상대 경로가 "
                     f"유효하지 않습니다 ({ref!r}) — 기본 템플릿으로 폴백.",
@@ -999,7 +1029,7 @@ class Builder:
                 return (None, None)
             return (norm, 'page_folder')
         if norm.startswith('/') or '..' in norm.split('/'):
-            issue(
+            self._issue(
                 scope, target,
                 f"meta.yaml: 'template' 의 경로가 유효하지 않습니다 "
                 f"({ref!r}) — 기본 템플릿으로 폴백.",
@@ -1030,7 +1060,7 @@ class Builder:
             tpl_path = self.templates_dir / norm
             origin_label = 'templates/'
         if not tpl_path.is_file():
-            issue(
+            self._issue(
                 scope, target,
                 f"meta.yaml: 'template' 에 명시한 파일이 {origin_label}에 "
                 f"없습니다: {meta_template!r} — 기본 {default_name} 로 폴백.",
@@ -1098,7 +1128,7 @@ class Builder:
             try:
                 raw = yaml_load(meta_file.read_text(encoding='utf-8'))
             except Exception as e:
-                issue(
+                self._issue(
                     'article', article_target,
                     f'meta.yaml 파싱 오류 — 글이 빌드에서 제외됨: {e}',
                     meta_file,
@@ -1119,7 +1149,7 @@ class Builder:
             if not date_str:
                 missing.append('date')
             if missing:
-                issue(
+                self._issue(
                     'article', article_target,
                     f"meta.yaml 의 필수 필드가 비어있습니다 "
                     f"— 글이 빌드에서 제외됨: {', '.join(missing)}",
@@ -1137,7 +1167,7 @@ class Builder:
 
             seo_raw = raw.get('seo') or {}
             if not isinstance(seo_raw, dict):
-                issue(
+                self._issue(
                     'article', slug,
                     f"meta.yaml: 'seo' 는 매핑이어야 합니다 "
                     f"(받은 값: {seo_raw!r}) — 빈 seo 로 폴백.",
@@ -1186,7 +1216,7 @@ class Builder:
                     seen.add(s)
                     tags.append(s)
             else:
-                issue(
+                self._issue(
                     'article', slug,
                     f"meta.yaml: 'tags' 는 리스트여야 합니다 "
                     f"(받은 값: {tags_raw!r}) — 빈 리스트로 폴백.",
@@ -1202,7 +1232,7 @@ class Builder:
                 try:
                     nav_priority = int(nav_priority_raw)
                 except (TypeError, ValueError):
-                    issue(
+                    self._issue(
                         'article', slug,
                         f"meta.yaml: 'nav_priority' 는 정수여야 합니다 "
                         f"(받은 값: {nav_priority_raw!r}) — 0 으로 폴백.",
@@ -1271,7 +1301,7 @@ class Builder:
             keep_this = True
 
             if not self.SLUG_RE.match(m.slug):
-                issue(
+                self._issue(
                     'article', m.slug,
                     f'slug 정규식 불일치: {m.slug!r} — 글이 빌드에서 제외됨.',
                     meta_path,
@@ -1279,7 +1309,7 @@ class Builder:
                 keep_this = False
 
             if m.slug in self.site.reserved_slugs:
-                issue(
+                self._issue(
                     'article', m.slug,
                     f'slug 예약어: {m.slug!r} — 글이 빌드에서 제외됨.',
                     meta_path,
@@ -1288,7 +1318,7 @@ class Builder:
 
             if m.slug in seen_slugs:
                 other = seen_slugs[m.slug]
-                issue(
+                self._issue(
                     'article', m.slug,
                     f"slug 중복: {m.slug!r} — 뒤늦게 발견된 쪽의 글이 "
                     f"빌드에서 제외됨 (먼저 발견된 글: {other}).",
@@ -1299,7 +1329,7 @@ class Builder:
                 seen_slugs[m.slug] = article.source_dir
 
             if not self.DATE_RE.match(m.date):
-                issue(
+                self._issue(
                     'article', m.slug,
                     f'date 형식 오류: {m.date!r} (YYYY-MM-DD 형식 필요) '
                     f'— 글이 빌드에서 제외됨.',
@@ -1309,7 +1339,7 @@ class Builder:
 
             if m.updated:
                 if not self.DATE_RE.match(m.updated):
-                    issue(
+                    self._issue(
                         'article', m.slug,
                         f'updated 형식 오류: {m.updated!r} — updated 를 '
                         f'무시하고 진행.',
@@ -1317,7 +1347,7 @@ class Builder:
                     )
                     m.updated = None
                 elif m.updated < m.date:
-                    issue(
+                    self._issue(
                         'article', m.slug,
                         f'updated ({m.updated}) 가 date ({m.date}) 보다 '
                         f'앞섭니다 — 그대로 진행하지만 의도 확인 권장.',
@@ -1348,7 +1378,7 @@ class Builder:
         for article in self.articles:
             if article.meta.slug in cat_slugs:
                 cat = cat_slugs[article.meta.slug]
-                issue(
+                self._issue(
                     'article', article.meta.slug,
                     f"slug 충돌 (글 ↔ 카테고리): {article.meta.slug!r} — "
                     f"카테고리 폴더 Articles/{'/'.join(cat.path)} 와 같은 "
@@ -1363,7 +1393,7 @@ class Builder:
         for cat in self.categories.values():
             all_articles = self._collect_articles(cat)
             if not all_articles:
-                _report.warning(
+                self._warning(
                     'category', '/'.join(cat.path),
                     '이 카테고리에 글이 하나도 없습니다 (빈 카테고리).',
                     self.articles_dir.joinpath(*cat.path),
@@ -1377,7 +1407,7 @@ class Builder:
                             article.content_file.stat().st_mtime
                         ).isoformat()
                         if mtime > article.meta.updated:
-                            _report.warning(
+                            self._warning(
                                 'article', article.meta.slug,
                                 f'meta.yaml 의 updated ({article.meta.updated}) '
                                 f'가 content 파일의 수정 시각 ({mtime}) 보다 '
@@ -1409,14 +1439,14 @@ class Builder:
             if not s:
                 # 빈 카테고리 slug — 빌드는 계속 (해당 카테고리는 산출물에서
                 # 자연스럽게 누락). 작성자가 폴더명을 보완해야 함.
-                issue(
+                self._issue(
                     'category', '/'.join(full_path_for_warn),
                     f'카테고리 폴더명이 빈 slug 로 변환됩니다: {folder_name!r} '
                     f'— 카테고리가 빌드되지 않을 수 있습니다.',
                     self.articles_dir.joinpath(*full_path_for_warn),
                 )
             if has_non_ascii(folder_name) and folder_name not in warned_folders:
-                _report.warning(
+                self._warning(
                     'category', '/'.join(full_path_for_warn),
                     f"URL slug 에 비ASCII 문자 포함: '{folder_name}' → '{s}'. "
                     f"빌드는 정상 진행되었으나, URL 가독성/공유성을 위해 "
@@ -1501,7 +1531,7 @@ class Builder:
         try:
             raw = yaml_load(meta_file.read_text(encoding='utf-8'))
         except Exception as e:
-            issue(
+            self._issue(
                 scope, target,
                 f'meta.yaml 파싱 오류 — 기본 CategoryMeta 로 폴백: {e}',
                 meta_file,
@@ -1535,7 +1565,7 @@ class Builder:
             try:
                 priority = int(priority_raw)
             except (TypeError, ValueError):
-                issue(
+                self._issue(
                     scope, target,
                     f"meta.yaml: 'priority' 는 정수여야 합니다 "
                     f"(받은 값: {priority_raw!r}) — 0 으로 폴백.",
@@ -1551,7 +1581,7 @@ class Builder:
         elif isinstance(excludes_raw, list):
             excludes = [str(x) for x in excludes_raw]
         else:
-            issue(
+            self._issue(
                 scope, target,
                 f"meta.yaml: 'excludes_categories' 는 리스트여야 합니다 "
                 f"(받은 값: {excludes_raw!r}) — 빈 리스트로 폴백.",
@@ -1566,7 +1596,7 @@ class Builder:
         # v0.5.4: seo (글의 SeoMeta 와 동일 스키마).
         seo_raw = raw.get('seo') or {}
         if not isinstance(seo_raw, dict):
-            issue(
+            self._issue(
                 scope, target,
                 f"meta.yaml: 'seo' 는 매핑이어야 합니다 "
                 f"(받은 값: {seo_raw!r}) — 빈 seo 로 폴백.",
@@ -1601,7 +1631,7 @@ class Builder:
             try:
                 nav_priority = int(nav_priority_raw)
             except (TypeError, ValueError):
-                issue(
+                self._issue(
                     scope, target,
                     f"meta.yaml: 'nav_priority' 는 정수여야 합니다 "
                     f"(받은 값: {nav_priority_raw!r}) — 0 으로 폴백.",
@@ -1757,7 +1787,7 @@ class Builder:
         """
         desc_val = seo.description
         if desc_val is None:
-            issue(
+            self._issue(
                 page_kind, slug,
                 "meta.yaml: 'seo.description' 필드가 없습니다 "
                 "— 외부 노출용 한 줄 설명을 작성해주세요. "
@@ -1766,7 +1796,7 @@ class Builder:
                 location,
             )
         elif desc_val == '':
-            issue(
+            self._issue(
                 page_kind, slug,
                 "meta.yaml: 'seo.description' 이 빈 문자열입니다 "
                 "— 외부 노출용 한 줄 설명을 작성해주세요. "
@@ -1869,7 +1899,7 @@ class Builder:
             self._live(f'  글 {_i}/{_n}  {m.slug}')
 
             if not content_path or not content_path.exists():
-                issue(
+                self._issue(
                     'article', m.slug,
                     'content 파일을 찾을 수 없어 글을 빌드하지 않습니다.',
                     article.source_dir,
@@ -1892,9 +1922,9 @@ class Builder:
                     hit = self.cache.lookup(m.slug, article_hash)
                     if hit is not None:
                         for it in hit.issues:
-                            replay_issue(_report, it)
+                            replay_issue(self.report, it)
                         for wn in hit.warnings:
-                            replay_warning(_report, wn)
+                            replay_warning(self.report, wn)
                         self.rendered_bodies[m.slug] = hit.body_plain
                         self.article_render_meta[m.slug] = {
                             'thumb': hit.thumb,
@@ -1910,7 +1940,7 @@ class Builder:
 
             # 캐시 miss — 평소대로 렌더한 뒤 cache.store() 로 기록.
             self._cache_misses += 1
-            article_report_offset = len(_report.entries)
+            article_report_offset = len(self.report.entries)
 
             content_text = content_path.read_text(encoding='utf-8')
 
@@ -1936,7 +1966,7 @@ class Builder:
             #   - 본문 폴백 없음. rr.first_paragraph / rr.first_image 참조 제거.
             desc_val = m.seo.description
             if desc_val is None:
-                issue(
+                self._issue(
                     'article', m.slug,
                     "meta.yaml: 'seo.description' 필드가 없습니다 "
                     "— 외부 노출용 한 줄 설명을 작성해주세요. "
@@ -1946,7 +1976,7 @@ class Builder:
                 )
                 summary = ''
             elif desc_val == '':
-                issue(
+                self._issue(
                     'article', m.slug,
                     "meta.yaml: 'seo.description' 이 빈 문자열입니다 "
                     "— 외부 노출용 한 줄 설명을 작성해주세요. "
@@ -1996,7 +2026,7 @@ class Builder:
                     for url_match in re.finditer(pattern, rr.html):
                         ref = url_match.group(1)
                         if '/_' in ref or ref.startswith('_'):
-                            _report.warning(
+                            self._warning(
                                 'article', m.slug,
                                 f'본문이 빌드에서 제외된 자산을 참조: {ref}',
                                 article.source_dir,
@@ -2080,6 +2110,7 @@ class Builder:
                 content_vars={'BODY'},
                 warn_context=('article', m.slug,
                               article.source_dir / 'meta.yaml'),
+                report=self.report,
             )
 
             ext = 'php' if has_live_php(page_html) else 'html'
@@ -2089,11 +2120,11 @@ class Builder:
             out_file = out_dir / f'index.{ext}'
             out_file.write_text(page_html, encoding='utf-8')
 
-            # v0.7.0: 캐시 store — 이번 글 렌더 중 _report 에 추가된 항목 중
-            # scope='article' AND target=slug 인 것만 캐시 기록 (다음 빌드의
-            # hit 에서 replay 됨).
+            # v0.7.0: 캐시 store — 이번 글 렌더 중 self.report 에 추가된 항목
+            # 중 scope='article' AND target=slug 인 것만 캐시 기록 (다음
+            # 빌드의 hit 에서 replay 됨). v0.8.2: per-Builder report.
             if self.cache.enabled and article_hash is not None:
-                new_entries = _report.entries[article_report_offset:]
+                new_entries = self.report.entries[article_report_offset:]
                 cache_issues = [
                     issue_payload(e.scope, e.target, e.message, e.location)
                     for e in new_entries
@@ -2218,7 +2249,7 @@ class Builder:
             # 인코딩 실패 — 폴백으로 원본 복사. 워닝은 BuildReport 로 라우팅.
             # 산출물 자체는 정상 (원본이 그대로 dist 에 들어감) → 'warning' 분류.
             if err:
-                _report.warning('site', '', err, location=src_file)
+                self._warning('site', '', err, location=src_file)
             _copy_if_newer(src_file, dst_file)
             return
 
@@ -2594,6 +2625,7 @@ class Builder:
             tpl_local, vars_,
             content_vars={'SUBCATEGORY_SECTIONS'},
             warn_context=('category', '/'.join(cat.slug_path), cat_meta_file),
+            report=self.report,
         )
 
         out_dir = self.dist.joinpath(*cat.slug_path)
@@ -2711,6 +2743,7 @@ class Builder:
             tpl_local, vars_,
             content_vars={'ARTICLE_LIST'},
             warn_context=('home', '', home_meta_file),
+            report=self.report,
         )
         self.dist.mkdir(parents=True, exist_ok=True)
         (self.dist / 'index.html').write_text(page_html, encoding='utf-8')
@@ -2798,7 +2831,7 @@ class Builder:
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
         }
-        page_html = _render_template(tpl, vars_)
+        page_html = _render_template(tpl, vars_, report=self.report)
         self.dist.mkdir(parents=True, exist_ok=True)
         (self.dist / '404.html').write_text(page_html, encoding='utf-8')
 
@@ -2840,7 +2873,16 @@ class Builder:
                 return article.category_path[0]
             return None
 
-        generator = f'siheonlee.com v{_SITE_VERSION} — github.com/siheonlee'
+        # v0.8.2: 버전 디커플링 (B1). v0.8.1 까지 이 한 줄이 `__version__` 이
+        # dist 로 새는 유일한 경로였다 — feed.atom/feed.rss 의 <generator>.
+        # 그 때문에 문서·구조 전용 릴리스 (v0.7.2 → v0.8.0 → v0.8.1) 는
+        # `__version__` 을 '0.7.2' 에 동결해야 byte-동일 검증이 성립했다.
+        # generator 문자열에서 버전 토큰을 제거해 `__version__` 의 dist 영향을
+        # 영구히 0 으로 만든다. 이후 `__version__` 은 cache global_hash /
+        # 콘솔 / build-report.md 전용 (모두 dist 밖) 이고, 릴리스 버전을
+        # 자유롭게 추종할 수 있다. 귀속(attribution) 은 그대로 유지.
+        # (Atom RFC 4287 / RSS 2.0 모두 <generator> 는 optional — 스펙 유효.)
+        generator = 'siheonlee.com — github.com/siheonlee'
         doc = build_feed_document(
             articles=self.articles,
             site=self.site,
@@ -2940,7 +2982,7 @@ class Builder:
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
         }
-        page = _render_template(tpl, vars_)
+        page = _render_template(tpl, vars_, report=self.report)
         (self.dist / 'search.php').write_text(page, encoding='utf-8')
 
     _PHP_OPEN_RE = re.compile(r'^\s*<\?php\s*\n')
@@ -3063,12 +3105,36 @@ class Builder:
         if not self.cache.enabled:
             self._emit('  (증분 캐시 비활성 - --no-cache)')
 
-        # v0.6.5: 한 프로세스에서 Builder().build() 가 여러 번 호출돼도
-        # _report 가 누적되지 않도록 빌드 시작 시 자동 초기화. v0.6.4 까지는
-        # 호출자가 명시적으로 reset_report() 를 호출해야 했고 (tests/
-        # run_diagnostics.py 의 결정성 섹션처럼) 그렇지 않으면 issue/warning
-        # 카운트가 빌드마다 누적되어 리포트에 중복 항목으로 나타났다.
-        reset_report()
+        # v0.8.2: per-Builder 리포트로 전환 (모듈 전역 폐지). 한 인스턴스를
+        # 재사용해 build() 를 여러 번 호출해도 issue/warning 이 누적되지
+        # 않도록 빌드 시작 시 새 BuildReport 로 교체. v0.6.5 ~ v0.8.1 의
+        # 모듈 전역 reset_report() 와 같은 의도지만, 이제 인스턴스 단위라
+        # 두 Builder 가 상태를 공유하지 않는다 (동시 빌드 가능). v0.6.4
+        # 까지는 호출자가 명시적으로 reset 을 호출해야 했다 (tests/
+        # run_diagnostics.py 의 결정성 섹션처럼).
+        self.report = BuildReport()
+
+        # v0.8.2: build() 멱등성 — 빌드 누적 상태 전부 초기화. v0.6.5 가
+        # _report 를, v0.7.2 가 _console 을 build() 진입 시 리셋하면서
+        # "한 인스턴스를 재사용해 build() 를 여러 번 불러도 누적되지
+        # 않는다" 는 의도를 세웠지만, 데이터 컬렉션 (articles /
+        # slug_to_article / categories / ...) 은 __init__ 에서만 초기화돼
+        # 재사용 시 누적됐다. 그래서 같은 인스턴스로 두 번째 build() 를
+        # 하면 _validate 가 같은 slug 를 'slug 중복' 으로 잘못 보고하는
+        # 잠복 결함이 있었다 (옛 테스트가 매번 새 Builder 를 써서 가려짐 —
+        # v0.8.2 의 BuildReportResetTests.test_same_instance_reuse_… 가
+        # 노출). 캐시(self.cache)의 디스크 매니페스트는 빌드 간 의도적으로
+        # 영속하므로 여기서 리셋하지 않는다 (별도 설계 — 범위 밖).
+        self.site = None
+        self.articles = []
+        self.slug_to_article = {}
+        self.categories = {}
+        self.rendered_bodies = {}
+        self.home_meta = CategoryMeta()
+        self.image_variants = {}
+        self.article_render_meta = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
 
         # v0.5.1: 이미지 최적화 도입으로 asset 단계가 article render 보다
         # 먼저 와야 한다. asset 단계가 raster 이미지를 webp 변종으로 만들고
@@ -3117,8 +3183,8 @@ class Builder:
 
         art_count = len(self.articles)
         cat_count = len(self.categories)
-        issue_count = _report.issue_count()
-        warn_count = _report.warning_count()
+        issue_count = self.report.issue_count()
+        warn_count = self.report.warning_count()
         elapsed = (datetime.datetime.now() - self._build_started).total_seconds()
         self._emit()
         self._emit(
@@ -3137,7 +3203,7 @@ class Builder:
 
         # v0.5.5: 빌드 종료 시 일원화 리포트 출력. meta.yaml 의 필드 부족 /
         # 빈 문자열 / 형식 오류 등 모든 콘텐츠 결함이 여기 모아진다.
-        _report.render()
+        self.report.render()
 
         # v0.7.2: 터미널에만 뜨던 안내를 파일로도 — build.py 가 있는 폴더
         # (self.base) 에 build-report.md 를 생성. 진행 트랜스크립트 + 요약 +
@@ -3178,8 +3244,8 @@ class Builder:
         lines.append(f'- **빌드 시각**: {finished}')
         lines.append(f'- **소요**: {elapsed:.1f}s')
         lines.append(f'- **결과**: {art_count} 글 · {cat_count} 카테고리')
-        lines.append(f'- **보완 필요**: {_report.issue_count()}건 · '
-                     f'**살펴볼 사항**: {_report.warning_count()}건')
+        lines.append(f'- **보완 필요**: {self.report.issue_count()}건 · '
+                     f'**살펴볼 사항**: {self.report.warning_count()}건')
         lines.append(f'- **증분 캐시**: {cache_line}')
         lines.append('')
         lines.append('## 빌드 진행')
@@ -3188,7 +3254,7 @@ class Builder:
         lines.extend(self._console)
         lines.append('```')
         lines.append('')
-        lines.append(_report.render_markdown())
+        lines.append(self.report.render_markdown())
         lines.append('')
         lines.append('---')
         lines.append('')

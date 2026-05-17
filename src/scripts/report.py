@@ -28,9 +28,15 @@
 
 사용 패턴:
   - Builder 가 `self.report = BuildReport()` 를 보유.
-  - die() / warn() 전역 함수는 v0.5.5 부터 빌더 메소드 `self._issue(...)` /
-    `self._warning(...)` 로 라우팅. 시스템 결함만 `abort()` 호출 (즉시 종료).
+  - 콘텐츠 결함은 빌더 메소드 `self._issue(...)` / `self._warning(...)` 로
+    라우팅. 시스템 결함만 `abort()` 호출 (즉시 종료).
   - 빌드 마지막 단계에서 `self.report.render()` 가 정렬된 리포트 출력.
+
+이력 주의 (v0.8.2): 위 per-Builder 라우팅은 v0.5.5 에 *설계·문서화* 됐으나
+구현은 v0.6.5~v0.8.1 동안 모듈 전역 `_report` (builder.py) + build() 진입
+자동 reset 이었다. v0.8.2 에서 비로소 이 docstring 대로 `self.report` +
+`self._issue`/`self._warning` 로 실구현 (모듈 전역·전역 함수 폐지) — 두
+Builder 가 리포트를 공유하지 않아 동시 빌드가 가능하다.
 """
 import sys
 from dataclasses import dataclass, field
