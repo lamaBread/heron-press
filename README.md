@@ -1,4 +1,4 @@
-# siheonlee.com v0.8.3 — 사용설명서
+# siheonlee.com v0.8.4 — 사용설명서
 
 **글마다 폴더 하나**를 만들어 본문·첨부를 관리하고, `python build.py` 한 번으로 사이트를 만드는 **PHP 기반 경량 웹 사이트 생성기**입니다.
 
@@ -12,7 +12,7 @@
 | **글 단위 색인 제어** | 기본 색인 허용. 빼고 싶은 글만 `noindex: true` 한 줄. |
 | **사이트 내 검색** | 클라이언트 JS 0. BM25 + 토크나이저 + 인덱스가 `search.php` 한 파일에 인라인. |
 
-> **v0.8.3 한 줄 요약:** *schema.org JSON-LD 구조화 데이터 (additive 기능).* 글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄 — `@graph` 로 `Article` + (breadcrumb 2개↑이면) `BreadcrumbList`. 기존 OG/Twitter/canonical/robots `<meta>` 를 **대체하지 않고 보강** (소비자가 다름: SNS=OG, SERP=description, 색인=robots, 리치결과=JSON-LD). off 스위치: `site.yaml`→`jsonld.enabled` (전역) + `meta.yaml`→`seo.jsonld:false` (글 단위, 사이트 토글이 마스터). `build_jsonld`/`jsonld_enabled` 신설, canonical/og_image/author 해석을 `build_meta_tags` 와 공유 헬퍼로 추출 (메타 태그 산출물 byte 불변). **코드 릴리스** — dist 는 v0.8.2 대비 글 페이지 47 개가 각 ld+json 한 줄 추가, 그 외 738 파일 byte-동일 (0 missing/extra), 결정성 2회 동일. 단위 266→297. 자세한 내역은 [§ 16](#16-업데이트-로그).
+> **v0.8.3 한 줄 요약:** *schema.org JSON-LD 구조화 데이터 (additive 기능).* 글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄 — `@graph` 로 `Article` + (breadcrumb 2개↑이면) `BreadcrumbList`. 기존 OG/Twitter/canonical/robots `<meta>` 를 **대체하지 않고 보강** (소비자가 다름: SNS=OG, SERP=description, 색인=robots, 리치결과=JSON-LD). off 스위치: `site.yaml`→`jsonld.enabled` (전역) + `meta.yaml`→`seo.jsonld:false` (글 단위, 사이트 토글이 마스터). `build_jsonld`/`jsonld_enabled` 신설, canonical/og_image/author 해석을 `build_meta_tags` 와 공유 헬퍼로 추출 (메타 태그 산출물 byte 불변). **코드 릴리스** — dist 는 v0.8.2 대비 **글 렌더 페이지에 한정** 변경 (각 ld+json 한 줄 추가 + 빵부스러기 정확 라벨·링크), 비-글 산출물 byte-동일 (0 missing/extra), 결정성 2회 동일. 단위 266→313. 자세한 내역은 [§ 16](#16-업데이트-로그).
 
 ## 목차
 
@@ -55,7 +55,7 @@ python build.py --no-cache     # 캐시 비활성
 성공 시 출력 형태 (글/카테고리/소요는 `Articles/` 에 따라 다름):
 
 ```
-빌드 시작 - siheonlee.com v0.8.3 (2026-05-18 02:55:00)
+빌드 시작 - siheonlee.com v0.8.4 (2026-05-19 03:00:00)
 [ 1/16] 설정 로드 (site.yaml / 토크나이저 패리티)
 [ 2/16] 글 폴더 스캔 (Articles/)
    …  (각 단계 [ n/16] 헤더, 무거운 단계는 \r 라이브 카운터)
@@ -117,7 +117,7 @@ cd dist && python -m http.server 8000   # → http://localhost:8000/
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v0.8.3/        ← 보이는 것은 아래 6 개뿐
+siheonlee.com_v0.8.4/        ← 보이는 것은 아래 6 개뿐
 │
 ├── Articles/                ← ★ 모든 글 (최초엔 참고 자료)
 │   ├── About/                   ← 톱레벨 글 (meta.yaml + content.html + 자산)
@@ -154,7 +154,7 @@ siheonlee.com_v0.8.3/        ← 보이는 것은 아래 6 개뿐
 │   ├── assets/                  ← 사이트 전역 자산 (/assets/ 로 로드)
 │   │   ├── common_template.css / imgslidebox.js / pagination.js
 │   │
-│   └── tests/                   ← 단위 테스트 (297) + run_diagnostics.py (5 항목)
+│   └── tests/                   ← 단위 테스트 (313) + run_diagnostics.py (6 항목)
 │
 ├── build.py                 ← 빌드 진입점 (자기 폴더의 src/ 를 sys.path 에 올림)
 ├── README.md                ← 이 문서
@@ -167,7 +167,7 @@ siheonlee.com_v0.8.3/        ← 보이는 것은 아래 6 개뿐
 
 > **v0.8.1:** 빌더 일체를 `src/` 한 폴더로 옮겨 최상위는 6 개뿐. `build.py` 가 자기 폴더의 `src/` 를 `sys.path` 맨 앞에 올리므로 `import scripts...` 가 그대로 동작. 아래 [§ 16](#16-업데이트-로그) changelog 의 `scripts/…`·`templates/…` 경로는 도입 시점의 역사 기록 — v0.8.1 부터 실제 위치는 모두 `src/` 접두.
 >
-> **v0.8.3:** schema.org JSON-LD 기능 릴리스 (구조 동일). 글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄 추가 — `@graph` 로 `Article` + (crumb 2개↑이면) `BreadcrumbList`. 기존 OG/Twitter/canonical/robots `<meta>` 를 **대체하지 않고 보강** (additive). off 스위치: `site.yaml`→`jsonld.enabled` (전역) + `meta.yaml`→`seo.jsonld:false` (글 단위). 코드 릴리스라 dist 가 바뀐다 — v0.8.2 대비 글 페이지 47개가 각 ld+json 한 줄 추가, 그 외 738 파일 byte-동일 (0 missing/extra), 결정성 2회 동일.
+> **v0.8.3:** schema.org JSON-LD + 정확 빵부스러기 기능 릴리스 (구조 동일). 글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄 추가 — `@graph` 로 `Article` + (crumb 2개↑이면) `BreadcrumbList`. 기존 OG/Twitter/canonical/robots `<meta>` 를 **대체하지 않고 보강** (additive). off 스위치: `site.yaml`→`jsonld.enabled` (전역) + `meta.yaml`→`seo.jsonld:false` (글 단위). 코드 릴리스라 dist 가 바뀐다 — v0.8.2 대비 **글 렌더 페이지에 한정** 변경 (ld+json 추가 + 빵부스러기 정확 라벨·링크), 비-글 산출물 byte-동일 (0 missing/extra), 결정성 2회 동일.
 
 > **중요:** `dist/` 안의 파일은 매 빌드마다 덮어씌워집니다. 수정은 `Articles/`·`src/templates/`·`src/assets/`·`site.yaml` 에서 하고 다시 빌드하세요.
 
@@ -655,7 +655,7 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 10. **본문 ↔ 메타데이터 분리 (v0.5.5)** — SEO/OG/피드 카피는 본문이 아니라 author 가 `seo:` 블록에 직접 쓴 값에서만. 본문=독자용, 메타=SERP/소셜용 — 다른 글이어야 함. SSG 는 추측하지 않음. `seo.description` 필수(누락 시 issue, 빌드는 통과). `og_image` 부재 시 본문 추출이 아니라 `site.default_og_image`.
 11. **`template:` 가로지르기 — 허용하되 알린다 (v0.6.4)** — 페이지 종류와 다른 템플릿 지정 가능. 빌더가 못 채우는 placeholder 는 strip + warning (자동 거부도 silent strip 도 아닌, 알림 + author 판정).
 
-**현재 한계 (v0.8.3)** — 두 부류. ⓐ 현 능력의 *내재적* 한계, ⓑ *의도적으로 보류한* 확장. **둘 다 현 상황에서는 도입하지 않는다** (사용자 합의 2026-05-18 — 사유가 유효한 동안 유지, 필요해질 때 재검토).
+**현재 한계 (v0.8.4)** — 두 부류. ⓐ 현 능력의 *내재적* 한계, ⓑ *의도적으로 보류한* 확장. **둘 다 현 상황에서는 도입하지 않는다** (사용자 합의 2026-05-18 — 사유가 유효한 동안 유지, 필요해질 때 재검토).
 
 **ⓐ 내재적 한계**
 
@@ -680,10 +680,12 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 > 코드 정합성 검증 관례: **문서 전용 릴리스** 는 정본 `Articles/` 클린 재빌드 후 `dist/` sha256 이 직전 코드 복사본과 동일함을 확인. **코드 릴리스** 는 결정성(2회 빌드 동일) + *직전 코드 릴리스* 기준 *열거된* diff 로 검증 (비변경 산출물 byte-동일 + 변경 명시).
 > v0.8.2 가 버전 디커플링 분기점 — 이전엔 `__version__` bump 이 feed `<generator>` 를 통해 dist 를 바꿔 문서 릴리스가 `__version__` 을 동결해야 했으나, v0.8.2 부터 generator 가 버전-free 라 `__version__` 의 dist 영향이 0. 따라서 v0.8.2 이후 문서 릴리스는 진짜 byte-동일 (무비용).
 > v0.8.3 은 *기능* 릴리스라 dist 를 바꾼다 — 글 페이지 `<head>` 에 schema.org JSON-LD (`@graph`: `Article` + crumb 2개↑ 시 `BreadcrumbList`) 추가. 빵부스러기는 처음부터 정확한 의미로 출시 — nav-tracker HTML 과 `BreadcrumbList` 가 단일 공유 소스(`_crumb_parts_for`)를 먹어 중간 조상 = 자기 중첩 카테고리 URL (`/{top}/…/{cat}/`), 글 말단 = 글 **제목**(= `Article.headline`, 폴더명 아님). 게이트도 함께 — `run_diagnostics` 에 JSON-LD 의미 검증 [6] 신설 (position 단조·비말단 item distinct·dist 실재·말단 name==headline) 으로 additive·결정성-only 게이트가 놓치는 *의미* 결함 부류를 가드 (§ 15 ⓑ "추측 리스크" 의 거울 — 추측이 아니라 *미검사* 누락). v0.8.2 대비 변경은 **글 렌더 페이지에 한정** (ld+json 추가 + 빵부스러기 정확 라벨·링크) — 비-글 산출물(피드/사이트맵/검색/홈/카테고리/자산/이미지) byte-불변, 0 missing/extra, 결정성 2회 동일, 단위 266→313. `meta.yaml` 스키마·명시 `slug:` 불변, 폴더명은 출력 무관 자유 (마이그레이션 아님). `__version__` 자체의 dist 누수는 0 (B1 유지) — dist 변경은 JSON-LD 기능·정확 빵부스러기 때문. 같은 릴리스에서 빌드 제외 접두도 `_` 단독 → `_`·`.` 로 일원화 (`is_excluded_path`) — `.draft`·`.git`·`.DS_Store` 같은 숨김 항목이 글/카테고리/nav/자산으로 새지 않게 가드; 정본 `Articles/` 에 `.` 접두 항목이 없어 위 byte-불변 주장과 무모순.
+> v0.8.4 는 v0.8.3 의 *문서 안정화* — 빵부스러기/JSON-LD·진단 **로직 무변경**. v0.8.3 README 에만 남아 있던 잘못된 수치/표현을 § 16 의 정정값에 정합: 한 줄 요약 박스·§ 3 트리의 `단위 266→297` → `266→313` (실제 스위트 313 — 라이브 실행·[1]·§ 16 모두 일치, `297` 은 stale 잔재), § 3 트리 `run_diagnostics.py (5 항목)` → `(6 항목)` ([6] 게이트는 v0.8.3 신설), box/§ 3 노트의 미검증 하드 수치(`47개/738 파일`) framing → § 16 의 정성 서술로 일치. `diagnostics_report.txt` 는 *stale 가 아니었다* — `[6]` 의 `ld+json 37 / BreadcrumbList 36` 은 게이트가 article `index.html` 만 스캔하는 (확정) 스코프상 정확한 값 (47 글이 ld+json 을 받되 그 중 10 글은 `index.php` 라 [6] 범위 밖, 이는 [6] 의 확정 설계). v0.8.4 클린 재빌드 후 재생성한 것은 리포트가 임베드하는 절대경로·실행 메타를 v0.8.4 로 갱신하고 새 버전 디렉터리에서 게이트를 재증명하기 위함이며 결과는 불변 ([1]=313, [2] 결정성, [6]=37/36 violations 0, 6/6) — v0.8.3 리포트 *내용* 은 원래 옳았고 README 산문만 틀렸었다. 코드 동작 변경 0 → `__version__` 0.8.3→0.8.4 는 B1 으로 dist 누수 0 이라 v0.8.4 무결성 계약은 **문서 전용 형** (정본 클린 재빌드 후 dist sha256 == 직전 코드 복사본 v0.8.3 — 실측 785=785 byte-동일, 0 missing/extra/changed); 단위 313 · 진단 6/6 승계.
 
 | 버전 | 날짜 | 요약 |
 |---|---|---|
-| **v0.8.3** | 2026-05-18 | schema.org JSON-LD + 정확 빵부스러기 (코드 릴리스) — 글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄 (`@graph`: `Article` + crumb 2개↑ 시 `BreadcrumbList`). 기존 OG/Twitter/canonical/robots `<meta>` 보강 (대체 아님). off: `site.yaml`→`jsonld.enabled` + `meta.yaml`→`seo.jsonld`. `seo.py` `build_jsonld`/`jsonld_enabled` 신설, canonical/og_image/author 해석을 `build_meta_tags` 와 공유 헬퍼로 추출 (메타 태그 byte 불변). 빵부스러기 의미 정확 — nav-tracker HTML 과 `BreadcrumbList` 는 단일 공유 소스(`_crumb_parts_for`): 각 중간 조상은 자기 중첩 카테고리 URL (`/{top}/…/{cat}/`), 글 말단 = 글 **제목**(= `Article.headline`, 폴더명 아님). 명시 `slug:` 유지·`meta.yaml` 스키마 불변 (폴더명은 출력 무관 자유). 게이트: `run_diagnostics` JSON-LD 의미 검증 [6] 신설 (position 단조·비말단 item distinct·dist 실재·말단 name==headline) — additive·결정성-only 게이트가 놓치는 의미 부류 가드. dist 는 v0.8.2 대비 글 렌더 페이지만 변경 (ld+json + 빵부스러기 정확 라벨·링크), 비-글 산출물 byte-동일, 결정성 2회 동일. 부수로 빌드 제외 접두를 `_` 단독 → `_`·`.` 로 일원화 (`slugs.is_excluded_path`/`is_excluded_name` 신설, 스캔·nav·자산 동기화가 단일 진실원 공유) — `.draft`·`.git`·`.DS_Store` 등 숨김 항목이 글·카테고리·nav·자산으로 새지 않음 (§ 6); 정본 `Articles/` 에 `.` 접두 항목이 없어 dist byte 영향 0. 단위 266→313. |
+| **v0.8.4** | 2026-05-19 | v0.8.3 문서 안정화 — 빵부스러기/JSON-LD·진단 로직 무변경. v0.8.3 README 에만 남아 있던 잘못된 수치/표현을 § 16 정정값에 정합: 단위 `266→297`→`266→313` (실제 스위트 313), `run_diagnostics.py (5 항목)`→`(6 항목)` ([6] 은 v0.8.3 신설), 한 줄 요약 박스·§ 3 노트의 미검증 하드 수치(`글 페이지 47개/738 파일`) framing → § 16 의 정성 서술(`글 렌더 페이지에 한정`, `비-글 산출물 byte-동일`)로 일치. `src/tests/diagnostics_report.txt` 는 stale 가 아니었음 — `[6]=37/36` 은 게이트가 article `index.html` 만 보는 확정 스코프상 정확 (47 ld+json 중 10 글은 `index.php` 라 [6] 범위 밖; [6] 확정 설계). v0.8.4 클린 재빌드 후 재생성은 리포트 임베드 경로·실행 메타를 v0.8.4 로 갱신하고 게이트를 재증명한 것이며 결과 불변 ([1]=313, [2] 결정성, [6]=37/36 violations 0, 6/6). 코드 동작 변경 0, dist 는 v0.8.3 과 byte-동일 (실측 785=785 sha256, 0 missing/extra/changed; `__version__` 0.8.3→0.8.4 는 B1 으로 dist 누수 0 — 무결성 계약 = 직전 코드 복사본 v0.8.3 과 dist sha256 동일), 단위 313 · 진단 6/6 승계. |
+| v0.8.3 | 2026-05-18 | schema.org JSON-LD + 정확 빵부스러기 (코드 릴리스) — 글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄 (`@graph`: `Article` + crumb 2개↑ 시 `BreadcrumbList`). 기존 OG/Twitter/canonical/robots `<meta>` 보강 (대체 아님). off: `site.yaml`→`jsonld.enabled` + `meta.yaml`→`seo.jsonld`. `seo.py` `build_jsonld`/`jsonld_enabled` 신설, canonical/og_image/author 해석을 `build_meta_tags` 와 공유 헬퍼로 추출 (메타 태그 byte 불변). 빵부스러기 의미 정확 — nav-tracker HTML 과 `BreadcrumbList` 는 단일 공유 소스(`_crumb_parts_for`): 각 중간 조상은 자기 중첩 카테고리 URL (`/{top}/…/{cat}/`), 글 말단 = 글 **제목**(= `Article.headline`, 폴더명 아님). 명시 `slug:` 유지·`meta.yaml` 스키마 불변 (폴더명은 출력 무관 자유). 게이트: `run_diagnostics` JSON-LD 의미 검증 [6] 신설 (position 단조·비말단 item distinct·dist 실재·말단 name==headline) — additive·결정성-only 게이트가 놓치는 의미 부류 가드. dist 는 v0.8.2 대비 글 렌더 페이지만 변경 (ld+json + 빵부스러기 정확 라벨·링크), 비-글 산출물 byte-동일, 결정성 2회 동일. 부수로 빌드 제외 접두를 `_` 단독 → `_`·`.` 로 일원화 (`slugs.is_excluded_path`/`is_excluded_name` 신설, 스캔·nav·자산 동기화가 단일 진실원 공유) — `.draft`·`.git`·`.DS_Store` 등 숨김 항목이 글·카테고리·nav·자산으로 새지 않음 (§ 6); 정본 `Articles/` 에 `.` 접두 항목이 없어 dist byte 영향 0. 단위 266→313. |
 | v0.8.2 | 2026-05-18 | 코드 건전성 — (1) `__version__` 디커플링: feed `<generator>` 에서 버전 토큰 제거 → `__version__` 의 dist 영향 0, `'0.7.2'`→`'0.8.2'`. (2) `build.py` argparse: `--help` + 미지/오타 인자 거부. (3) 빌드 리포트 모듈 전역 → per-Builder + `build()` 멱등성 결함 1건 수정. dist 는 v0.8.0 과 `feed.atom`/`feed.rss` generator 한 줄만 차이 (의도). 단위 258→266. |
 | v0.8.1 | 2026-05-17 | 폴더 구조 정리 — 빌더 일체를 `src/` 아래로, 최상위 6 항목. 코드 동작·산출물 불변 (dist v0.8.0 과 byte 동일, `__version__` 0.7.2). |
 | v0.8.0 | 2026-05-17 | README 코드 정합성 정정 (문서 결함 5건: §5 카테고리 필드 / §8 서브 URL 행 / §10 sitemap 회고 / 빌드 출력 예시 / 버전 표기). 코드·dist 무변경. |
@@ -718,4 +720,4 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 
 ---
 
-*siheonlee.com v0.8.3 — 빌드 Python + Pillow, 런타임 PHP. 검색 Okapi BM25 메타데이터 3-필드 인라인 인덱스, 이미지 WebP 다중 해상도 자동, 글/홈/카테고리 통일 SEO 메타 + 외부 CSS·`template:` 지원, schema.org JSON-LD (글 페이지 `Article`+`BreadcrumbList`, 기존 메타 태그 보강·off 스위치 동반). 빵부스러기는 정확한 의미로 출시 — 중간 조상=자기 중첩 URL, 글 말단=글 제목 (nav-tracker/JSON-LD 단일 공유 소스); JSON-LD 의미 게이트 [6] 동반. (2026-05-18)*
+*siheonlee.com v0.8.4 — 빌드 Python + Pillow, 런타임 PHP. 검색 Okapi BM25 메타데이터 3-필드 인라인 인덱스, 이미지 WebP 다중 해상도 자동, 글/홈/카테고리 통일 SEO 메타 + 외부 CSS·`template:` 지원, schema.org JSON-LD (글 페이지 `Article`+`BreadcrumbList`, 기존 메타 태그 보강·off 스위치 동반). 빵부스러기는 정확한 의미로 출시 — 중간 조상=자기 중첩 URL, 글 말단=글 제목 (nav-tracker/JSON-LD 단일 공유 소스); JSON-LD 의미 게이트 [6] 동반. v0.8.4 는 v0.8.3 의 문서·진단 안정화 (로직 무변경, dist v0.8.3 과 byte-동일). (2026-05-19)*

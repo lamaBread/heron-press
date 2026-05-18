@@ -734,7 +734,7 @@ class CrumbPartsForTests(unittest.TestCase):
             ('Mid', '/top/mid/'),     # 중간 = 자기 중첩 URL (Bug A 교정)
             ('글 제목', None),         # 말단 = 글 제목, item 없음 (Bug B)
         ])
-        # 중간은 부모(top)와 distinct — v0.8.3 은 둘 다 '/top/' 이었다.
+        # 중간은 부모(top)와 distinct — 순진한 구현은 둘 다 '/top/' (Bug A).
         self.assertNotEqual(crumb[0][1], crumb[1][1])
         # 말단 url=None → JSON-LD item 생략 / nav-tracker reload 앵커.
         self.assertIsNone(crumb[-1][1])
