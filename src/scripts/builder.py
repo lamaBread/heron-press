@@ -1,5 +1,24 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v0.8.3 변경 — schema.org JSON-LD 구조화 데이터 (additive):
+  - **글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄**
+    추가. `@graph` 로 Article + (2개 이상이면) BreadcrumbList. 기존
+    OG/Twitter/canonical/robots 메타 태그를 *대체하지 않고 보강* 한다 —
+    소비자가 다르다 (SNS 언퍼ler=OG, SERP=meta description, 색인=robots,
+    리치 결과=JSON-LD). 로직은 seo.py 의 `build_jsonld` / `jsonld_enabled`,
+    canonical/og_image/author 해석은 build_meta_tags 와 공유 헬퍼
+    (resolve_*) 로 추출 — 메타 태그 산출물 byte 불변 (순수 리팩터).
+  - **off 스위치** (v0.5.5 "새 기능은 off 스위치 동반" 원칙): 사이트 전역
+    `site.yaml`→`jsonld.enabled` (기본 True), 글 단위 `meta.yaml`→
+    `seo.jsonld: false`. 사이트 토글이 마스터 (글 단위 true 로 사이트 off
+    를 못 뒤집음). 비출력 시 `{{JSONLD}}` 라인을 ROBOTS_META 와 같은
+    방식으로 라인-이팅 (빈 줄 잔존 없음).
+  - **결정성**: `json.dumps(ensure_ascii=False, sort_keys=True,
+    separators=(',',':'))` + `<` `>` `&` → `\\u003c/\\u003e/\\u0026`
+    (`<script>` raw-text breakout 방지). 코드 릴리스라 무결성 계약은
+    "결정성 2회 동일 + v0.8.2 기준 *열거* diff (= 글 페이지마다 ld+json
+    한 줄 추가, 그 외 byte 불변)". 단위 266→297 (+test_jsonld 31).
+
 v0.8.2 변경 — per-Builder 리포트 + build() 멱등성 + 버전 디커플링:
   - **모듈 전역 `_report` 폐지 → `self.report`** — scripts/report.py 가
     v0.5.5 부터 docstring 으로 명세해 온 "Builder 가 self.report 보유,
@@ -244,7 +263,7 @@ v0.5.4 변경 — `<title>` 폴백 체인 일반화 + 단어 경계 truncate + n
 
 16단계 파이프라인 (v0.5.3 에서 _build_feeds 추가, v0.6.4 에서 _sync_page_css 추가):
   [1] _load_config           — site.yaml + 토크나이저 패리티 검증
-  [2] _scan_articles         — Articles/ 트리 순회, _ 접두 제외
+  [2] _scan_articles         — Articles/ 트리 순회, _ / . 접두 제외
   [3] _parse_frontmatter     — meta.yaml 파싱 → ArticleMeta 채움 (seo: 블록 +
                                 v0.5.3 의 tags 필드 포함)
   [4] _validate              — slug 검증, 카테고리 트리 구축 (한글 폴더 워닝),
@@ -409,8 +428,11 @@ from pathlib import Path
 from .yaml_parser import yaml_load
 from .models import (
     SiteConfig, ArticleMeta, SeoMeta, CategoryMeta, Article, Category,
+    JsonLdConfig,
 )
-from .slugs import category_slug_from_name, is_underscore_path, has_non_ascii
+from .slugs import (
+    category_slug_from_name, is_excluded_path, is_excluded_name, has_non_ascii,
+)
 from .markdown import (
     escape_html,
     render_article_md,
@@ -476,7 +498,9 @@ def _pagination_nav_html(group_key: str, total_items: int, per_page: int) -> str
         f'aria-label="Next page">›</button>'
         f'</nav>'
     )
-from .seo import build_meta_tags, truncate_description
+from .seo import (
+    build_meta_tags, build_jsonld, jsonld_enabled, truncate_description,
+)
 from .search import (
     html_to_plain,
     build_search_index,
@@ -797,6 +821,8 @@ class Builder:
             search_title=str(get('search_title') or 'Search'),
             # v0.5.1: 이미지 자동 최적화 설정.
             images=self._parse_image_config(get('images') or {}),
+            # v0.8.3: schema.org JSON-LD 사이트 전역 토글.
+            jsonld=self._parse_jsonld_config(get('jsonld') or {}),
         )
 
         # v0.4.6: 사용자가 옛 home_* 키를 site.yaml 에 그대로 두면 알아채지
@@ -891,6 +917,21 @@ class Builder:
             default_sizes=str(sizes),
         )
 
+    def _parse_jsonld_config(self, raw) -> JsonLdConfig:
+        """site.yaml 의 `jsonld:` 블록을 JsonLdConfig 로 파싱 (v0.8.3).
+
+        `_parse_image_config` 와 같은 패턴 — 비어 있거나 dict 가 아니면
+        기본값(enabled=True). 알 수 없는 키는 조용히 무시 (forward compat —
+        후속 버전이 하위 키를 추가해도 옛 빌더가 깨지지 않음). 값이 없으면
+        (`enabled:` 부재) 기본 True 라 옛 site.yaml 도 변경 의무 없이
+        JSON-LD 가 켜진다.
+        """
+        if not isinstance(raw, dict):
+            raw = {}
+        enabled_raw = raw.get('enabled')
+        enabled = True if enabled_raw is None else bool(enabled_raw)
+        return JsonLdConfig(enabled=enabled)
+
     # ── [2] Content scan ──────────────────────────────────────
 
     def _scan_articles(self):
@@ -900,11 +941,14 @@ class Builder:
         for root, dirs, files in os.walk(self.articles_dir):
             root_path = Path(root)
 
-            if is_underscore_path(root_path, self.articles_dir):
+            # v0.8.3: 제외 접두 = '_' 또는 '.' (slugs.is_excluded_*). 경로의
+            # 어느 세그먼트든 해당하면 그 서브트리 전체를 스캔에서 배제 →
+            # .draft 같은 폴더가 글/카테고리로 새지 않는다.
+            if is_excluded_path(root_path, self.articles_dir):
                 dirs.clear()
                 continue
 
-            dirs[:] = [d for d in dirs if not d.startswith('_')]
+            dirs[:] = [d for d in dirs if not is_excluded_name(d)]
 
             if 'meta.yaml' not in files:
                 continue
@@ -1195,6 +1239,11 @@ class Builder:
                 og_type=seo_raw.get('og_type'),
                 twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
                 twitter_image=seo_raw.get('twitter_image'),
+                # v0.8.3: 글 단위 JSON-LD opt-out/opt-in. yaml_load 가
+                # true/false 를 Python bool 로, 부재는 None 으로 보존하므로
+                # 그대로 전달 (None=site 디폴트 / False=이 글만 끔 / True=명시
+                # opt-in). jsonld_enabled 가 `is False` 만 특수 처리한다.
+                jsonld=seo_raw.get('jsonld'),
             )
 
             # v0.5.3: tags — 작성자가 직접 적는 주제어 목록.
@@ -1621,6 +1670,12 @@ class Builder:
             og_type=seo_raw.get('og_type'),
             twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
             twitter_image=seo_raw.get('twitter_image'),
+            # v0.8.3: 카테고리/홈 SeoMeta 도 글과 같은 스키마 유지를 위해
+            # jsonld 를 파싱 (대칭성). 단 JSON-LD 출력은 글 페이지에서만
+            # 하므로 (article.html 만 {{JSONLD}} 보유) 카테고리/홈에서는
+            # 파싱만 되고 사용되지 않는다 — seo.title_prefix 외 다른 seo
+            # 필드들과 같은 forward-compat 취급.
+            jsonld=seo_raw.get('jsonld'),
         )
 
         # v0.5.4: nav_priority — 톱레벨 nav 정렬 키 (priority 와 별개 축).
@@ -1826,7 +1881,10 @@ class Builder:
         for child in self.articles_dir.iterdir():
             if not child.is_dir():
                 continue
-            if child.name.startswith('_'):
+            # v0.8.3: glob 직속 순회라 _scan_articles 의 제외와 별개로
+            # 여기서도 '_'/'.' 접두 폴더를 nav 후보에서 직접 배제 (글 없는
+            # 카테고리-격 폴더도 nav 에 오를 수 있으므로 단독 가드 필요).
+            if is_excluded_name(child.name):
                 continue
             article = next(
                 (a for a in self.articles if a.source_dir == child),
@@ -1872,6 +1930,48 @@ class Builder:
             return None
         top = (article.category_path[0],)
         return self.categories.get(top)
+
+    def _ancestor_categories(self, path_parts):
+        """path_parts (Articles/ 기준 폴더명 리스트, 톱→부모 순) 를 등록된
+        Category 객체 리스트로 해석한다. 각 접두 경로
+        (path_parts[:1], [:2], …) 를 카테고리 트리에서 찾는다. 미등록
+        깊이는 건너뛴다 — 정본 콘텐츠에서는 글/카테고리의 모든 접두
+        경로가 Category 로 등록돼 있다(빌더의 카테고리 트리)."""
+        out = []
+        for k in range(1, len(path_parts) + 1):
+            c = self.categories.get(tuple(path_parts[:k]))
+            if c is not None:
+                out.append(c)
+        return out
+
+    def _crumb_parts_for(self, *, ancestors, leaf):
+        """nav-tracker HTML 과 JSON-LD BreadcrumbList 의 단일 공유 crumb 소스.
+
+        파라미터
+            ancestors : 톱레벨→최근접 부모 순의 조상 Category 리스트.
+                        각 조상은 자기 *중첩* 카테고리 URL
+                        ('/' + '/'.join(cat.slug_path) + '/') 로 링크된다.
+            leaf      : (이름, url|None) — 현재 페이지(말단) 항목.
+
+        글 페이지·카테고리 페이지(톱/서브) 세 호출자가 공유한다.
+        빵부스러기 의미 정확성:
+          · Bug A 회피 — 모든 중간 조상이 톱레벨 URL(top_url)이 아니라
+            자기 중첩 카테고리 URL 로 링크한다 (톱레벨 조상의 중첩
+            URL 은 '/{top.slug}/').
+          · Bug B 회피 — 글 호출자가 leaf=(글 제목, None) 을 넘긴다
+            (말단 이름이 폴더명이 아니라 글 제목 = Article.headline).
+            카테고리 페이지 호출자는 K2(폴더명 유지)에 따라 leaf 에
+            cat.folder_name 을 그대로 넘긴다.
+        조상이 0개면(톱레벨 글 / 톱 카테고리 페이지) crumb 은 [leaf]
+        뿐 — 항목 2개 미만이라 JSON-LD BreadcrumbList 노드는 생략된다
+        (build_jsonld 의 기존 정책 유지). nav-tracker HTML 은 그대로
+        한 줄 렌더되며 말단 텍스트만 (글이면) 제목이 된다."""
+        crumb_parts = [
+            (anc.folder_name, '/' + '/'.join(anc.slug_path) + '/')
+            for anc in ancestors
+        ]
+        crumb_parts.append(leaf)
+        return crumb_parts
 
     def _render_articles(self):
         # v0.6.4: 글마다 template 키가 다를 수 있어 per-article load. 기본 article.html.
@@ -2043,16 +2143,35 @@ class Builder:
                 updated=m.updated or m.date,
             )
 
-            crumb_parts = []
-            top_cat = self._top_category_for_article(article)
-            if top_cat:
-                top_url = f"/{top_cat.slug}/"
-                crumb_parts.append((top_cat.folder_name, top_url))
-                middle_folders = article.category_path[1:-1]
-                for folder in middle_folders:
-                    crumb_parts.append((folder, top_url))
-            crumb_parts.append((article.category_path[-1], None))
+            # 말단 = 글 제목(m.title) — 폴더명/slug 아님(Bug B).
+            # 조상 = 글을 담은 카테고리들(자기 폴더 제외), 각자 자기
+            # 중첩 카테고리 URL 로 링크(Bug A). 톱레벨 글(조상 0)은
+            # 단일 crumb → BreadcrumbList 생략, nav-tracker 말단=제목.
+            crumb_parts = self._crumb_parts_for(
+                ancestors=self._ancestor_categories(
+                    article.category_path[:-1]),
+                leaf=(m.title, None),
+            )
             nav_tracker = self._nav_tracker_for_path(crumb_parts)
+
+            # v0.8.3: schema.org JSON-LD (additive — 메타 태그를 대체하지
+            # 않고 보강). 사이트(site.jsonld.enabled)/글(seo.jsonld) 토글로
+            # 출력 여부 결정. breadcrumb 은 위 crumb_parts 를 그대로 재사용
+            # 해 사이트 nav-tracker 와 동일한 라벨/경로를 쓴다.
+            if jsonld_enabled(self.site, m.seo):
+                jsonld_html = build_jsonld(
+                    title=m.title,
+                    seo=m.seo,
+                    site=self.site,
+                    canonical_path=f'/{m.slug}/',
+                    page_lang=m.lang or self.site.lang,
+                    published=m.date,
+                    updated=m.updated or m.date,
+                    tags=m.tags,
+                    breadcrumb=crumb_parts,
+                )
+            else:
+                jsonld_html = ''
 
             # v0.6.4: 글 단위 template override. 폴백 = article.html.
             tpl = self._resolve_template(
@@ -2079,6 +2198,20 @@ class Builder:
                     flags=re.MULTILINE,
                 )
 
+            # v0.8.3: JSON-LD placeholder 는 ROBOTS_META 와 같은 라인-이팅
+            # 규칙. 비출력(사이트/글 토글 off)이면 `{{JSONLD}}` 가 자리한
+            # 라인을 통째로 제거해 빈 줄이 남지 않게 한다. 출력이면
+            # placeholder 를 그대로 두고 아래 vars_ 의 'JSONLD' 로 치환
+            # (META_TAGS 와 동일한 _render_template Pass 1 경로 — 사용자
+            # 텍스트가 섞인 값도 같은 방식으로 안전 처리됨).
+            if not jsonld_html:
+                tpl_local = re.sub(
+                    r'^[ \t]*\{\{JSONLD\}\}[ \t]*\r?\n',
+                    '',
+                    tpl_local,
+                    flags=re.MULTILINE,
+                )
+
             # v0.6.4: COMMON_CSS + PAGE_STYLESHEETS line-eating 을 공용 헬퍼로.
             tpl_local = self._apply_css_placeholders(
                 tpl_local,
@@ -2096,6 +2229,9 @@ class Builder:
             vars_ = {
                 'LANG': escape_html(page_lang),
                 'META_TAGS': meta_tags,
+                # v0.8.3: 비출력이면 위에서 라인 자체를 strip 했으므로 이
+                # 키는 무해하게 미사용. 출력이면 placeholder 를 치환.
+                'JSONLD': jsonld_html,
                 'PAGE_STYLES': page_styles,
                 'PAGE_TITLE': escape_html(page_title),
                 'MAIN_TITLE': escape_html(self.site.main_title),
@@ -2186,7 +2322,7 @@ class Builder:
             for src_file in src_root.rglob('*'):
                 if not src_file.is_file():
                     continue
-                if is_underscore_path(src_file, src_root):
+                if is_excluded_path(src_file, src_root):
                     continue
                 if src_file.name in ('meta.yaml', 'content.md', 'content.html'):
                     continue
@@ -2276,7 +2412,7 @@ class Builder:
         for src_file in src_root.rglob('*'):
             if not src_file.is_file():
                 continue
-            if is_underscore_path(src_file, src_root):
+            if is_excluded_path(src_file, src_root):
                 continue
             if src_file.name in ('meta.yaml', 'content.md', 'content.html'):
                 continue
@@ -2548,21 +2684,21 @@ class Builder:
             f"<section><p>No articles found</p></section>"
         )
 
-        # breadcrumb: 톱레벨이면 [(folder, url)], 서브면 [(top, top_url), (sub, None)]
+        # breadcrumb: 글 페이지와 동일한 단일 공유 소스(_crumb_parts_for).
+        # 조상은 자기 중첩 카테고리 URL 로 링크(Bug A 회피). 카테고리
+        # 페이지의 말단 이름은 K2(폴더명 유지)에 따라 cat.folder_name
+        # 그대로다(카테고리 페이지엔 '글 제목' 개념이 없다). 톱이면
+        # 조상 0 + 자기 url_prefix 단일 crumb(BreadcrumbList 생략),
+        # 서브면 조상들 + (folder, None).
         if is_top:
-            crumb_parts = [(cat.folder_name, url_prefix)]
+            crumb_parts = self._crumb_parts_for(
+                ancestors=[], leaf=(cat.folder_name, url_prefix),
+            )
         else:
-            top_cat = self.categories.get((cat.path[0],))
-            crumb_parts = []
-            if top_cat is not None:
-                crumb_parts.append((top_cat.folder_name, f"/{top_cat.slug}/"))
-            # 중간 폴더들 (3+ depth) → 가장 가까운 톱레벨로 링크 (원본 quirk 와 일치).
-            for mid_folder in cat.path[1:-1]:
-                crumb_parts.append(
-                    (mid_folder,
-                     f"/{top_cat.slug}/" if top_cat else None)
-                )
-            crumb_parts.append((cat.folder_name, None))
+            crumb_parts = self._crumb_parts_for(
+                ancestors=self._ancestor_categories(cat.path[:-1]),
+                leaf=(cat.folder_name, None),
+            )
         nav_tracker = self._nav_tracker_for_path(crumb_parts)
 
         # v0.6.2: 카테고리에도 글과 동일한 description 필수화 정책.

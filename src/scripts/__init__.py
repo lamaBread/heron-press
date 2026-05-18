@@ -1,4 +1,4 @@
-"""siheonlee.com v0.8.2 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v0.8.3 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -9,7 +9,8 @@
   - slugs        — 카테고리/폴더명 → slug 변환
   - markdown     — 마크다운 본문 후처리 + PHP 함수 시뮬레이션 + per-article styles
   - parsedown    — Parsedown 1.7.4 의 Python 포팅 (v0.4.1)
-  - seo          — <meta> 태그 빌더. v0.5.5 부터 본문 폴백 제거 (메타데이터 분리 원칙).
+  - seo          — <meta> 태그 + JSON-LD 빌더. v0.5.5 본문 폴백 제거 (메타데이터
+                   분리 원칙). v0.8.3 schema.org JSON-LD (build_jsonld) 추가.
   - images       — 이미지 자동 최적화 (WebP + srcset + lazy loading, v0.5.1)
   - search       — 토크나이저, BM25 인덱스, PHP 정적 배열 직렬화 (v0.6.0 v4 포맷)
   - sitemap      — sitemap.xml 생성 (v0.4.4)
@@ -35,6 +36,16 @@ __version__:
     - 빌드 콘솔 출력 / build-report.md (모두 dist 밖).
   따라서 이 값은 이제 릴리스 버전을 자유롭게 추종한다 — 더 이상
   byte-동일 검증을 위해 동결할 필요가 없다.
+
+  주의 (v0.8.3): v0.8.3 은 dist 를 바꾼다 — 글 페이지에 JSON-LD
+  스크립트 한 줄 추가 + 정확한 빵부스러기 (중간 조상=자기 중첩
+  URL, 글 말단=글 제목). 그러나 그것은 **JSON-LD 기능·정확
+  빵부스러기** 때문이지 `__version__` 때문이 아니다 — 위 B1
+  디커플링은 그대로 유효해 버전 문자열 자체의 dist 영향은 여전히
+  0 이다. 그래서 v0.8.3 의 무결성 계약은 "문서 전용 = 직전과
+  sha256 동일" 이 아니라 코드 릴리스용 "결정성 2회 동일 + 직전
+  (v0.8.2) 대비 *열거된* diff" (= 글 렌더 페이지에 한정, 그 외
+  byte 불변) 이다.
 """
 
-__version__ = '0.8.2'
+__version__ = '0.8.3'

@@ -79,3 +79,13 @@ images:
   lazy_loading: true
   # srcset 과 짝이 되는 sizes 속성 디폴트 / CSS media query
   default_sizes: "(max-width: 800px) 100vw, 800px"
+
+# schema.org JSON-LD 구조화 데이터 (글 페이지 <head> 의
+# <script type="application/ld+json"> — Article + BreadcrumbList).
+# 기존 OG/Twitter/canonical/robots 메타 태그를 대체하지 않고 보강한다.
+jsonld:
+  # JSON-LD 전체 토글 / true / false (기본 true).
+  # false 면 모든 글 페이지에서 ld+json 스크립트가 출력되지 않는다.
+  # 글 단위로는 그 글 meta.yaml 의 seo.jsonld: false 로 개별 opt-out
+  # (사이트가 켜져 있을 때). 사이트를 끄면 글 단위로 되살릴 수 없다.
+  enabled: true

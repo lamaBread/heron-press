@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.8.2 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v0.8.3 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -24,7 +24,7 @@ Usage:
     python build.py --clean-cache  # .build_cache/ 만 폐기 후 빌드 (dist 는 유지)
     python build.py --no-cache     # 증분 캐시 비활성 (v0.6.5 동작)
     python build.py --help         # 인자 도움말 (v0.8.2: argparse)
-    python -m unittest discover -s src/tests   # 단위 테스트 (v0.8.2: 266개)
+    python -m unittest discover -s src/tests   # 단위 테스트 (v0.8.3: 313개)
     python src/tests/run_diagnostics.py        # 빌드 결정성/BM25 패리티 등 통합 진단
 
 v0.8.2 부터 인자 파싱이 argparse 라 미지/오타 인자 (`--clena` 등) 는 조용히
@@ -39,6 +39,31 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v0.8.3 변경 사항 (vs v0.8.2) — schema.org JSON-LD + 정확 빵부스러기 (코드 릴리스):
+  - 글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄을
+    추가 — `@graph` 로 Article + (crumb 2개↑이면) BreadcrumbList. 기존
+    OG/Twitter/canonical/robots `<meta>` 를 *대체하지 않고 보강* 한다
+    (소비자가 다름: SNS=OG, SERP=description, 색인=robots, 리치결과=JSON-LD).
+  - off 스위치 (v0.5.5 원칙): `site.yaml`→`jsonld.enabled` (기본 true,
+    사이트 전역) + `meta.yaml`→`seo.jsonld: false` (글 단위 opt-out).
+    사이트 토글이 마스터. 비출력 시 `{{JSONLD}}` 라인은 ROBOTS_META 와
+    같은 방식으로 라인-이팅 (빈 줄 없음).
+  - 빵부스러기 의미 정확: nav-tracker HTML 과 JSON-LD `BreadcrumbList`
+    가 단일 공유 소스(`Builder._crumb_parts_for`)를 먹는다. 중간 조상
+    = 각자 자기 중첩 카테고리 URL (`/{top}/…/{cat}/`), 글 말단 = 글
+    제목 (= `Article.headline`). 카테고리 페이지 말단은 폴더명 유지
+    (글 제목 개념 없음). 명시 `slug:`·`meta.yaml` 스키마 불변 — 폴더
+    명은 출력에 무관한 자유형 그대로 (마이그레이션 아님).
+  - 게이트: `src/tests/run_diagnostics.py` 에 JSON-LD 의미 정확성
+    검증 [6] — BreadcrumbList position 단조, 비말단 item distinct,
+    비말단 item 의 dist 실재, 말단 item 생략·name==headline. additive·
+    결정성-only 게이트가 놓치는 의미 결함 부류를 잡는다.
+  - 코드 릴리스라 dist 가 바뀐다. 무결성 = "결정성 2회 동일 + v0.8.2
+    대비 *열거된* diff" — 글 렌더 페이지에 한정 (ld+json 추가 + 빵부스
+    러기 정확 라벨·링크), 그 외 (피드/사이트맵/검색/홈/카테고리/assets)
+    byte 불변. `__version__` 자체의 dist 누수는 여전히 0 (v0.8.2 B1
+    유지) — dist 변경은 기능·정확성 때문.
 
 v0.8.2 변경 사항 (vs v0.8.1) — 코드 건전성 (버전 디커플링 / CLI / 리포트):
   - **(1) `__version__` 디커플링 (B1)** — v0.8.1 까지 `__version__` 이

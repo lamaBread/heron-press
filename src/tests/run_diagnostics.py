@@ -17,6 +17,9 @@
   [4] Python ↔ PHP BM25 점수 패리티 — 6 개 쿼리, 모든 hit 의 점수 일치.
        (PHP 가 없으면 skip.)
   [5] dist/search.php 의 인덱스 형식 검증 (version=4, 필드 존재).
+  [6] 글 페이지 JSON-LD 의미 정확성 (v0.8.3) — BreadcrumbList position
+       단조·비말단 item distinct·dist 실재·말단 name==headline 등.
+       PHP 불필요. dist 가 없으면 skip.
 
 모든 항목이 통과하면 exit code 0, 하나라도 실패하면 1.
 """
@@ -328,6 +331,171 @@ def section_index_shape(report, php_bin) -> bool:
 
 
 # ════════════════════════════════════════════════════════════════
+# 항목 6: JSON-LD 의미 정확성 (v0.8.3 신설 게이트)
+# ════════════════════════════════════════════════════════════════
+#
+# additive·결정성-only 무결성 게이트는 JSON-LD 의 *의미* 정확성을
+# 보지 않는다 — 빵부스러기 결함(중간 폴더가 자기 중첩 URL 이 아니라
+# 톱레벨 URL 로 링크 = Bug A / 말단 이름이 글 제목이 아니라 폴더명
+# = Bug B) 부류가 게이트를 그대로 통과한다. 이 섹션이 그 부류를 가드한다.
+# 게이트 개선이지 보류된 SSG 확장이 아니다(메모리 feedback_deferred_
+# extensions 비해당).
+
+JSONLD_SCRIPT_PREFIX = '<script type="application/ld+json">'
+JSONLD_SCRIPT_SUFFIX = '</script>'
+
+
+def extract_jsonld(html: str):
+    """글 페이지 HTML 에서 ld+json 스크립트 1개를 디코드해 dict 로 반환
+    (없으면 None). seo.build_jsonld 의 `<` `>` `&` → `\\u003c` `\\u003e`
+    `\\u0026` 치환을 test_jsonld._doc 와 동일하게 역변환한다."""
+    i = html.find(JSONLD_SCRIPT_PREFIX)
+    if i == -1:
+        return None
+    j = html.find(JSONLD_SCRIPT_SUFFIX, i)
+    if j == -1:
+        return None
+    payload = html[i + len(JSONLD_SCRIPT_PREFIX):j]
+    raw = (payload.replace('\\u003c', '<')
+                  .replace('\\u003e', '>')
+                  .replace('\\u0026', '&'))
+    return json.loads(raw)
+
+
+def validate_jsonld_doc(doc, *, base_url, exists):
+    """디코드된 JSON-LD 문서 1개의 의미 정확성을 검사. 위반 메시지
+    리스트를 반환한다(빈 리스트 = 정상). `exists(path)` 는 사이트 내부
+    절대경로(예 '/blog/3d-printing/')가 dist 에 실재하는지 판정하는
+    bool 콜러블.
+
+    검사 항목 (JSON-LD 의미 정확성 계약):
+      - @graph 에 Article 존재 + headline 비공백.
+      - BreadcrumbList 가 있으면:
+          · position 이 1..n 엄밀 단조 증가.
+          · 모든 ListItem 의 name 비공백.
+          · 말단(마지막)은 item 생략, 비말단은 item 보유.
+          · 비말단 item URL 들이 서로 distinct (Bug A: 중간 폴더가
+            top_url 로 중복되면 적발).
+          · 사이트 내부 비말단 item 이 실재 dist 경로로 해석
+            (top_url 오링크/오타 URL 적발).
+          · 글 페이지 말단 name == Article.headline (v0.8.3 계약 —
+            Bug B: 말단이 폴더명이면 적발).
+    BreadcrumbList 가 없으면(톱레벨 글의 단일 crumb 등) 그 검사들은
+    건너뛴다(노드 생략은 schema.org 권장·정상)."""
+    errs = []
+    graph = doc.get('@graph')
+    if not isinstance(graph, list):
+        return ['@graph 가 리스트가 아님']
+    by_type = {}
+    for n in graph:
+        if isinstance(n, dict):
+            by_type.setdefault(n.get('@type'), n)
+    article = by_type.get('Article')
+    if article is None:
+        return ['@graph 에 Article 노드 없음']
+    headline = article.get('headline')
+    if not (isinstance(headline, str) and headline.strip()):
+        errs.append(f'Article.headline 비공백 아님: {headline!r}')
+
+    bc = by_type.get('BreadcrumbList')
+    if bc is None:
+        return errs  # 단일 crumb/톱레벨 글 — 노드 생략은 정상
+    items = bc.get('itemListElement')
+    if not isinstance(items, list) or not items:
+        errs.append('BreadcrumbList.itemListElement 가 비어있음/비리스트')
+        return errs
+
+    positions = [it.get('position') for it in items]
+    if positions != list(range(1, len(items) + 1)):
+        errs.append(f'position 이 1..n 엄밀 단조 아님: {positions}')
+
+    for k, it in enumerate(items):
+        nm = it.get('name')
+        if not (isinstance(nm, str) and nm.strip()):
+            errs.append(f'ListItem[{k}].name 비공백 아님: {nm!r}')
+
+    last = items[-1]
+    if 'item' in last:
+        errs.append(
+            f'말단 ListItem 에 item 존재(생략돼야 함): {last.get("item")!r}')
+    nonleaf_urls = []
+    for k, it in enumerate(items[:-1]):
+        if 'item' not in it:
+            errs.append(f'비말단 ListItem[{k}] 에 item 없음')
+            continue
+        nonleaf_urls.append(it['item'])
+
+    if len(set(nonleaf_urls)) != len(nonleaf_urls):
+        errs.append(f'비말단 item URL 중복(Bug A 류): {nonleaf_urls}')
+
+    for u in nonleaf_urls:
+        if isinstance(u, str) and u.startswith(base_url):
+            path = u[len(base_url):]
+            if not path.startswith('/'):
+                path = '/' + path
+            if not exists(path):
+                errs.append(f'비말단 item 이 dist 에 미해석: {u} (path {path})')
+
+    leaf_name = last.get('name')
+    if isinstance(headline, str) and leaf_name != headline:
+        errs.append(
+            f'말단 name != Article.headline (Bug B 류): '
+            f'{leaf_name!r} != {headline!r}')
+    return errs
+
+
+def section_jsonld_semantics(report) -> bool:
+    report.section('[6] JSON-LD semantic correctness (article pages)')
+
+    from scripts.builder import Builder
+    dist = PROJECT_ROOT / 'dist'
+    if not dist.is_dir():
+        report.line('  dist/ 없음 — skipped (먼저 빌드 필요).')
+        report.status(True, skipped=True)
+        return True
+
+    b = Builder(PROJECT_ROOT)
+    buf = io.StringIO()
+    with redirect_stdout(buf), redirect_stderr(buf):
+        b._load_config()
+    base_url = b.site.base_url
+
+    def exists(path: str) -> bool:
+        rel = path.strip('/')
+        if rel == '':
+            return (dist / 'index.html').is_file()
+        cand = dist / rel
+        return cand.is_file() or (cand / 'index.html').is_file()
+
+    docs_checked = 0
+    with_breadcrumb = 0
+    violations = []
+    for p in sorted(dist.rglob('index.html')):
+        doc = extract_jsonld(p.read_text(encoding='utf-8'))
+        if doc is None:
+            continue
+        docs_checked += 1
+        if any(isinstance(n, dict) and n.get('@type') == 'BreadcrumbList'
+               for n in (doc.get('@graph') or [])):
+            with_breadcrumb += 1
+        rel = str(p.relative_to(dist)).replace('\\', '/')
+        for msg in validate_jsonld_doc(doc, base_url=base_url, exists=exists):
+            violations.append((rel, msg))
+
+    report.line(f'  base_url            : {base_url}')
+    report.line(f'  ld+json docs        : {docs_checked}')
+    report.line(f'  with BreadcrumbList : {with_breadcrumb}')
+    report.line(f'  violations          : {len(violations)}')
+    ok = not violations
+    if violations:
+        report.line('  -- Violations --')
+        for rel, msg in violations:
+            report.line(f'    * {rel}: {msg}')
+    report.status(ok)
+    return ok
+
+
+# ════════════════════════════════════════════════════════════════
 # 리포트 출력
 # ════════════════════════════════════════════════════════════════
 
@@ -435,6 +603,8 @@ def main():
     if not section_score_parity(report, php_bin):
         overall = False
     if not section_index_shape(report, php_bin):
+        overall = False
+    if not section_jsonld_semantics(report):
         overall = False
 
     report.finalize()

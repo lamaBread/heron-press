@@ -1,5 +1,14 @@
 """폴더명 → URL slug 변환.
 
+v0.8.3 변경:
+  - 빌드 제외 접두 일원화. 기존 `is_underscore_path` (`_` 접두만) 를
+    `is_excluded_path` 로 일반화하고 단일-구성요소용 `is_excluded_name`
+    헬퍼를 신설. 제외 접두 = `_` (작성자가 의도적으로 비공개·편집 중) +
+    `.` (OS/VCS 가 만드는 숨김 — `.git` · `.DS_Store`, 그리고 작성자가
+    "숨겼다" 고 믿는 `.draft` 등). 두 접두를 한 규칙으로 다뤄, 숨겼다고
+    여기는 폴더가 글·카테고리·자산으로 실수 공개되는 길을 막는다. 정본
+    Articles 에는 `.` 접두 항목이 없어 산출물 byte 영향 0.
+
 v0.4.5 변경:
   - 비ASCII 폴더명 경고 메시지를 더 명시적으로 보강 (이 메시지는
     builder._build_category_tree 에서 출력됨). 사용자가 빌드 콘솔에서
@@ -58,10 +67,25 @@ def category_slug_from_name(name: str) -> str:
     return s.lower()
 
 
-def is_underscore_path(p, base) -> bool:
-    """True if any segment in path (relative to base) starts with '_'."""
+# v0.8.3: 빌드 제외 폴더/파일 접두. '_' = 작성자가 의도적으로 비공개
+# (편집 중·초안), '.' = OS·VCS 숨김 (.git · .DS_Store · 작성자가 "숨겼다"
+# 고 믿는 .draft 등). 두 접두를 같은 규칙으로 다룬다 (스캔·nav·자산 동기화
+# 가 모두 이 한 곳을 본다).
+_EXCLUDED_PREFIXES = ('_', '.')
+
+
+def is_excluded_name(name: str) -> bool:
+    """단일 경로 구성요소가 빌드 제외 대상인지 (`_` / `.` 접두)."""
+    return name.startswith(_EXCLUDED_PREFIXES)
+
+
+def is_excluded_path(p, base) -> bool:
+    """base 기준 상대경로의 한 세그먼트라도 빌드 제외 접두면 True.
+
+    v0.8.3: 구 `is_underscore_path` (`_` 만) 의 일반화 — `_`·`.` 둘 다.
+    """
     try:
         rel = p.relative_to(base)
     except ValueError:
         rel = p
-    return any(part.startswith('_') for part in rel.parts)
+    return any(is_excluded_name(part) for part in rel.parts)

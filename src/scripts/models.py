@@ -2,6 +2,18 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
+v0.8.3 변경 — JSON-LD 구조화 데이터:
+  - JsonLdConfig dataclass 신설. site.yaml 의 `jsonld:` 블록 (단일 토글
+    `enabled`, ImageConfig 와 같은 패턴). SiteConfig 에 `jsonld` 필드 추가.
+    schema.org JSON-LD 를 글 페이지 `<head>` 에 출력하는 기능의 사이트 전역
+    on/off. 실제 로직은 seo.py (`build_jsonld` / `jsonld_enabled`), 여기엔
+    순수 데이터만 (models.py 는 dataclass 전용 원칙 유지 — seo.py 가
+    models 를 import 하므로 역방향 import 는 순환이 되어 불가).
+  - SeoMeta 에 `jsonld: Optional[bool]` 추가. None=사이트 디폴트 따름,
+    False=이 글만 opt-out, True=명시적 opt-in (사이트가 켜져 있을 때만
+    의미 — 사이트 토글이 마스터). description 등 str 필드의 None/''/text
+    3-상태와 달리 순수 boolean 토글이라 tri-state 규칙은 적용되지 않는다.
+
 v0.6.4 변경 — CSS 일원화 + template 키:
   - CategoryMeta 에 `stylesheets` (list[str]) 와 `use_common_css` (bool=True)
     필드 추가. v0.6.3 의 글/카테고리·홈 비대칭 해소 — 이제 홈 (Articles/meta.yaml)
@@ -106,6 +118,27 @@ from .images import ImageConfig
 
 
 @dataclass
+class JsonLdConfig:
+    """site.yaml 의 `jsonld:` 블록 (v0.8.3).
+
+    schema.org JSON-LD 구조화 데이터를 글 페이지 `<head>` 에
+    `<script type="application/ld+json">` 한 줄로 출력하는 기능의 사이트
+    전역 토글. `images:` 블록과 같은 패턴 — 단일 feature on/off 이지만
+    forward-compat 여지를 위해 dataclass 로 둔다 (후속 버전에서 type 등
+    하위 키 추가 가능).
+
+    enabled — JSON-LD 전체 토글. 기본 True. False 면 모든 글 페이지에서
+              `{{JSONLD}}` placeholder 라인 자체가 ROBOTS_META 와 같은 방식
+              으로 제거되어 산출물에 ld+json 스크립트가 한 줄도 나가지
+              않는다 (v0.5.5 의 "새 기능은 off 스위치를 동반" 원칙). 글
+              단위로는 `seo.jsonld: false` 로 개별 opt-out 가능 (사이트가
+              켜져 있을 때). 사이트가 꺼져 있으면 글 단위 `seo.jsonld: true`
+              로 강제 켜지지 않는다 — 사이트 토글이 마스터.
+    """
+    enabled: bool = True
+
+
+@dataclass
 class SiteConfig:
     domain: str
     base_url: str
@@ -136,6 +169,8 @@ class SiteConfig:
     search_title: str = 'Search'
     # v0.5.1: 이미지 자동 최적화 정책 (WebP + 다중 해상도 + lazy loading).
     images: ImageConfig = field(default_factory=ImageConfig)
+    # v0.8.3: schema.org JSON-LD 구조화 데이터 사이트 전역 토글.
+    jsonld: JsonLdConfig = field(default_factory=JsonLdConfig)
 
 
 @dataclass
@@ -176,6 +211,11 @@ class SeoMeta:
     og_type: Optional[str] = None
     twitter_card: str = 'summary_large_image'
     twitter_image: Optional[str] = None
+    # v0.8.3: 글 단위 JSON-LD opt-out/opt-in. None=site.jsonld.enabled 를
+    # 따름 / False=이 글만 ld+json 미출력 / True=명시적 opt-in (사이트가
+    # 켜져 있을 때만 효과 — 사이트 토글이 마스터). 순수 boolean 이라 다른
+    # SeoMeta str 필드의 None/''/text 3-상태 규칙은 적용되지 않는다.
+    jsonld: Optional[bool] = None
 
 
 @dataclass

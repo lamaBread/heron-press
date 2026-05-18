@@ -1,4 +1,15 @@
-"""SEO meta 태그 빌더 (§ 5).
+"""SEO meta 태그 + JSON-LD 구조화 데이터 빌더 (§ 5).
+
+v0.8.3 — JSON-LD (schema.org) 추가:
+  글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄을
+  추가하는 `build_jsonld()` 와 사이트/글 토글을 판정하는 `jsonld_enabled()`
+  를 신설. 기존 메타 태그를 *대체하지 않고 보강* (additive) 한다 — OG/
+  Twitter/canonical/robots 와 JSON-LD 는 기계 소비자가 서로 다르다 (SNS
+  언퍼ler=OG, SERP 스니펫=meta description, 색인 제어=robots meta, 검색
+  엔진 리치 결과=JSON-LD). 두 산출물이 어긋나지 않도록 canonical/og_image/
+  author 해석을 `resolve_canonical` / `resolve_og_image` / `resolve_author`
+  헬퍼로 추출해 build_meta_tags 와 공유한다 (추출은 순수 리팩터 — v0.8.2
+  까지 build_meta_tags 인라인이던 로직과 1:1, 메타 태그 산출물 byte 불변).
 
 본문 ↔ 메타데이터 분리 원칙 (v0.5.5):
   description / og_description / twitter_description / og_image 같이 외부에
@@ -53,6 +64,7 @@ v0.5.4 잔존 기능:
     공백까지 backup. 한국어/한자/일본어 등 CJK 글자는 글자 단위가 의미 단위
     이므로 영향 없음 (Latin 단어 검사를 통과 못한다).
 """
+import json
 import re
 from typing import Optional
 
@@ -91,6 +103,40 @@ def truncate_description(s: str, max_len: int) -> str:
 def _present(val) -> bool:
     """필드가 '실제 노출할 값을 가진다' 인지. None / 빈 문자열은 False."""
     return val is not None and val != ''
+
+
+# ════════════════════════════════════════════════════════════════
+# 공용 해석 헬퍼 (v0.8.3) — build_meta_tags 와 build_jsonld 가 같은
+# canonical / og_image / author 를 보도록 추출. 동작은 v0.8.2 까지
+# build_meta_tags 인라인이던 것과 1:1 (순수 리팩터, 산출물 불변).
+# ════════════════════════════════════════════════════════════════
+
+def resolve_canonical(seo: SeoMeta, site: SiteConfig,
+                      canonical_path: str) -> str:
+    """canonical URL — seo.canonical (author 명시) > base_url+canonical_path."""
+    return (
+        seo.canonical if _present(seo.canonical)
+        else f'{site.base_url}{canonical_path}'
+    )
+
+
+def resolve_og_image(seo: SeoMeta, site: SiteConfig) -> Optional[str]:
+    """og:image — seo.og_image > site.default_og_image, 절대 URL 정규화.
+
+    본문 폴백 없음 (v0.5.5 본문↔메타데이터 분리). 'http' 로 시작하지 않으면
+    site.base_url 접두. 둘 다 부재면 None.
+    """
+    img = seo.og_image if _present(seo.og_image) else None
+    if img is None and _present(site.default_og_image):
+        img = site.default_og_image
+    if img and not img.startswith('http'):
+        img = site.base_url + img
+    return img
+
+
+def resolve_author(seo: SeoMeta, site: SiteConfig) -> Optional[str]:
+    """author — seo.author (author 명시) > site.default_author."""
+    return seo.author if _present(seo.author) else site.default_author
 
 
 def build_meta_tags(
@@ -136,17 +182,11 @@ def build_meta_tags(
     # description — 본문 폴백 없음. None/빈 문자열이면 태그 누락.
     desc = seo.description if _present(seo.description) else None
 
-    canonical = (
-        seo.canonical if _present(seo.canonical)
-        else f'{site.base_url}{canonical_path}'
-    )
+    canonical = resolve_canonical(seo, site, canonical_path)
 
     # og_image — 본문 폴백 없음. seo.og_image > site.default_og_image.
-    og_image = seo.og_image if _present(seo.og_image) else None
-    if og_image is None and _present(site.default_og_image):
-        og_image = site.default_og_image
-    if og_image and not og_image.startswith('http'):
-        og_image = site.base_url + og_image
+    # v0.8.3: 해석을 resolve_og_image 로 추출 (build_jsonld 와 공용·동작 불변).
+    og_image = resolve_og_image(seo, site)
 
     og_title = seo.og_title if _present(seo.og_title) else full_title
 
@@ -176,7 +216,7 @@ def build_meta_tags(
     if _present(desc):
         tags.append(f'<meta name="description" content="{e(desc)}">')
 
-    author = seo.author if _present(seo.author) else site.default_author
+    author = resolve_author(seo, site)
     if _present(author):
         tags.append(f'<meta name="author" content="{e(author)}">')
 
@@ -207,3 +247,124 @@ def build_meta_tags(
         tags.append(f'<meta name="twitter:image" content="{e(tw_image)}">')
 
     return '\n    '.join(tags), full_title
+
+
+# ════════════════════════════════════════════════════════════════
+# JSON-LD 구조화 데이터 (schema.org) — v0.8.3
+# ════════════════════════════════════════════════════════════════
+
+def jsonld_enabled(site: SiteConfig, seo: SeoMeta) -> bool:
+    """이 페이지에 JSON-LD 를 출력할지 판정. 사이트 토글이 마스터.
+
+    - site.jsonld.enabled 가 False → 무조건 False (글 단위 seo.jsonld=True
+      로도 강제 켜지지 않는다).
+    - 사이트가 켜져 있고 seo.jsonld 가 False → 이 글만 opt-out → False.
+    - 그 외 (seo.jsonld 가 None/True) → True.
+    """
+    if not site.jsonld.enabled:
+        return False
+    if seo.jsonld is False:
+        return False
+    return True
+
+
+def build_jsonld(
+    *,
+    title: str,
+    seo: SeoMeta,
+    site: SiteConfig,
+    canonical_path: str,
+    page_lang: str,
+    published: Optional[str] = None,
+    updated: Optional[str] = None,
+    tags: Optional[list] = None,
+    breadcrumb: Optional[list] = None,
+) -> str:
+    """글 페이지 `<head>` 에 들어갈 schema.org JSON-LD `<script>` 한 줄 반환.
+
+    v0.8.3 신설. build_meta_tags 와 *부가적* (additive) — OG/Twitter/
+    canonical/robots 메타 태그를 대체하지 않는다 (소비자가 다름: SNS
+    언퍼ler=OG, SERP 스니펫=meta description, 색인 제어=robots meta,
+    검색 엔진 리치 결과=JSON-LD). 본문↔메타데이터 분리 원칙을 동일하게
+    따른다 — description/og_image/author 는 author 가 직접 쓴 값(또는
+    site 디폴트)만, 본문 추출 폴백 없음. canonical/og_image/author 해석은
+    build_meta_tags 와 같은 resolve_* 헬퍼를 공유해 두 산출물이 어긋나지
+    않는다.
+
+    @graph 로 두 노드:
+      - Article  — headline / datePublished / dateModified / description /
+        author(Person) / publisher(Organization) / image / keywords /
+        inLanguage / url / mainEntityOfPage. 부재한 선택 필드는 키 자체를
+        넣지 않는다 (빈 값 노이즈 금지 — 메타 태그 정책과 동형).
+      - BreadcrumbList — breadcrumb 인자(빌더의 crumb_parts, 사이트의
+        nav-tracker 와 같은 라벨)를 1-기반 ListItem 배열로. 마지막(현재
+        페이지, url=None)은 schema.org 권장대로 `item` 을 생략. 항목이
+        2개 미만(톱레벨 글의 단일 crumb 등)이면 의미 있는 경로가 아니라
+        BreadcrumbList 노드 자체를 생략한다.
+
+    결정성: json.dumps(ensure_ascii=False, sort_keys=True,
+    separators=(',', ':')) — 객체 키가 삽입 순서와 무관하게 정렬되어
+    입력이 같으면 byte 동일. 배열(@graph / itemListElement / keywords)
+    순서는 의미가 있어 보존된다 (sort_keys 는 객체 키만 정렬).
+
+    `<script>` 안전: raw-text 요소라 `</script` / `<!--` 가 HTML 파서를
+    깨뜨릴 수 있어 직렬화 결과의 `<` `>` `&` 를 각각 `\\u003c` `\\u003e`
+    `\\u0026` 로 치환한다. 셋 다 유효한 JSON 이스케이프라 소비자는 원문
+    으로 복원하고, 치환 결과에는 다시 `<>&` 가 없어 순서 무관.
+    """
+    canonical = resolve_canonical(seo, site, canonical_path)
+
+    article = {
+        '@type': 'Article',
+        'headline': title,
+        'url': canonical,
+        'mainEntityOfPage': {'@type': 'WebPage', '@id': canonical},
+        'publisher': {
+            '@type': 'Organization',
+            'name': site.name,
+            'url': site.base_url,
+        },
+    }
+    if _present(published):
+        article['datePublished'] = published
+    if _present(updated):
+        article['dateModified'] = updated
+    if _present(seo.description):
+        article['description'] = seo.description
+    author = resolve_author(seo, site)
+    if _present(author):
+        article['author'] = {'@type': 'Person', 'name': author}
+    img = resolve_og_image(seo, site)
+    if img:
+        article['image'] = img
+    if tags:
+        article['keywords'] = list(tags)
+    if _present(page_lang):
+        article['inLanguage'] = page_lang
+
+    graph = [article]
+
+    items = []
+    for i, (name, url) in enumerate(breadcrumb or [], start=1):
+        el = {'@type': 'ListItem', 'position': i, 'name': name}
+        if url:
+            el['item'] = (
+                url if url.startswith('http') else site.base_url + url
+            )
+        items.append(el)
+    if len(items) >= 2:
+        graph.append({
+            '@type': 'BreadcrumbList',
+            'itemListElement': items,
+        })
+
+    doc = {'@context': 'https://schema.org', '@graph': graph}
+    payload = json.dumps(
+        doc, ensure_ascii=False, sort_keys=True, separators=(',', ':'),
+    )
+    payload = (
+        payload.replace('<', '\\u003c')
+               .replace('>', '\\u003e')
+               .replace('&', '\\u0026')
+    )
+    return f'<script type="application/ld+json">{payload}</script>'

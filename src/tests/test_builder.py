@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.builder import Builder  # noqa: E402
 from scripts.models import (  # noqa: E402
-    SiteConfig, SeoMeta,
+    SiteConfig, SeoMeta, Category,
 )
 
 
@@ -697,6 +697,73 @@ class BuildReportResetTests(unittest.TestCase):
             len(b1.report.entries),
             b1.report.issue_count() + b1.report.warning_count(),
         )
+
+
+class CrumbPartsForTests(unittest.TestCase):
+    """빵부스러기/nav-tracker 단일 공유 소스의 빌더 레벨 검증.
+    `_crumb_parts_for` 는 조상을 자기 *중첩* 카테고리 URL 로 링크하고
+    (Bug A 교정), 글 호출자는 말단에 글 제목을 넘긴다(Bug B 교정).
+    `_ancestor_categories` 는 접두 경로를 등록 Category 로 해석한다."""
+
+    def _b(self):
+        b = Builder.__new__(Builder)
+        # Articles/Top/Mid/<글폴더> 를 모사하는 최소 카테고리 트리.
+        top = Category(folder_name='Top', slug='top',
+                       path=['Top'], slug_path=['top'])
+        mid = Category(folder_name='Mid', slug='mid',
+                       path=['Top', 'Mid'], slug_path=['top', 'mid'])
+        b.categories = {('Top',): top, ('Top', 'Mid'): mid}
+        return b, top, mid
+
+    def test_ancestor_categories_resolution_and_skip(self):
+        b, top, mid = self._b()
+        self.assertEqual(b._ancestor_categories(['Top', 'Mid']), [top, mid])
+        self.assertEqual(b._ancestor_categories(['Top']), [top])
+        self.assertEqual(b._ancestor_categories([]), [])
+        # 미등록 깊이는 건너뛴다 (('Top','Ghost') 미등록).
+        self.assertEqual(b._ancestor_categories(['Top', 'Ghost']), [top])
+
+    def test_three_level_article_nested_urls_and_title_leaf(self):
+        b, _, _ = self._b()
+        # 글 category_path = ['Top','Mid','<글폴더>'] → 조상 = [:-1].
+        ancestors = b._ancestor_categories(['Top', 'Mid', 'Leaf_Folder'][:-1])
+        crumb = b._crumb_parts_for(ancestors=ancestors,
+                                   leaf=('글 제목', None))
+        self.assertEqual(crumb, [
+            ('Top', '/top/'),
+            ('Mid', '/top/mid/'),     # 중간 = 자기 중첩 URL (Bug A 교정)
+            ('글 제목', None),         # 말단 = 글 제목, item 없음 (Bug B)
+        ])
+        # 중간은 부모(top)와 distinct — v0.8.3 은 둘 다 '/top/' 이었다.
+        self.assertNotEqual(crumb[0][1], crumb[1][1])
+        # 말단 url=None → JSON-LD item 생략 / nav-tracker reload 앵커.
+        self.assertIsNone(crumb[-1][1])
+
+    def test_top_level_article_single_crumb_is_title(self):
+        b, _, _ = self._b()
+        ancestors = b._ancestor_categories(['About'][:-1])  # == []
+        crumb = b._crumb_parts_for(ancestors=ancestors,
+                                   leaf=('글 제목', None))
+        # 단일 crumb → downstream(build_jsonld)에서 BreadcrumbList 생략,
+        # nav-tracker 는 한 줄 + 말단 텍스트 = 글 제목.
+        self.assertEqual(crumb, [('글 제목', None)])
+
+    def test_top_category_page_single_crumb_keeps_folder_name(self):
+        b, _, _ = self._b()
+        # 톱 카테고리 페이지: 조상 0 + 자기 url_prefix, 말단 이름은
+        # K2(폴더명 유지)에 따라 폴더명 그대로 (글 제목 개념 없음).
+        crumb = b._crumb_parts_for(ancestors=[],
+                                   leaf=('Top', '/top/'))
+        self.assertEqual(crumb, [('Top', '/top/')])
+
+    def test_subcategory_page_nested_middle_and_folder_leaf(self):
+        b, _, _ = self._b()
+        # 서브 카테고리 페이지 cat.path=['Top','Mid'] → 조상 = [:-1]=
+        # ['Top'], 말단 = (cat.folder_name, None).
+        ancestors = b._ancestor_categories(['Top', 'Mid'][:-1])
+        crumb = b._crumb_parts_for(ancestors=ancestors,
+                                   leaf=('Mid', None))
+        self.assertEqual(crumb, [('Top', '/top/'), ('Mid', None)])
 
 
 if __name__ == '__main__':
