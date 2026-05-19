@@ -55,7 +55,7 @@ category_per_page: 20
 # 카테고리가 상위 페이지에 section 임베드될 때 페이지당 글 수 / 양수
 category_preview_per_page: 5
 
-# 피드 summary / 갤러리 description 의 최대 글자 수 / 양수
+# 피드 summary (Atom <summary> / RSS <description>) 의 최대 글자 수 / 양수
 description_truncate: 150
 
 # /robots.txt 본문 / 여러 줄 문자열
@@ -80,12 +80,7 @@ images:
   # srcset 과 짝이 되는 sizes 속성 디폴트 / CSS media query
   default_sizes: "(max-width: 800px) 100vw, 800px"
 
-# schema.org JSON-LD 구조화 데이터 (글 페이지 <head> 의
-# <script type="application/ld+json"> — Article + BreadcrumbList).
-# 기존 OG/Twitter/canonical/robots 메타 태그를 대체하지 않고 보강한다.
+# 글 페이지 <head> 의 schema.org JSON-LD (Article + BreadcrumbList). 기존 OG/canonical 등을 대체 않고 보강.
 jsonld:
-  # JSON-LD 전체 토글 / true / false (기본 true).
-  # false 면 모든 글 페이지에서 ld+json 스크립트가 출력되지 않는다.
-  # 글 단위로는 그 글 meta.yaml 의 seo.jsonld: false 로 개별 opt-out
-  # (사이트가 켜져 있을 때). 사이트를 끄면 글 단위로 되살릴 수 없다.
+  # 전체 토글 / true / false. false 면 전 글 미출력 (글 단위 seo.jsonld:false 로 opt-out, 단 사이트 off 시 글 단위 복구 불가)
   enabled: true

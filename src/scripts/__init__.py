@@ -1,4 +1,4 @@
-"""siheonlee.com v1.0.1 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.0.2 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -108,6 +108,23 @@ __version__:
   shipped dist 가 아니라 v1.0.0 *코드* 클린 재빌드로 잡아(v0.8.3
   식 클린-vs-클린) 순수 코드 델타를 격리했다. v1.0.0 폴더는 불변
   아카이브라 손대지 않았다 (검증은 4번째 숫자 복사본 v1.0.0.1 에서).
+
+  v1.0.2 는 메인페이지(홈 Recent posts) **기본 출력 개수 코드 디폴트
+  를 5 → 10** 으로 바꾼 사용자 정책 릴리스. `Builder.HOME_PER_PAGE
+  _DEFAULT` 상수 + README § 11 / `Articles/README.md` 의 "없으면
+  per_page=N" 문서를 일치시킨다. 이 상수는 `Articles/meta.yaml` 에
+  `per_page` 가 없을 때만 발효하는데 정본 `Articles/meta.yaml` 은
+  `per_page: 10` 을 명시하므로 상수는 dormant — **dist 영향 0**.
+  무결성 = 코드 릴리스 형이되 산출물 byte-불변형: 정본 Articles
+  고정, v1.0.1 *코드* 클린 재빌드(불변 v1.0.1 손대지 않는 4번째-
+  숫자 검증 복사본 `siheonlee.com_v1.0.1.1`) vs v1.0.2 클린 재빌드
+  의 dist 가 **786=786, 0 added/0 removed/0 changed = byte-완전
+  동일**(상수가 dormant라 디폴트 변경이 어떤 페이지도 바꾸지
+  않음). 클린 빌드 2회 결정성 동일, 단위 313 · 진단 6/6 승계.
+  `Articles/README.md`(운영자 문서) 의 per_page 예시·디폴트 표기도
+  10 으로 정합했으나 그 파일은 글 폴더가 아니라 dist 로 새지 않음
+  (위 0-diff 로 실측 확인). `__version__` 1.0.1→1.0.2 의 dist
+  누수 0 (B1 유지).
 """
 
-__version__ = '1.0.1'
+__version__ = '1.0.2'

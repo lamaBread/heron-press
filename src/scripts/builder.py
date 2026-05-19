@@ -1750,7 +1750,10 @@ class Builder:
 
     # v0.4.6: Articles/meta.yaml 이 통째로 없거나 per_page 가 비어 있을 때
     # 적용되는 코드 디폴트. site.yaml 에서 home_per_page 가 제거된 자리.
-    HOME_PER_PAGE_DEFAULT = 5
+    # v1.0.2: 사용자 결정으로 5 → 10 (메인페이지 Recent posts 기본 출력
+    # 개수). 정본 Articles/meta.yaml 은 per_page 를 명시(=10)하므로 이
+    # 상수는 그때 dormant — dist 영향 0, per_page 미설정 시에만 발효.
+    HOME_PER_PAGE_DEFAULT = 10
 
     def _home_per_page(self) -> int:
         """메인페이지 Recent posts 의 페이지당 글 수.

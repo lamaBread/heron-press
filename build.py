@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.0.1 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.0.2 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -39,6 +39,26 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v1.0.2 변경 사항 (vs v1.0.1) — 홈 기본 출력 개수 디폴트 5→10 (정책 릴리스):
+  - **메인페이지 Recent posts 코드 디폴트 5 → 10** — 사용자 결정.
+    `Builder.HOME_PER_PAGE_DEFAULT` 상수를 `5` → `10` 으로 바꾸고
+    README § 11 ("Articles/meta.yaml … 없으면 `per_page=10`") 와
+    `Articles/README.md` 의 per_page 예시·디폴트 표기를 정합. 이
+    상수는 `Articles/meta.yaml` 에 `per_page` 가 없을 때만 발효
+    한다 — 정본 `Articles/meta.yaml` 은 `per_page: 10` 을 명시
+    하므로 상수는 dormant 다.
+  - **결정성·산출물** — 상수가 dormant 라 dist 영향이 **0**.
+    `__version__` 1.0.1→1.0.2 의 dist 누수도 0 (v0.8.2 B1 유지).
+    무결성 = 코드 릴리스 형이되 산출물 byte-불변형: 정본 Articles
+    고정, v1.0.1 *코드* 클린 재빌드(불변 `siheonlee.com_v1.0.1`
+    을 손대지 않는 4번째-숫자 검증 복사본 `siheonlee.com_
+    v1.0.1.1`) vs v1.0.2 클린 재빌드의 dist 가 786=786, 0 added/
+    0 removed/0 changed = **byte-완전 동일** (디폴트 변경이 어떤
+    페이지도 바꾸지 않음 — Articles/meta.yaml 명시값 10 이 우선).
+    `Articles/README.md` 표기도 10 으로 정합했으나 그 파일은 글
+    폴더가 아니라 dist 로 새지 않음 (위 0-diff 로 실측 확인).
+    클린 빌드 2회 결정성 동일, 단위 313 · 진단 6/6 승계.
 
 v1.0.1 변경 사항 (vs v1.0.0) — 소분류 헤더 링크화 (기능 릴리스):
   - **소분류명 글씨 자체가 링크 + 우측 → 화살표 폐지** — 톱레벨
