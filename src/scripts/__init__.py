@@ -1,4 +1,4 @@
-"""siheonlee.com v0.8.4 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.0.0 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -61,6 +61,27 @@ __version__:
   `__version__` 0.8.3→0.8.4 는 B1 으로 dist 누수 0 — v0.8.4
   무결성 계약은 문서 전용 형 (정본 클린 재빌드 후 dist sha256
   == 직전 코드 복사본 v0.8.3; 실측 785=785 byte-동일).
+
+  v1.0.0 은 첫 정식 릴리스이자 *기능* 릴리스 — dist 가 바뀐다 (B1 은
+  유지라 `__version__` 0.8.4→1.0.0 자체의 dist 누수는 0). 두 변경:
+  (1) 기본 og:image 자산 패스스루 — `_copy_site_assets` 가
+  `site.default_og_image` 가 가리키는 자산만 webp 변환·variant 등록을
+  건너뛰고 원본을 그대로 dist 에 낸다. og:image 소비자는 `<img srcset>`
+  후처리가 아니라 SNS 링크 언퍼ler — 고정 URL 하나만 가져가 다중
+  해상도가 무의미하고, KakaoTalk·일부 Facebook 은 WebP og:image 를
+  못 렌더하며, `resolve_og_image` 가 이 값을 문자열 그대로 쓰므로
+  변환 시 그 URL 이 404 가 된다 (seo.py 의 "소비자가 다르다" 원칙).
+  실제 `default-og.png`(1200×480) 자산 동반 — v0.8.4 까지는 site.yaml
+  이 가리키는 경로에 파일이 없어 본문 이미지 없는 모든 페이지의
+  og:image 가 죽은 404 였다 (latent 결함 해소). (2) `About` 글
+  `noindex: true` — 그 페이지 robots noindex + sitemap.xml·검색
+  인덱스에서 제외. (피드는 최신 20개 윈도우라 date 2025-01-01 인
+  About 은 v0.8.4 에서도 이미 미수록 — noindex 가 피드엔 no-op.)
+  v0.8.4 대비 실측 dist diff (786 vs 785) = +assets/default-og.png,
+  Δ about/index.html(robots 한 줄)·sitemap.xml·search.php;
+  feed.rss/feed.atom 포함 그 외 전부 byte-불변, 클린 빌드 2회
+  결정성 동일 (combined sha256 bf4293c7…) — 코드 릴리스 형
+  무결성 계약.
 """
 
-__version__ = '0.8.4'
+__version__ = '1.0.0'

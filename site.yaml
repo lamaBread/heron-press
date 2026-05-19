@@ -12,9 +12,9 @@ domain: siheonlee.com
 base_url: https://siheonlee.com
 
 # 사이트 이름 / og:site_name 과 홈/카테고리/시스템 페이지 <title> 기본값
-name: Lama
+name: heron
 # 헤더 좌상단 큰 글씨 / 임의 문자열
-main_title: Lama
+main_title: heron
 # 기본 저자 / 임의 문자열 (글 seo.author 비우면 폴백)
 default_author: 이시헌
 # 기본 og:image / site-relative 또는 절대 URL (글/홈/카테고리 seo.og_image 비우면 폴백)

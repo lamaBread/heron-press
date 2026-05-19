@@ -2892,17 +2892,31 @@ class Builder:
         v0.5.1: assets/ 안의 raster 이미지도 webp 변환 대상. variants 는
         `/assets/{rel}` URL 키로 등록 — 템플릿/HTML 에서 `/assets/foo.png` 형태로
         참조되는 이미지가 후처리에서 webp 로 치환된다.
+
+        v1.0.0 예외 — `site.default_og_image` 가 가리키는 자산(= 사이트
+        기본 og:image)은 raster 여도 webp 변환·variant 등록을 건너뛰고
+        원본을 그대로 복사한다. 이 자산의 소비자는 `<img srcset>` 후처리가
+        아니라 SNS 링크 언퍼ler 다 — `og:image` 메타의 고정 URL 하나를
+        그대로 가져가므로 다중 해상도/srcset 이 무의미하고, KakaoTalk·일부
+        Facebook 크롤러는 WebP og:image 를 렌더하지 못한다. `seo.py` 의
+        `resolve_og_image` 도 이 값을 문자열 그대로 쓰므로(webp 재매핑
+        없음) 변환하면 그 URL 이 dist 에서 404 가 된다 (seo.py docstring 의
+        "소비자가 다르다" 원칙과 같은 결). default_og_image 가 외부 URL
+        이거나 assets/ 밖이면 매칭되는 자산이 없어 이 예외는 무동작.
         """
         if not self.assets_dir.is_dir():
             return
         dst_assets = self.dist / 'assets'
         dst_assets.mkdir(parents=True, exist_ok=True)
+        default_og = self.site.default_og_image
         for src_file in self.assets_dir.rglob('*'):
             if not src_file.is_file():
                 continue
             rel = src_file.relative_to(self.assets_dir)
             dst_file = dst_assets / rel
-            if self._should_optimize_image(src_file):
+            # 사이트 기본 og:image 자산은 원본 그대로 (위 docstring 참조).
+            is_default_og = ('/assets/' + rel.as_posix()) == default_og
+            if self._should_optimize_image(src_file) and not is_default_og:
                 self._optimize_and_register(
                     src_file=src_file,
                     dst_file=dst_file,

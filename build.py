@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v0.8.3 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.0.0 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -39,6 +39,34 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v1.0.0 변경 사항 (vs v0.8.4) — 첫 정식 릴리스 (기능 릴리스):
+  - **기본 og:image 자산 패스스루** — `_copy_site_assets` 가
+    `site.default_og_image` 가 가리키는 자산만 webp 변환·variant 등록을
+    건너뛰고 원본을 그대로 `dist/assets/` 에 복사. og:image 소비자는
+    `<img srcset>` 후처리가 아니라 SNS 링크 언퍼ler — 고정 URL 하나만
+    가져가 다중 해상도가 무의미하고, KakaoTalk·일부 Facebook 은 WebP
+    og:image 를 못 렌더한다. `seo.resolve_og_image` 도 이 값을 문자열
+    그대로 쓰므로(webp 재매핑 없음) 변환하면 그 URL 이 dist 에서 404.
+    실제 `src/assets/default-og.png`(1200×480) 동반 — v0.8.4 까지는
+    site.yaml 이 `/assets/default-og.png` 를 가리키되 그 파일이 없어
+    본문 이미지가 없는 모든 글·홈·카테고리의 og:image 가 죽은 404
+    였다 (이번에 해소). `default_og_image` 가 외부 URL 이거나 assets/
+    밖이면 매칭 자산이 없어 이 예외는 무동작.
+  - **`About` 글 검색 비허용** — `Articles/About/meta.yaml` 에
+    `noindex: true`. 그 페이지 `<head>` 에 `<meta name='robots'
+    content='noindex'>` + `sitemap.xml`·`search.php` 인덱스에서
+    제외 (v0.4.0 색인 정책·v0.6.0 검색 제외와 일관). 피드는 최신
+    20개(`DEFAULT_MAX_ENTRIES`) 윈도우라 date 2025-01-01 인 About
+    은 v0.8.4 에서도 이미 미수록 — noindex 가 피드엔 no-op
+    (`feed.rss`/`feed.atom` byte-불변).
+  - **결정성·산출물** — `__version__` 0.8.4→1.0.0 의 dist 누수는 0
+    (v0.8.2 B1 유지). v0.8.4 dist 대비 실측 diff (786 vs 785) =
+    `+assets/default-og.png`, Δ `about/index.html`(robots 한 줄)·
+    `sitemap.xml`·`search.php`; `feed.rss`/`feed.atom` 포함 그 외
+    산출물 전부 byte-불변, 클린 빌드 2회 결정성 동일 (combined
+    sha256 `bf4293c7…`). 무결성 = "결정성 + v0.8.4 기준 위 실측
+    열거 diff" (코드 릴리스 형). 단위 313 · 진단 6/6 승계.
 
 v0.8.3 변경 사항 (vs v0.8.2) — schema.org JSON-LD + 정확 빵부스러기 (코드 릴리스):
   - 글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄을

@@ -6,14 +6,14 @@
   failures      : 0
   errors        : 0
   skipped       : 0
-  elapsed       : 151.452s
+  elapsed       : 153.462s
   → PASS
 
 ════════════════════════════════════════════════════════════
 [2] Build determinism (dist sha256 stability)
 ────────────────────────────────────────────────────────────
-  files (1st build): 785
-  files (2nd build): 785
+  files (1st build): 786
+  files (2nd build): 786
   all files identical between 1st and 2nd build.
   → PASS
 
@@ -21,7 +21,7 @@
 [3] dist/search.php php -l (PHP syntax)
 ────────────────────────────────────────────────────────────
   exit code   : 0
-  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v0.8.4\dist\search.php
+  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.0.0\dist\search.php
   → PASS
 
 ════════════════════════════════════════════════════════════
@@ -36,8 +36,8 @@
 ────────────────────────────────────────────────────────────
   version    : 4
   top fields : ['version', 'params', 'stats', 'docs', 'categories', 'df_title', 'df_desc', 'df_tags', 'tf_title', 'tf_desc', 'tf_tags']
-  N          : 47
-  docs count : 47
+  N          : 46
+  docs count : 46
   doc[0] keys: ['slug', 'title', 'date', 'category', 'category_slug', 'description', 'tags', 'body_snippet', 'dl_title', 'dl_desc', 'dl_tags']
   → PASS
 
