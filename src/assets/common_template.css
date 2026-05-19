@@ -597,3 +597,109 @@ section.listup-gallery > p {
     }
 }
 
+
+/* ════════════════════════════════════════════════════════════════
+   imgSlideBox  (v1.1.2 — 오류 수정 + 페이지네이션형 재디자인)
+   정본 lama.pe.kr 의 imgSlideBox 는 단일 <img> 의 src 를 JS 로 갈아끼워
+   한 장만 보였다. siheonlee 정적 빌드(markdown.py _simulate_imgslidebox)
+   는 폴더의 모든 이미지를 <img class="slide"> 로 미리 펼치고 그중 한
+   장에만 .active 를 주며, assets/imgslidebox.js 가 .active 를 옮긴다.
+   (1) 오류 수정 — "active 한 장만 보이기"는 전적으로 CSS 책임인데
+   v1.1.1 까지 그 규칙이 없어 모든 슬라이드가 세로로 나열됐다(슬라이드
+   박스가 아니라 이미지 목록). 아래 .slide / .slide.active 가 그 핵심
+   수정이며, .imgBox 와 톤(테두리/마진/반응형 폭)을 맞춘다.
+   (2) 재디자인 — 좌우 큰 오버레이 버튼 대신, 사이트 .pagination-nav 와
+   같은 절제된 톤의 점(dot) 인디케이터를 이미지 하단 중앙에 둔다
+   (‹ prev · 점들 · next ›). 이 .slide-nav 는 imgslidebox.js 가 런타임에
+   만들므로 정적 HTML 산출물은 바뀌지 않는다.
+   ════════════════════════════════════════════════════════════════ */
+.imgSlideBox {
+    position: relative;   /* prev/next 절대배치의 기준 */
+    border: solid black 1px;
+    margin-bottom: 10px;
+    width: 65%;           /* .imgBox 와 동일 폭 (반응형도 아래에서 일치) */
+    overflow: hidden;
+}
+/* 핵심: active 한 장만 노출. 이 두 줄이 없으면 모든 이미지가 나열된다. */
+.imgSlideBox .slide {
+    display: none;
+    width: 100%;          /* .imgBox img 와 동일 — 박스 폭에 꽉 채움 */
+}
+.imgSlideBox .slide.active {
+    display: block;
+}
+/* 하단 중앙 내비게이션 — imgslidebox.js 가 런타임에 만든다(정적 HTML
+   불변). 사이트 .pagination-nav 와 같은 절제된 톤을 따르되, 이미지
+   위에 얹히므로 흰색 계열 + 가독성용 그림자를 쓴다. '평소 흐릿,
+   hover/focus 시 또렷' 원칙 유지(콘텐츠를 시각적으로 압도하지 않음). */
+.imgSlideBox .slide-nav {
+    position: absolute;
+    left: 50%;
+    bottom: 0.7em;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0.55em;
+    padding: 0.3em 0.7em;
+    user-select: none;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+.imgSlideBox:hover .slide-nav,
+.imgSlideBox:focus .slide-nav,
+.imgSlideBox:focus-within .slide-nav {
+    opacity: 1;
+}
+/* 점 인디케이터 — 현재 위치 표시 + 클릭으로 해당 슬라이드 이동 */
+.imgSlideBox .slide-dot {
+    width: 7px;
+    height: 7px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.55);
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.imgSlideBox .slide-dot:hover,
+.imgSlideBox .slide-dot:focus {
+    background-color: rgba(255, 255, 255, 0.85);
+    outline: none;
+}
+.imgSlideBox .slide-dot.active {
+    background-color: #fff;
+    transform: scale(1.35);
+}
+/* 이전/다음 — 점들 양옆의 절제된 갈매기(chevron) */
+.imgSlideBox .prev,
+.imgSlideBox .next {
+    border: none;
+    background: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 1.15em;
+    line-height: 1;
+    padding: 0 0.15em;
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+    opacity: 0.85;
+    transition: opacity 0.2s ease;
+}
+.imgSlideBox .prev:hover,
+.imgSlideBox .next:hover,
+.imgSlideBox .prev:focus,
+.imgSlideBox .next:focus {
+    opacity: 1;
+    outline: none;
+}
+/* 반응형 폭 — .imgBox 의 브레이크포인트/폭과 동일하게 맞춤. */
+@media (min-width: 993px) and (max-width: 1430px) {
+    .imgSlideBox { width: 80%; }
+}
+@media (min-width: 601px) and (max-width: 992px) {
+    .imgSlideBox { width: 80%; }
+}
+@media screen and (max-width: 600px) {
+    .imgSlideBox { width: 100%; }
+}
+

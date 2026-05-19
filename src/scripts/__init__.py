@@ -183,6 +183,52 @@ __version__:
   단위 313→3xx (test_markdown 에 ParsePhpGlobals/SimulatePhp 신설,
   실측치는 §16/diagnostics 참조), 진단 6/6 승계. `__version__`
   1.1.0→1.1.1 의 dist 누수 0 (B1 유지).
+
+  v1.1.2 는 **배포 사고 수정 + imgSlideBox 페이지네이션형 재디자인**
+  릴리스 — CSS·JS 두 자산이 바뀌므로 dist 가 바뀐다 (B1 유지라
+  `__version__` 1.1.1→1.1.2 자체의 dist 누수는 0).
+    (1) 오류 — v1.1.1 dist 실배포에서 imgSlideBox 가 슬라이드 박스가
+        아니라 폴더 안 모든 이미지가 세로로 나열됐다(사용자 보고,
+        `/clear` 글). 정본 lama.pe.kr 의 `PHP/GlobalFunctions.php`
+        imgSlideBox 는 단일 `<img>` 의 `src` 를 JS 로 갈아끼워 한
+        장만 보였지만, siheonlee 정적 빌드(`markdown.py`
+        `_simulate_imgslidebox`)는 폴더의 모든 이미지를
+        `<img class="slide">` 로 펼치고 첫 장에만 `.active` 를 준
+        뒤 `imgslidebox.js` 가 `.active` 를 옮기는 설계 — "한 장만
+        보이기" 가 전적으로 CSS 책임인데 `common_template.css` 에
+        `.imgSlideBox .slide{display:none}` + `.slide.active
+        {display:block}` 가 처음부터 없어 모두 표시됐다(JS 정상,
+        누락 CSS 가 본질). 그 두 줄이 핵심 수정이며 절대 제거 금지
+        (제거 시 전체 나열로 회귀).
+    (2) 재디자인(같은 릴리스에서 함께) — 사용자 요청으로 좌우 큰
+        반투명 검정 오버레이 버튼을 폐지하고, 사이트 `.pagination
+        -nav` 와 같은 절제된 톤의 점(dot) 인디케이터를 이미지 하단
+        중앙에 두는 모던·간결한 페이지네이션형으로 재디자인(‹ prev ·
+        점들 · next ›, 활성 점 흰색·확대, 점 클릭 이동, 평소 흐릿·
+        hover/focus-within 또렷). 이 `.slide-nav` 는 `imgslidebox
+        .js` 가 **런타임에 생성**한다 — `_simulate_imgslidebox`
+        정적 마크업·빌드 로직은 무변경이라 정적 HTML 산출물은 한
+        글자도 안 바뀌고, 변경이 `common_template.css`·`imgslidebox
+        .js` 두 자산에만 갇힌다(JS 미동작 시 오류수정 CSS 로 첫
+        장만 보이는 안전 폴백 — 슬라이드의 JS 의존이라는 기존
+        점진적 향상 자세와 일관).
+  무결성 = 코드 릴리스 형·dist 의도적 변경형 (정본 Articles 고정,
+  불변 `siheonlee.com_v1.1.1` 미수정·4번째-숫자 검증 복사본
+  `siheonlee.com_v1.1.1.1` 의 v1.1.1 *코드* 클린 재빌드 vs v1.1.2
+  클린 재빌드의 *열거된* diff): `assets/common_template.css` +
+  `assets/imgslidebox.js` 딱 두 파일만 변경, 786=786·0 added/0
+  removed, 그 외 글·홈·카테고리·피드·사이트맵·검색·이미지·기타
+  자산 전부 byte-불변(공통 CSS·JS 는 `<link>`/`<script src>` 로
+  참조될 뿐 HTML 인라인 아니고 raster 아니라 webp 비대상이라 그대로
+  복사 — HTML 무변경을 [6] ld+json 47/46 불변이 실증). 클린 빌드
+  2회 결정성 동일(combined sha256
+  748997de3e15860866c35732684c9ebf410023259b54a9292ad66a2e30a699fa).
+  빌드 *로직* 모듈(scripts/·templates/) byte-불변; build.py·
+  __init__.py 변경은 docstring/`__version__` 뿐 (주석·B1 — dist
+  미도달, 위 2-파일 diff 가 실증). Python 로직 무변경이라 단위
+  **337** 승계(신규 테스트 없음 — 순수 CSS/JS 자산 변경, v1.0.1·
+  v1.0.2 선례 일치), 진단 **6/6** 승계([6] ld+json 47/46 그대로).
+  `__version__` 1.1.1→1.1.2 의 dist 누수 0 (B1 유지).
 """
 
-__version__ = '1.1.1'
+__version__ = '1.1.2'

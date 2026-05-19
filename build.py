@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.1.1 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.1.2 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
