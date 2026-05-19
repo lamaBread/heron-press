@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.0.0 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.0.1 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -39,6 +39,39 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v1.0.1 변경 사항 (vs v1.0.0) — 소분류 헤더 링크화 (기능 릴리스):
+  - **소분류명 글씨 자체가 링크 + 우측 → 화살표 폐지** — 톱레벨
+    카테고리 페이지(예: `/blog/`)의 자식 소분류 section 헤더가
+    v1.0.0 까지는 `소분류명 <a class='more-link'>→</a>` (이름은
+    plain text, 우측에 가는 화살표 링크) 였다. v1.0.1 은 화살표를
+    없애고 소분류명 글씨 자체를 그 소분류의 자기 페이지
+    (`/{top}/{sub}/`)로 가는 a 태그로 만든다 — 글씨를 클릭하면 그
+    소분류 글만 보인다. `scripts/builder.py` 의 `_render_section`
+    `more_url` 분기가 `<a class='subcat-link'>{이름}</a>` 를 내고,
+    `src/assets/common_template.css` 의 `.more-link` 관련 3 룰을
+    `.gap .subcat-link` 한 룰(`color: inherit; text-decoration:
+    none;`, 호버 효과 없음)로 교체 — 링크지만 본문 글씨와 똑같이
+    보이고(스타일 없이·깔끔하게), 클릭 가능 암시는 브라우저 기본
+    포인터 커서뿐. `more_url` 이 없는 section(카테고리 자기 직속
+    글)과 홈의 정적 "Recent posts" 갭은 무영향.
+  - **결정성·산출물** — `__version__` 1.0.0→1.0.1 의 dist 누수는
+    0 (v0.8.2 B1 유지). 무결성 = 코드 릴리스 형 (정본 Articles
+    고정, v1.0.0 *코드* 클린 재빌드[불변 v1.0.0 손대지 않는
+    4번째-숫자 검증 복사본 `siheonlee.com_v1.0.0.1`] vs v1.0.1
+    클린 재빌드의 열거 diff). v1.0.0 대비 변경은 **5 파일** —
+    `assets/common_template.css` + `blog`·`project`·`research`·
+    `study`/`index.html` (자식 소분류를 둔 4 톱레벨 카테고리
+    페이지), 0 added/0 removed, 781 byte-동일(786=786). 홈
+    (`index.html`)·소분류 말단 페이지·`feed.rss`/`feed.atom`·
+    `sitemap.xml`·`search.php`·글 페이지 전부 byte-불변. 클린
+    빌드 2회 dist 완전 동일 (combined sha256 `bac1e2c6…`). 단위
+    313 승계 · 진단 6/6. (부수 발견·이번 변경과 직교: 불변
+    아카이브 `siheonlee.com_v1.0.0` 의 *shipped* `dist/index.html`
+    이 v1.0.0 코드 클린 재빌드와 1파일 불일치 = v1.0.0 자체의
+    사전 staleness. baseline 을 shipped dist 가 아니라 코드 클린
+    재빌드로 잡아 순수 코드 델타를 격리했다 — v0.8.3 식 클린-vs-
+    클린. v1.0.0 폴더는 불변이라 손대지 않았다.)
 
 v1.0.0 변경 사항 (vs v0.8.4) — 첫 정식 릴리스 (기능 릴리스):
   - **기본 og:image 자산 패스스루** — `_copy_site_assets` 가

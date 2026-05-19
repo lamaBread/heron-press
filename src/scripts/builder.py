@@ -2536,7 +2536,10 @@ class Builder:
 
         articles 는 이미 정렬되어 있어야 한다.
         group_key 는 같은 페이지 내에서 unique 해야 한다 (페이지 컨트롤 짝짓기).
-        more_url 이 주어지면 section 우측 상단에 → 링크가 표시된다.
+        more_url 이 주어지면 section 헤더의 라벨(소분류명) *자체* 가 그 URL
+        로 가는 링크가 된다 — 클릭하면 그 소분류의 자기 페이지(그 분류 글
+        만)로 이동. (v1.0.1: 라벨 우측의 → 화살표 폐지. 링크는 본문 글씨와
+        동일하게 보이도록 스타일을 비운 a 태그 — .gap .subcat-link.)
         layout 이 'gallery' 면 section 에 listup-gallery 클래스가 추가되고 항목이
         이미지 타일로 렌더된다 (v0.5.3).
         """
@@ -2566,9 +2569,13 @@ class Builder:
             nav_html = _pagination_nav_html(group_key, len(articles), per_page)
 
         if more_url:
+            # v1.0.1: 소분류명 글씨 자체에 스타일 없는 a 태그를 건다 (우측
+            # → 화살표 폐지). 글씨를 클릭하면 그 소분류의 자기 페이지로
+            # 가 그 분류 글만 보인다. 링크 외양은 .gap .subcat-link 가
+            # color inherit + text-decoration none 으로 본문 글씨와 동일.
             label_html = (
-                f"{escape_html(label)} "
-                f"<a class='more-link' href='{more_url}'>→</a>"
+                f"<a class='subcat-link' href='{more_url}'>"
+                f"{escape_html(label)}</a>"
             )
         else:
             label_html = escape_html(label)

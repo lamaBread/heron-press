@@ -1,4 +1,4 @@
-"""siheonlee.com v1.0.0 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.0.1 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -82,6 +82,32 @@ __version__:
   feed.rss/feed.atom 포함 그 외 전부 byte-불변, 클린 빌드 2회
   결정성 동일 (combined sha256 bf4293c7…) — 코드 릴리스 형
   무결성 계약.
+
+  v1.0.1 은 소분류 헤더 UI *기능* 릴리스 — dist 가 바뀐다 (B1 유지라
+  `__version__` 1.0.0→1.0.1 자체의 dist 누수는 0). 변경 한 가지:
+  톱레벨 카테고리 페이지의 자식 소분류 section 헤더에서 (1) 우측
+  → 화살표를 폐지하고 (2) 소분류명 글씨 자체를 그 소분류 페이지
+  (`more_url` = `/{top}/{sub}/`)로 가는 스타일 없는 링크로 만든다 —
+  글씨를 클릭하면 그 소분류 글만 보인다. `_render_section` 의
+  `more_url` 분기가 `{label} <a class='more-link'>→</a>` 대신
+  `<a class='subcat-link'>{label}</a>` 를 내고, `common_template
+  .css` 의 `.more-link` 3 룰을 `.gap .subcat-link` 1 룰(color
+  inherit + text-decoration none, 호버 없음 — 본문 글씨와 동일
+  외양)으로 교체. `more_url` 없는 section(자기 직속 글)·홈의 정적
+  "Recent posts" 갭은 무영향. 무결성 = 코드 릴리스 형 (정본
+  Articles 고정, v1.0.0 코드 클린 재빌드[검증 복사본 v1.0.0.1] vs
+  v1.0.1 클린 재빌드 열거 diff): 5 파일만 변경 — `assets/common_
+  template.css` + `blog`·`project`·`research`·`study`/`index.html`
+  (자식 소분류를 둔 4 톱레벨 카테고리 페이지), 0 added/0 removed,
+  781 byte-동일(786=786). 홈·소분류 말단 페이지·피드·사이트맵·
+  검색·robots·글 페이지 전부 byte-불변. 결정성: v1.0.1 클린 빌드
+  2회 dist 완전 동일 (combined sha256 bac1e2c6…). 단위 313 승계,
+  진단 6/6. 부수 발견(이번 변경과 직교): 불변 아카이브 v1.0.0 의
+  *shipped* `dist/index.html`(홈) 이 v1.0.0 코드 클린 재빌드와
+  1파일 불일치 — v1.0.0 자체의 사전 staleness. 그래서 baseline 을
+  shipped dist 가 아니라 v1.0.0 *코드* 클린 재빌드로 잡아(v0.8.3
+  식 클린-vs-클린) 순수 코드 델타를 격리했다. v1.0.0 폴더는 불변
+  아카이브라 손대지 않았다 (검증은 4번째 숫자 복사본 v1.0.0.1 에서).
 """
 
-__version__ = '1.0.0'
+__version__ = '1.0.1'
