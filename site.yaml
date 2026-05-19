@@ -84,3 +84,13 @@ images:
 jsonld:
   # 전체 토글 / true / false. false 면 전 글 미출력 (글 단위 seo.jsonld:false 로 opt-out, 단 사이트 off 시 글 단위 복구 불가)
   enabled: true
+
+# PHP 서명 변수 / `{변수명: 문자열}` 맵.
+# 정본 lama.pe.kr 서버는 PHP/GlobalVariables.php 를 auto_prepend 해 글
+# 본문 imgBox 캡션 안 `{$reference_hanbyeol}` 같은 토큰을 런타임에
+# 치환했다. siheonlee.com 정적 빌드엔 그 런타임이 없으므로 값을 여기
+# 옮겨 적으면 빌드 시점에 캡션에 치환된다. 정의 안 된 변수는 빈
+# 문자열(PHP 미정의 변수 echo 동작과 동일). 변수명 앞 `$` 는 생략.
+php_globals:
+  reference_hanbyeol: "Character illustration by 김한별 (kakao ID: zzang767401)"
+  reference_hanbyeol_webDesign: "Illustration and Web Design by 김한별 (kakao ID: zzang767401)"

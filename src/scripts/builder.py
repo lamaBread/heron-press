@@ -441,6 +441,7 @@ from .markdown import (
     normalize_styles,
     process_html,
     has_live_php,
+    parse_php_globals,
     resolve_section_markers,
 )
 from .images import (
@@ -823,6 +824,8 @@ class Builder:
             images=self._parse_image_config(get('images') or {}),
             # v0.8.3: schema.org JSON-LD 사이트 전역 토글.
             jsonld=self._parse_jsonld_config(get('jsonld') or {}),
+            # v1.1.1: PHP 서명 변수 (imgBox 캡션 `{$name}` 보간).
+            php_globals=parse_php_globals(get('php_globals')),
         )
 
         # v0.4.6: 사용자가 옛 home_* 키를 site.yaml 에 그대로 두면 알아채지
@@ -2050,11 +2053,13 @@ class Builder:
             if content_path.suffix == '.md':
                 rr = render_article_md(
                     content_text, m.slug, article.source_dir,
+                    self.site.php_globals,
                 )
                 # v0.4.3: 본문 자동 첫 갭 + 섹션 마커 (===제목===, ======) 처리.
                 body_html = resolve_section_markers(rr.html, m.title)
             else:
-                rr = process_html(content_text, m.slug, article.source_dir)
+                rr = process_html(content_text, m.slug, article.source_dir,
+                                  self.site.php_globals)
                 body_html = rr.html
 
             self.rendered_bodies[m.slug] = html_to_plain(rr.html)

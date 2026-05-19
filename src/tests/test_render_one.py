@@ -25,15 +25,35 @@ if str(_SRC) not in sys.path:
 
 from scripts.markdown import (                        # noqa: E402
     render_article_md, process_html, resolve_section_markers,
+    parse_php_globals,
 )
+from scripts.yaml_parser import yaml_load              # noqa: E402
+
+
+def _site_php_globals() -> dict:
+    """render_one.py 와 *같은* <verdir>/site.yaml php_globals.
+
+    v1.1.1: 미리보기 본문 충실도 = 빌더와 같은 서명 변수 치환. 양쪽이
+    동일 site.yaml 에서 읽으므로 패리티가 구성적으로 보장된다.
+    """
+    sy = _ROOT / 'site.yaml'
+    if not sy.is_file():
+        return {}
+    try:
+        return parse_php_globals(
+            (yaml_load(sy.read_text(encoding='utf-8')) or {})
+            .get('php_globals'))
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def _build_body(text: str, slug: str, title: str, src_dir: Path,
                 ext: str) -> str:
     """빌더 _render_articles 와 1:1 동일한 본문 식."""
+    g = _site_php_globals()
     if ext == 'html':
-        return process_html(text, slug, src_dir).html
-    rr = render_article_md(text, slug, src_dir)
+        return process_html(text, slug, src_dir, g).html
+    rr = render_article_md(text, slug, src_dir, g)
     return resolve_section_markers(rr.html, title)
 
 

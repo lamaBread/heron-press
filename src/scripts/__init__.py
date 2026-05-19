@@ -146,6 +146,43 @@ __version__:
   (위 0-diff 가 실증). admin 은 빌드 *앞단* 의 별도 저작 도구라
   설계 원칙 5 "Articles/ 읽기만, 소스 자동수정 안 함"(=빌드의
   불변식) 무손상 — admin 은 빌드가 아니라 그 입력을 만드는 별개 도구.
+
+  v1.1.1 은 **배포 사고 수정** 릴리스 — 빌드 *로직* 변경이라 dist 가
+  바뀐다 (B1 유지라 `__version__` 1.1.0→1.1.1 자체의 dist 누수는 0).
+  v1.0.2.2 실배포에서 `/u-hof/`·`/automatic-grading/` 등 imgBox PHP
+  를 쓰는 글이 본문 중간부터 잘려 나갔다. 원인은 `scripts/markdown.py`
+  의 `simulate_php_in_html` 이 **한 호출짜리 한 줄** `<?php f(a) ?>`
+  형태만 정적 HTML 로 펼치고, 실제 본문 대부분인 **다중 구문 블록**
+  (`<?php\n global $sig;\n imgBox(...);\n imgBox(...);\n?>`) 은
+  시뮬레이트에 실패해 원본 PHP 가 그대로 dist 로 샌 것. 정적
+  siheonlee.com 에는 `imgBox()`/`$reference_*` 런타임이 없어
+  `Call to undefined function imgBox()` fatal → 그 지점부터 응답
+  truncate (사용자 보고 문제 1·2 는 동일 원인). 수정:
+    (1) `simulate_php_in_html` 을 블록 토큰 스캐너로 재작성 — 주석
+        (`//` `#` `/* */`)·`global` 선언·`;` 을 무시하고 imgBox/
+        imgSlideBox 호출만 있으면 블록 통째로 정적 HTML 치환,
+        다른 살아있는 구문이 있으면 원문 보존(동적 PHP 보호).
+    (2) site.yaml `php_globals:` 신설 — 정본 lama.pe.kr 의
+        `PHP/GlobalVariables.php`($reference_hanbyeol /
+        $reference_hanbyeol_webDesign = 김한별 일러스트·웹디자인
+        크레딧) 를 운영자 설정으로 옮겨 캡션 `{$name}` 을 빌드
+        시점에 치환 (정의 없으면 빈 문자열 = PHP 미정의 echo 동등).
+        site.yaml 값은 운영자 입력이라 코드 무결성 항목 아님.
+    (3) `_simulate_imgbox` 캡션(`exp`)을 이스케이프하지 않도록 —
+        정본 `PHP/GlobalFunctions.php` 의 imgBox 가 `$exp` 를 그대로
+        echo 했고 작성자가 `<br>`·`&nbsp;`·`<a>` 와 서명 보간을
+        의도적으로 캡션에 넣기 때문(원 사이트와 같은 결과). `alt`
+        는 속성값이라 이스케이프 유지.
+  무결성 = 코드 릴리스 형 (정본 Articles 고정, v1.1.0 *코드* 클린
+  재빌드 vs v1.1.1 클린 재빌드의 *열거된* dist diff + 클린 빌드 2회
+  결정성 동일). dist 변경은 의도된 것 — imgBox 다중 블록을 쓰는 글
+  (이전 leak `.php` 10개) 이 올바른 정적 HTML 로 펼쳐지고, 그중
+  살아있는 PHP 가 사라진 페이지는 `index.php`→`index.html` 로
+  바뀐다. admin 미리보기(render_one.py)도 같은 site.yaml php_globals
+  를 읽어 본문 충실도 유지(test_render_one 패리티 게이트 갱신).
+  단위 313→3xx (test_markdown 에 ParsePhpGlobals/SimulatePhp 신설,
+  실측치는 §16/diagnostics 참조), 진단 6/6 승계. `__version__`
+  1.1.0→1.1.1 의 dist 누수 0 (B1 유지).
 """
 
-__version__ = '1.1.0'
+__version__ = '1.1.1'

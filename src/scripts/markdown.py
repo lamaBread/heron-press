@@ -239,14 +239,58 @@ def render_markdown(text: str) -> str:
 # ════════════════════════════════════════════════════════════════
 # PHP function simulation (imgBox / imgSlideBox)
 # ════════════════════════════════════════════════════════════════
+#
+# 정본 lama.pe.kr 서버는 `PHP/GlobalFunctions.php`(imgBox/imgSlideBox)
+# 와 `PHP/GlobalVariables.php`($reference_hanbyeol 등 서명 변수) 를
+# auto_prepend 해 글 본문의 `<?php … ?>` 블록을 런타임에 실행했다.
+# siheonlee.com 정적 빌드에는 그 런타임이 없으므로, 작성자가 .html
+# 본문에 쓴 imgBox/imgSlideBox PHP 를 빌드 시점에 정적 HTML 로 펼친다.
+#
+# v1.1.1 — 다중 구문 블록 지원 (배포 사고 수정):
+#   이전 구현은 한 블록당 호출 1개인 `<?php func(args) ?>` 한 줄 형태
+#   만 시뮬레이트했다. 실제 본문은 거의 다 다중 구문 블록
+#       <?php
+#           global $reference_hanbyeol_webDesign;   // 서명 변수 선언
+#           imgBox("a.png", "캡션 {$reference_hanbyeol_webDesign}");
+#           imgBox("b.png", "캡션");
+#       ?>
+#   형태라 시뮬레이트에 실패해 원본 PHP 가 그대로 dist 로 샜고,
+#   siheonlee.com 에서 `Call to undefined function imgBox()` (또는
+#   미정의 `$reference_*` 전역) fatal 이 나 그 지점부터 응답이 잘렸다.
+#   이제 블록 전체를 토큰 스캔해 주석(`//` `#` `/* */`)·`global` 선언·
+#   세미콜론을 무시하고, 남는 게 imgBox/imgSlideBox 호출뿐이면 정적
+#   HTML 로 펼친다. 살아있는 다른 구문이 하나라도 있으면 블록을 원문
+#   그대로 둔다 (보수적 — 진짜 동적 PHP 는 건드리지 않음).
+
+
+def _interpolate_php(s: str, php_globals: dict) -> str:
+    """PHP 큰따옴표 문자열 보간: `{$name}` / `$name` → php_globals[name].
+
+    정의 안 된 변수는 빈 문자열 (PHP 의 미정의 변수 echo 동작과 동일).
+    작은따옴표 인자에는 호출하지 않는다 (PHP 가 보간 안 함).
+    """
+    s = re.sub(r'\{\$([A-Za-z_]\w*)\}',
+               lambda m: str(php_globals.get(m.group(1), '')), s)
+    s = re.sub(r'\$([A-Za-z_]\w*)',
+               lambda m: str(php_globals.get(m.group(1), '')), s)
+    return s
+
 
 def _simulate_imgbox(src: str, exp: str, alt: str, slug: str) -> str:
+    """imgBox PHP 호출 → 정적 `<div class="imgBox">`.
+
+    `exp`(캡션) 는 **이스케이프하지 않는다** — 정본 GlobalFunctions.php
+    의 imgBox 가 `{$exp}` 를 그대로 echo 했고, 작성자가 캡션에 `<br>`·
+    `&nbsp;`·`<a …>` 와 서명 변수 보간을 의도적으로 넣기 때문이다(정적
+    빌드가 원래 사이트와 같은 결과를 내야 함). `alt` 는 속성값이라
+    안전을 위해 이스케이프를 유지한다.
+    """
     url = rewrite_asset_path(src, slug)
     alt = alt or ''
     if exp:
         return (f'<div class="imgBox">\n'
                 f'  <img src="{url}" alt="{escape_html(alt)}">\n'
-                f'  <p class="caption">{escape_html(exp)}</p>\n'
+                f'  <p class="caption">{exp}</p>\n'
                 f'</div>')
     return (f'<div class="imgBox">\n'
             f'  <img src="{url}" alt="{escape_html(alt)}">\n'
@@ -282,103 +326,249 @@ def _simulate_imgslidebox(dir_path: str, slug: str, article_dir: Path) -> str:
             f'</div>')
 
 
-def _parse_php_args(args_str: str) -> list:
-    args = []
-    current = ''
-    in_q = None
-    for ch in args_str:
-        if in_q:
-            if ch == in_q:
-                in_q = None
-            else:
-                current += ch
-        elif ch in ('"', "'"):
-            in_q = ch
-        elif ch == ',':
-            args.append(current.strip())
-            current = ''
-        else:
-            current += ch
-    if current.strip() or in_q is not None:
-        args.append(current.strip())
-    return args
+def _php_call_args(text: str, start: int) -> tuple:
+    """`(` 직후 `start` 부터 짝맞춤 `)` 까지 스캔, 인자 목록을 돌려준다.
 
-
-_PHP_CALL_OPEN_RE = re.compile(r'<\?php\s+(\w+)\(')
-_PHP_CLOSE_RE = re.compile(r'\s*\?>')
-
-
-def _scan_php_args(text: str, start: int) -> tuple:
-    """`(` 직후부터 짝맞춤 `)` 까지 quote/nested parens 인식하며 스캔.
-
-    v0.4.2: 이전의 `\\(([^)]*)\\)` 정규식은 인자 안의 `)` 를 처리 못 해
-    `imgBox("a(b).jpg", ...)` 같은 입력이 깨졌다. 이제 nested parens 와
-    quote 안의 `)` 모두 정상 처리.
-
-    반환: (args_str, close_paren_index)  매칭 실패 시 (None, None).
+    quote(작은/큰따옴표, 백슬래시 이스케이프)·중첩 괄호를 인식한다.
+    반환: (args, close_idx) — args 는 (값, 따옴표문자|None) 튜플 리스트,
+    close_idx 는 닫는 `)` 의 인덱스. 짝이 안 맞으면 (None, None).
+    따옴표 문자열은 따옴표를 벗긴 본문만, 그 외(상수/숫자/변수)는 원문.
     """
+    args = []
+    buf = []
+    quote = None          # 현재 문자열 안이면 그 따옴표 문자
+    cur_quote = None      # 이 인자가 따옴표 문자열이면 그 따옴표 문자
     depth = 1
-    in_q = None
     i = start
     n = len(text)
     while i < n:
         ch = text[i]
-        if in_q:
-            if ch == in_q:
-                in_q = None
-        elif ch in ('"', "'"):
-            in_q = ch
-        elif ch == '(':
+        if quote:
+            if ch == '\\' and i + 1 < n:
+                # PHP 문자열 이스케이프 — 다음 문자를 그대로 보존
+                buf.append(text[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+                i += 1
+                continue
+            buf.append(ch)
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            cur_quote = ch
+            i += 1
+            continue
+        if ch == '(':
             depth += 1
-        elif ch == ')':
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == ')':
             depth -= 1
             if depth == 0:
-                return text[start:i], i
+                val = ''.join(buf).strip()
+                if val or cur_quote is not None or args:
+                    args.append((val, cur_quote))
+                return args, i
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == ',' and depth == 1:
+            args.append((''.join(buf).strip(), cur_quote))
+            buf = []
+            cur_quote = None
+            i += 1
+            continue
+        buf.append(ch)
         i += 1
     return None, None
 
 
-def simulate_php_in_html(text: str, slug: str, article_dir: Path) -> str:
+def _find_php_block_end(text: str, i: int) -> int:
+    """`<?php` 직후 인덱스 `i` 부터 블록을 닫는 `?>` 의 `?` 위치를 찾는다.
+
+    PHP 규칙: `?>` 는 문자열·`/* */` 안에서는 블록을 닫지 않지만,
+    `//`·`#` 줄 주석 안에서는 닫는다(그래서 `<?php // x ?>` 가 유효).
+    못 찾으면 -1.
+    """
+    n = len(text)
+    state = 'N'   # N 평문 / S '..' / D ".." / L 줄주석 / B /*..*/
+    while i < n:
+        ch = text[i]
+        if state == 'N':
+            if ch == '?' and i + 1 < n and text[i + 1] == '>':
+                return i
+            if ch == "'":
+                state = 'S'
+            elif ch == '"':
+                state = 'D'
+            elif ch == '/' and i + 1 < n and text[i + 1] == '/':
+                state = 'L'
+                i += 2
+                continue
+            elif ch == '#':
+                state = 'L'
+            elif ch == '/' and i + 1 < n and text[i + 1] == '*':
+                state = 'B'
+                i += 2
+                continue
+        elif state == 'S':
+            if ch == '\\' and i + 1 < n:
+                i += 2
+                continue
+            if ch == "'":
+                state = 'N'
+        elif state == 'D':
+            if ch == '\\' and i + 1 < n:
+                i += 2
+                continue
+            if ch == '"':
+                state = 'N'
+        elif state == 'L':
+            if ch == '?' and i + 1 < n and text[i + 1] == '>':
+                return i
+            if ch == '\n':
+                state = 'N'
+        elif state == 'B':
+            if ch == '*' and i + 1 < n and text[i + 1] == '/':
+                state = 'N'
+                i += 2
+                continue
+        i += 1
+    return -1
+
+
+_PHP_IDENT_RE = re.compile(r'[A-Za-z_]\w*')
+
+
+def _simulate_php_block(interior: str, slug: str, article_dir: Path,
+                        php_globals: dict) -> tuple:
+    """`<?php` 와 `?>` 사이 본문을 정적 HTML 로 펼친다.
+
+    반환: (html, ok). ok=False 면 imgBox/imgSlideBox·주석·`global`·`;`
+    이외의 살아있는 구문이 있다는 뜻 — 호출부가 블록을 원문 그대로 둔다.
+    ok=True 이고 호출이 0개면 (전부 주석/global) html='' (블록 소멸).
+    """
+    parts = []
+    i = 0
+    n = len(interior)
+    while i < n:
+        ch = interior[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch == ';':
+            i += 1
+            continue
+        if interior.startswith('//', i) or ch == '#':
+            nl = interior.find('\n', i)
+            i = n if nl == -1 else nl + 1
+            continue
+        if interior.startswith('/*', i):
+            end = interior.find('*/', i + 2)
+            if end == -1:
+                return '', False          # 닫히지 않은 블록 주석
+            i = end + 2
+            continue
+        m = _PHP_IDENT_RE.match(interior, i)
+        if not m:
+            return '', False              # `$x = …`, `<?=` 등 — 동적
+        ident = m.group(0)
+        j = m.end()
+        if ident == 'global':
+            # `global $a, $b;` 선언 — 정적 출력에선 무의미, 건너뛴다.
+            semi = interior.find(';', j)
+            i = n if semi == -1 else semi + 1
+            continue
+        # 함수 호출이어야 함: 식별자 뒤 (공백 후) `(`
+        k = j
+        while k < n and interior[k].isspace():
+            k += 1
+        if k >= n or interior[k] != '(':
+            return '', False              # `echo $x` 등 — 동적
+        args, close = _php_call_args(interior, k + 1)
+        if args is None:
+            return '', False              # 괄호 짝 안 맞음
+        # 닫는 `)` 뒤 선택적 `;` 소비
+        i = close + 1
+        while i < n and interior[i].isspace():
+            i += 1
+        if i < n and interior[i] == ';':
+            i += 1
+
+        def _val(idx):
+            if idx >= len(args):
+                return ''
+            raw, q = args[idx]
+            return _interpolate_php(raw, php_globals) if q == '"' else raw
+
+        if ident == 'imgBox':
+            parts.append(_simulate_imgbox(_val(0), _val(1), _val(2), slug))
+        elif ident == 'imgSlideBox':
+            parts.append(_simulate_imgslidebox(_val(0), slug, article_dir))
+        else:
+            return '', False              # 알 수 없는 살아있는 함수
+    return '\n'.join(parts), True
+
+
+def simulate_php_in_html(text: str, slug: str, article_dir: Path,
+                         php_globals: dict = None) -> str:
+    """본문의 `<?php … ?>` 블록을 정적 HTML 로 펼친다.
+
+    imgBox/imgSlideBox 호출(과 주석·`global`·`;`)만 든 블록은 통째로
+    정적 HTML 로 치환되어 더 이상 라이브 PHP 가 아니다. 그 외 동적
+    구문이 섞인 블록은 원문 그대로 보존한다(검색 페이지 등 보호).
+    """
+    php_globals = php_globals or {}
     out = []
     pos = 0
     while True:
-        m = _PHP_CALL_OPEN_RE.search(text, pos)
-        if not m:
+        idx = text.find('<?php', pos)
+        if idx == -1:
+            out.append(text[pos:])
             break
-        args_str, close_paren = _scan_php_args(text, m.end())
-        if args_str is None:
-            out.append(text[pos:m.end()])
-            pos = m.end()
-            continue
-        close_m = _PHP_CLOSE_RE.match(text, close_paren + 1)
-        if not close_m:
-            out.append(text[pos:m.end()])
-            pos = m.end()
-            continue
-
-        func = m.group(1)
-        args = _parse_php_args(args_str)
-        out.append(text[pos:m.start()])
-
-        if func == 'imgBox':
-            src = args[0] if len(args) > 0 else ''
-            exp = args[1] if len(args) > 1 else ''
-            alt = args[2] if len(args) > 2 else ''
-            out.append(_simulate_imgbox(src, exp, alt, slug))
-        elif func == 'imgSlideBox':
-            dir_path = args[0] if args else ''
-            out.append(_simulate_imgslidebox(dir_path, slug, article_dir))
-        else:
-            out.append(text[m.start():close_m.end()])
-
-        pos = close_m.end()
-
-    out.append(text[pos:])
+        close = _find_php_block_end(text, idx + len('<?php'))
+        if close == -1:
+            out.append(text[pos:])        # 닫히지 않은 블록 — 원문 보존
+            break
+        block_end = close + 2             # `?>` 다음
+        interior = text[idx + len('<?php'):close]
+        html, ok = _simulate_php_block(interior, slug, article_dir,
+                                       php_globals)
+        out.append(text[pos:idx])
+        out.append(html if ok else text[idx:block_end])
+        pos = block_end
     return ''.join(out)
 
 
 def has_live_php(html: str) -> bool:
     return '<?php' in html or '<?=' in html
+
+
+def parse_php_globals(raw) -> dict:
+    """site.yaml `php_globals:` 블록 → `{변수명: 문자열}`.
+
+    정본 lama.pe.kr 의 `PHP/GlobalVariables.php` 가 auto_prepend 하던
+    서명 변수($reference_hanbyeol 등)를 운영자가 site.yaml 에 옮겨 적는
+    자리. 정적 빌드는 그 런타임이 없으므로 여기에 값을 두면 imgBox
+    캡션의 `{$name}` 보간이 빌드 시점에 치환된다(`_interpolate_php`).
+
+    변수명 앞의 `$` 는 있으면 떼고, 값은 문자열로 강제. dict 가 아니면
+    `{}` (forward compat — 옛/빈 site.yaml 도 그냥 보간 없음).
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for k, v in raw.items():
+        if k is None:
+            continue
+        name = str(k).lstrip('$').strip()
+        if name:
+            out[name] = '' if v is None else str(v)
+    return out
 
 
 # ════════════════════════════════════════════════════════════════
@@ -391,21 +581,24 @@ def has_live_php(html: str) -> bool:
 # 사용. RenderResult 도 `html` 한 필드로 슬림화.
 
 
-def finalize_md_html(html: str, slug: str, article_dir: Path) -> RenderResult:
+def finalize_md_html(html: str, slug: str, article_dir: Path,
+                     php_globals: dict = None) -> RenderResult:
     final = rewrite_asset_paths_in_html(html, slug)
-    final = simulate_php_in_html(final, slug, article_dir)
+    final = simulate_php_in_html(final, slug, article_dir, php_globals)
     return RenderResult(html=final)
 
 
-def render_article_md(text: str, slug: str, article_dir: Path) -> RenderResult:
+def render_article_md(text: str, slug: str, article_dir: Path,
+                      php_globals: dict = None) -> RenderResult:
     pre = preprocess_md_custom_syntax(text)
     raw_html = render_markdown(pre)
-    return finalize_md_html(raw_html, slug, article_dir)
+    return finalize_md_html(raw_html, slug, article_dir, php_globals)
 
 
-def process_html(text: str, slug: str, article_dir: Path) -> RenderResult:
+def process_html(text: str, slug: str, article_dir: Path,
+                 php_globals: dict = None) -> RenderResult:
     """content.html 처리: PHP 함수 시뮬레이션 + asset 경로 재작성."""
-    text = simulate_php_in_html(text, slug, article_dir)
+    text = simulate_php_in_html(text, slug, article_dir, php_globals)
     text = rewrite_asset_paths_in_html(text, slug)
     return RenderResult(html=text)
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """단일 글 본문 렌더 — admin.php 실시간 미리보기 진입점 (v1.1.0).
 
+v1.1.1: site.yaml `php_globals` 를 미리보기에도 적용 — imgBox 캡션의
+서명 변수 보간이 산출물과 동일하게 치환되도록(본문 충실도 유지).
+
 admin.php 가 이 스크립트를 서브프로세스로 부른다. 목적은 **미리보기와
 산출물의 본문 충실도 일치**: 별도 마크다운 엔진을 두지 않고 실제 빌더가
 글 본문을 만들 때 쓰는 `scripts.markdown` 경로를 그대로 재사용한다
@@ -83,10 +86,25 @@ def main(argv=None) -> None:
     try:
         from scripts.markdown import (
             render_article_md, process_html, resolve_section_markers,
+            parse_php_globals,
         )
         from scripts.yaml_parser import yaml_load
     except Exception as e:  # noqa: BLE001 — 미리보기는 무엇이든 보여줘야
         _fail(f"빌더 모듈 import 실패: {e!r}")
+
+    # v1.1.1: 빌더와 같은 site.yaml php_globals 를 미리보기에도 적용 —
+    # imgBox 캡션의 `{$reference_hanbyeol}` 등이 산출물과 동일하게 치환
+    # 되어야 본문 충실도가 유지된다 (설계 원칙 6·9, test_render_one 게이트).
+    # 빌더는 <verdir>/site.yaml 을 읽으므로 여기서도 같은 파일에서.
+    php_globals = {}
+    site_yaml = _SRC.parent / 'site.yaml'
+    if site_yaml.is_file():
+        try:
+            php_globals = parse_php_globals(
+                (yaml_load(site_yaml.read_text(encoding='utf-8')) or {})
+                .get('php_globals'))
+        except Exception:  # noqa: BLE001 — 폴백으로 계속 (보간만 생략)
+            php_globals = {}
 
     # slug / title 은 meta.yaml 에서. 새 글(아직 meta 미작성) 미리보기도
     # 깨지지 않도록 안전한 폴백을 둔다 — slug 폴백은 asset 경로가
@@ -121,9 +139,9 @@ def main(argv=None) -> None:
 
     try:
         if ext == 'html':
-            body = process_html(text, slug, source_dir).html
+            body = process_html(text, slug, source_dir, php_globals).html
         else:
-            rr = render_article_md(text, slug, source_dir)
+            rr = render_article_md(text, slug, source_dir, php_globals)
             body = resolve_section_markers(rr.html, title)
     except Exception as e:  # noqa: BLE001
         _fail(f"본문 렌더 중 예외: {e!r}")

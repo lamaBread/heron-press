@@ -2,11 +2,11 @@
 ════════════════════════════════════════════════════════════
 [1] Unit tests
 ────────────────────────────────────────────────────────────
-  tests run     : 317
+  tests run     : 337
   failures      : 0
   errors        : 0
   skipped       : 0
-  elapsed       : 160.613s
+  elapsed       : 156.086s
   → PASS
 
 ════════════════════════════════════════════════════════════
@@ -21,7 +21,7 @@
 [3] dist/search.php php -l (PHP syntax)
 ────────────────────────────────────────────────────────────
   exit code   : 0
-  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.1.0\dist\search.php
+  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.1.1\dist\search.php
   → PASS
 
 ════════════════════════════════════════════════════════════
@@ -45,8 +45,8 @@
 [6] JSON-LD semantic correctness (article pages)
 ────────────────────────────────────────────────────────────
   base_url            : https://siheonlee.com
-  ld+json docs        : 37
-  with BreadcrumbList : 36
+  ld+json docs        : 47
+  with BreadcrumbList : 46
   violations          : 0
   → PASS
 
