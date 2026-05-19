@@ -1,4 +1,4 @@
-"""siheonlee.com v1.0.2 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.1.0 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -125,6 +125,27 @@ __version__:
   10 으로 정합했으나 그 파일은 글 폴더가 아니라 dist 로 새지 않음
   (위 0-diff 로 실측 확인). `__version__` 1.0.1→1.0.2 의 dist
   누수 0 (B1 유지).
+
+  v1.1.0 은 **로컬 글쓰기 도구 admin.php 추가** — 기능 릴리스지만
+  빌드 로직 0 변경. PHP 내장 서버(`php -S 127.0.0.1:8001`)로만 뜨는
+  단일 사용자 저작 프런트엔드 — root `admin.php`(얇은 라우터) +
+  `src/admin/`(PHP 로직 + `render_one.py`/`slug_one.py` Python 진입).
+  글 작성/수정/카테고리 이동/비공개/삭제(`Articles/.trash/`)와 실시간
+  본문 미리보기(실제 `scripts.markdown` 재사용 — 파서 단일화 보존)·
+  원클릭 `python build.py`. `_scan_articles` 는 `Articles/` 만 도므로
+  root `admin.php`·`src/admin/` 은 빌더가 안 본다 → **dist 영향 0**.
+  무결성 = 도구 추가형·산출물 byte-불변형: 정본 Articles 고정,
+  v1.0.2 *코드* 클린 재빌드(불변 v1.0.2 손대지 않는 4번째-숫자 검증
+  복사본 `siheonlee.com_v1.0.2.3`) vs v1.1.0 클린 재빌드의 dist 가
+  **786=786, 0 added/0 removed/0 changed = byte-완전 동일**. 클린
+  빌드 2회 결정성 동일, `__version__` 1.0.2→1.1.0 의 dist 누수 0
+  (B1 유지), 단위 313→317(render_one 패리티 4 신설) · 진단 6/6 승계.
+  빌더 *로직* 모듈(scripts/·templates/·assets/)은 byte-불변; build.py
+  변경은 docstring(버전 헤더·구조 노트, 매 버전 관례)뿐이고 이 파일
+  (__init__.py)은 __version__ 만 — 둘 다 주석/B1 이라 dist 미도달
+  (위 0-diff 가 실증). admin 은 빌드 *앞단* 의 별도 저작 도구라
+  설계 원칙 5 "Articles/ 읽기만, 소스 자동수정 안 함"(=빌드의
+  불변식) 무손상 — admin 은 빌드가 아니라 그 입력을 만드는 별개 도구.
 """
 
-__version__ = '1.0.2'
+__version__ = '1.1.0'

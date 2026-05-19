@@ -1,4 +1,4 @@
-# siheonlee.com v1.0.2 — 사용설명서
+# siheonlee.com v1.1.0 — 사용설명서
 
 **글마다 폴더 하나**를 만들어 본문·첨부를 관리하고, `python build.py` 한 번으로 사이트를 만드는 **PHP 기반 경량 웹 사이트 생성기**입니다.
 
@@ -12,7 +12,7 @@
 | **글 단위 색인 제어** | 기본 색인 허용. 빼고 싶은 글만 `noindex: true` 한 줄. |
 | **사이트 내 검색** | 클라이언트 JS 0. BM25 + 토크나이저 + 인덱스가 `search.php` 한 파일에 인라인. |
 
-> **v1.0.2 한 줄 요약:** *메인페이지(Recent posts) 기본 출력 개수 코드 디폴트 5 → 10 (사용자 정책 릴리스).* `Builder.HOME_PER_PAGE_DEFAULT` 상수를 `5` → `10` 으로 바꾸고 README § 11 ("없으면 `per_page=10`")·`Articles/README.md` 의 per_page 예시·디폴트 표기를 정합. 이 상수는 `Articles/meta.yaml` 에 `per_page` 가 **없을 때만** 발효 — 정본 `Articles/meta.yaml` 은 `per_page: 10` 을 명시하므로 상수는 dormant 라 **dist 영향 0**. 무결성은 정본 Articles 고정 후 v1.0.1 *코드* 클린 재빌드(불변 v1.0.1 손대지 않는 4번째-숫자 검증 복사본 `siheonlee.com_v1.0.1.1`) vs v1.0.2 클린 재빌드: dist **786=786, 0 added/0 removed/0 changed = byte-완전 동일** (디폴트 변경이 어떤 페이지도 안 바꿈). `Articles/README.md`(운영자 문서, dist 미포함 — 0-diff 로 실측 확인) 표기도 10 으로 정합. 클린 빌드 2회 결정성 동일, `__version__` 1.0.1→1.0.2 dist 누수 0 (B1), 단위 313 · 진단 6/6 승계. 직전 v1.0.1(소분류 헤더 링크화)·v1.0.0(첫 정식) 내역은 [§ 16](#16-업데이트-로그).
+> **v1.1.0 한 줄 요약:** *로컬 글쓰기 도구 `admin.php` 추가 (기능 릴리스, 빌드 로직 0 변경).* PHP 내장 서버(`php -S 127.0.0.1:8001 admin.php`)로만 뜨는 **로컬 전용 단일 사용자** 저작 프런트엔드 — `build.py` 패턴 미러(루트의 얇은 라우터 `admin.php` + 로직 일체 `src/admin/`). 글 작성/수정·카테고리 이동(slug 불변→URL 영구)·비공개(`_`)·삭제(`.trash`→빌드 자동 제외·복구 가능)·**실시간 본문 미리보기**·**원클릭 빌드**. 미리보기는 별도 엔진 없이 빌더가 쓰는 `scripts.markdown` 경로를 `src/admin/render_one.py` 가 그대로 재사용 → 미리보기 *본문* = 산출물 byte-동일(설계 원칙 6·9 파서 단일화 보존, `src/tests/test_render_one.py` 가 빌더 경로와 byte 비교로 게이트). 빌더는 `Articles/` 만 스캔하므로 `admin.php`·`src/admin/` 은 `dist/` 에 새지 않는다 — 무결성 = **도구 추가형·산출물 byte-불변형**: 정본 Articles 고정, 불변 `siheonlee.com_v1.0.2` 를 손대지 않는 4번째-숫자 검증 복사본 `siheonlee.com_v1.0.2.3` 의 v1.0.2 *코드* 클린 재빌드 vs v1.1.0 클린 재빌드 dist **786=786, 0 added/0 removed/0 changed = byte-완전 동일** (combined sha256 `f340c5a9…` 양쪽 일치). 빌더 *로직* 모듈(`src/scripts/`·`src/templates/`·`src/assets/`)은 byte-불변; `build.py` 변경은 docstring(버전 헤더·구조 노트, 매 버전 관례)뿐이고 `src/scripts/__init__.py` 는 `__version__` 1.0.2→1.1.0 뿐 — 둘 다 주석/B1 이라 dist 미도달(위 0-diff 가 실증). admin 은 빌드 *앞단* 의 별도 저작 도구 — 설계 원칙 5 "`Articles/` 읽기 전용 빌드" 무손상. `__version__` 1.0.2→1.1.0 dist 누수 0 (B1), 단위 313→**317** (render_one 패리티 4 신설) · 진단 6/6 승계. 사용·보안은 [§ 17](#17-로컬-글쓰기--adminphp). 직전 v1.0.2(홈 디폴트 5→10)·v1.0.1(소분류 헤더 링크화) 내역은 [§ 16](#16-업데이트-로그).
 
 ## 목차
 
@@ -32,6 +32,7 @@
 14. [트러블슈팅](#14-트러블슈팅)
 15. [설계 원칙과 한계](#15-설계-원칙과-한계)
 16. [업데이트 로그](#16-업데이트-로그)
+17. [로컬 글쓰기 — admin.php](#17-로컬-글쓰기--adminphp)
 
 ---
 
@@ -117,7 +118,7 @@ cd dist && python -m http.server 8000   # → http://localhost:8000/
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v1.0.2/        ← 보이는 것은 아래 6 개뿐
+siheonlee.com_v1.1.0/        ← 보이는 것은 아래 7 개뿐 (v1.1.0: admin.php 추가)
 │
 ├── Articles/                ← ★ 모든 글 (최초엔 참고 자료)
 │   ├── About/                   ← 톱레벨 글 (meta.yaml + content.html + 자산)
@@ -145,6 +146,12 @@ siheonlee.com_v1.0.2/        ← 보이는 것은 아래 6 개뿐
 │   │   ├── report.py               ← BuildReport (issue/warning, render_markdown)
 │   │   └── builder.py              ← 빌드 파이프라인 (Builder 클래스)
 │   │
+│   ├── admin/                   ← ★ 로컬 글쓰기 admin (v1.1.0) — § 17
+│   │   ├── render_one.py            ← 단일 글 본문 렌더 (scripts.markdown 재사용)
+│   │   ├── slug_one.py              ← 폴더명 → slug (scripts.slugs 재사용)
+│   │   ├── lib/                     ← fs · proc · metayaml · articles (PHP)
+│   │   └── views/                   ← layout · list · new · edit · build (PHP)
+│   │
 │   ├── templates/               ← 페이지 HTML 틀 + PHP 모듈
 │   │   ├── article.html / category.html / home.html / 404.html
 │   │   ├── search.php              ← 런타임 검색 (라우팅/필터/렌더)
@@ -154,8 +161,9 @@ siheonlee.com_v1.0.2/        ← 보이는 것은 아래 6 개뿐
 │   ├── assets/                  ← 사이트 전역 자산 (/assets/ 로 로드)
 │   │   ├── common_template.css / imgslidebox.js / pagination.js
 │   │
-│   └── tests/                   ← 단위 테스트 (313) + run_diagnostics.py (6 항목)
+│   └── tests/                   ← 단위 테스트 (317) + run_diagnostics.py (6 항목)
 │
+├── admin.php                ← 로컬 글쓰기 진입점 (얇은 라우터 — § 17, dist 미포함)
 ├── build.py                 ← 빌드 진입점 (자기 폴더의 src/ 를 sys.path 에 올림)
 ├── README.md                ← 이 문서
 └── site.yaml                ← 사이트 전역 설정
@@ -166,6 +174,8 @@ siheonlee.com_v1.0.2/        ← 보이는 것은 아래 6 개뿐
 ```
 
 > **v0.8.1:** 빌더 일체를 `src/` 한 폴더로 옮겨 최상위는 6 개뿐. `build.py` 가 자기 폴더의 `src/` 를 `sys.path` 맨 앞에 올리므로 `import scripts...` 가 그대로 동작. 아래 [§ 16](#16-업데이트-로그) changelog 의 `scripts/…`·`templates/…` 경로는 도입 시점의 역사 기록 — v0.8.1 부터 실제 위치는 모두 `src/` 접두.
+>
+> **v1.1.0:** 로컬 글쓰기 도구 `admin.php` 추가 — `build.py` 패턴 미러 (얇은 진입점 + `src/admin/` 로직). 빌더는 `Articles/` 만 스캔하므로 `admin.php`·`src/admin/` 은 `dist/` 에 새지 않는다(산출물 byte-불변). 빌드 *앞단* 의 별도 저작 도구라 설계 원칙 5("`Articles/` 읽기 전용 빌드")는 무손상 — admin 이 소스를 쓰고, `build.py` 는 여전히 읽기만. 사용·보안은 [§ 17](#17-로컬-글쓰기--adminphp).
 >
 > **v0.8.3:** schema.org JSON-LD + 정확 빵부스러기 기능 릴리스 (구조 동일). 글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄 추가 — `@graph` 로 `Article` + (crumb 2개↑이면) `BreadcrumbList`. 기존 OG/Twitter/canonical/robots `<meta>` 를 **대체하지 않고 보강** (additive). off 스위치: `site.yaml`→`jsonld.enabled` (전역) + `meta.yaml`→`seo.jsonld:false` (글 단위). 코드 릴리스라 dist 가 바뀐다 — v0.8.2 대비 **글 렌더 페이지에 한정** 변경 (ld+json 추가 + 빵부스러기 정확 라벨·링크), 비-글 산출물 byte-동일 (0 missing/extra), 결정성 2회 동일.
 
@@ -339,6 +349,8 @@ Research Notes (CS) → research-notes-cs
 - **비공개** — 파일/폴더명 앞에 `_` 또는 `.`. 경로의 어느 세그먼트든 `_`·`.` 접두면 그 아래 전체가 글·카테고리·nav·자산에서 모두 제외. 빌드 시 `dist/{slug}/` 자동 삭제. `_` = 의도적 비공개·편집 중, `.` = OS/VCS 숨김(`.git`·`.DS_Store`) **그리고** `.draft` 처럼 작성자가 "숨겼다" 고 믿는 폴더가 실수로 공개되는 길을 막음 *(v0.8.3 일원화 — 정본 `Articles/` 에 `.` 접두 항목이 없어 산출물 byte 영향 0)*.
 - **이동** — 글 폴더를 다른 카테고리로 옮겨도 `slug` 가 같으면 URL 불변.
 - **삭제** — 글 폴더 삭제 후 빌드하면 `dist/{slug}/` 자동 정리 (고아 정리).
+
+> **v1.1.0:** 위 비공개·이동·삭제(와 글 작성/수정·실시간 미리보기·원클릭 빌드)를 파일 탐색기 대신 브라우저로 하는 로컬 GUI 가 추가됐다 — [§ 17 admin.php](#17-로컬-글쓰기--adminphp). 같은 규약을 그대로 쓴다(이동=폴더 rename·slug 불변, 비공개=`_` 접두, 삭제=`.trash` 이동이라 빌드 자동 제외·복구 가능).
 
 ---
 
@@ -613,6 +625,7 @@ rsync -avz --delete dist/ user@siheonlee.com:/var/www/siheonlee.com/
 
 - **빌드 머신**에는 PHP 불필요 (v0.4.1). PHP CLI 있으면 토크나이저 패리티 자동 검증.
 - **배포 서버**는 **PHP 7.4+ + mbstring** 필요 (search.php + `.php` 출력 글). 이것은 한계가 아니라 전제.
+- ⚠️ **`admin.php`·`src/admin/` 은 절대 배포하지 말 것** (v1.1.0). 위 `rsync` 는 `dist/` 만 올리므로 자연히 빌드 머신을 벗어나지 않는다 — admin 은 로컬 전용 단일 사용자 저작 도구다. 추가 방어로 `admin.php` 는 PHP 내장 서버(`cli-server`)+루프백이 아니면 스스로 403 을 낸다([§ 17](#17-로컬-글쓰기--adminphp)). DocumentRoot 는 `dist/` 뿐이라 `.php` 라우터가 그 안에 없기도 하다.
 
 **배포 검증:**
 
@@ -665,6 +678,8 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 |---|---|
 | 이미지 최적화는 정적 단일 프레임 | animated GIF 는 첫 프레임만 WebP. 보존하려면 webp 직접 첨부/외부 URL. 글·이미지 단위 토글 없음 (전역 `images.enabled` 만). |
 | 증분 캐싱은 글 페이지만 (v0.7.0) | 검색/sitemap/feed/홈/카테고리/assets 는 모든 글이 입력이라 매 빌드 재구축 (의도된 범위). |
+| admin 미리보기 = 본문 충실도 (v1.1.0) | 같은 파서·확장이라 *본문* 은 산출물과 byte-동일하나, 헤더/nav/푸터·`<meta>`·JSON-LD 같은 풀페이지 chrome 은 만들지 않는다 (그건 템플릿 채움 단계). 풀페이지 정확본은 원클릭 빌드 후 `dist/` 확인 — 의도된 분담. 패리티는 `test_render_one` 으로 게이트. |
+| admin 은 로컬 단일 사용자·인증 없음 (v1.1.0) | PHP 내장 서버(`cli-server`)+루프백 가드만 (그 외 즉시 403). 다중 사용자/동시 편집/원격 접근 비대상. raw `meta.yaml` 폼 저장은 부분집합 파서가 인라인 주석을 보존 못 함 — 커스텀 주석 유지하려면 raw 칸으로 저장 (raw 가 진실원). |
 
 **ⓑ 의도적으로 보류한 확장** (도입 금지 — 아래 사유 유효한 동안)
 
@@ -686,10 +701,12 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 > v1.0.0 은 첫 정식 릴리스이자 *기능* 릴리스라 dist 를 바꾼다 (B1 은 유지 — `__version__` 0.8.4→1.0.0 자체의 dist 누수는 0). 두 변경: (1) **기본 og:image 자산 패스스루** — `_copy_site_assets` 가 `site.default_og_image` 가 가리키는 자산만 webp 변환·variant 등록을 건너뛰고 원본을 그대로 `dist/assets/` 에 낸다. og:image 소비자는 `<img srcset>` 후처리가 아니라 SNS 링크 언퍼ler 라 고정 URL 하나만 가져가(다중 해상도 무의미), KakaoTalk·일부 Facebook 은 WebP og:image 를 못 렌더하며, `resolve_og_image` 가 이 값을 문자열 그대로 쓰므로 변환 시 그 URL 이 404 가 된다 — seo.py docstring 의 "소비자가 다르다" 원칙의 자연스러운 귀결. 실제 `src/assets/default-og.png`(1200×480) 동반: v0.8.4 까지는 `site.yaml` 이 `/assets/default-og.png` 를 가리키되 그 파일이 없어 본문 이미지 없는 모든 페이지의 `og:image` 가 죽은 404 였다 (이 자산은 raster 라 v0.5.1 파이프라인을 그대로 거치면 webp 로 사라졌을 것 — 그래서 패스스루가 필요했고, 이로써 latent 결함 해소). (2) **`About` 검색 비허용** — `Articles/About/meta.yaml` 에 `noindex: true` (v0.4.0 색인 정책·v0.6.0 검색 제외와 일관). **실측** v0.8.4 dist 대비 diff (786 vs 785 파일) = `+assets/default-og.png`, Δ `about/index.html`(robots meta 한 줄)·`sitemap.xml`·`search.php`. 피드(`feed.rss`/`feed.atom`)는 **byte-불변** — feed 는 최신 `DEFAULT_MAX_ENTRIES=20` 만 담는데 About 은 date 2025-01-01 로 그 윈도우 밖이라 v0.8.4 에서도 이미 미수록, noindex 가 피드엔 no-op (sitemap 은 그런 cap 이 없어 실제로 빠진다). 그 외 산출물 전부 byte-불변, 클린 빌드 2회 결정성 동일 (combined sha256 `bf4293c7…`) — 무결성 계약은 **코드 릴리스 형** ("결정성 + v0.8.4 기준 위 실측 열거 diff", 문서 전용 sha256 동치 아님), 단위 313 · 진단 6/6 승계.
 > v1.0.1 은 소분류 헤더 UI *기능* 릴리스라 dist 를 바꾼다 (B1 유지 — `__version__` 1.0.0→1.0.1 자체의 dist 누수는 0). 한 가지 변경: 톱레벨 카테고리 페이지(예: `/blog/`)의 자식 소분류 section 헤더에서 (1) 우측 → 화살표를 폐지하고 (2) 소분류명 글씨 *자체*를 그 소분류의 자기 페이지(`/{top}/{sub}/`)로 가는 a 태그로 만든다 — 글씨를 클릭하면 그 소분류 글만 보인다 (사용자 요청: "소분류 카테고리명 자체에 a태그를 스타일 없이 걸어서, 깔끔하게, 글씨를 클릭하면 소분류 내용만"). `scripts/builder.py` 의 `_render_section` `more_url` 분기가 `{소분류명} <a class='more-link'>→</a>` 대신 `<a class='subcat-link'>{소분류명}</a>` 를 내고, `src/assets/common_template.css` 의 `.more-link` 관련 3 룰(`.gap .more-link`, `:hover`, `* a:link.more-link`)을 `.gap .subcat-link` 한 룰(`color: inherit; text-decoration: none;`, 호버 효과 없음)로 교체 — 링크지만 본문 글씨와 동일 외양(스타일 없이·깔끔하게), 클릭 가능 암시는 브라우저 기본 포인터 커서뿐. `more_url` 이 없는 section(카테고리 자기 직속 글)·홈의 정적 "Recent posts" 갭은 무영향. 무결성 = **코드 릴리스 형** (정본 Articles 고정, v1.0.0 *코드* 클린 재빌드[불변 `siheonlee.com_v1.0.0` 를 손대지 않는 4번째-숫자 검증 복사본 `siheonlee.com_v1.0.0.1`] vs v1.0.1 클린 재빌드의 열거 diff): v1.0.0 대비 변경은 **5 파일** = `assets/common_template.css` + `blog`·`project`·`research`·`study`/`index.html` (자식 소분류를 둔 4 톱레벨 카테고리 페이지), 0 added/0 removed, 781 byte-동일(786=786). 홈(`index.html`)·소분류 말단 페이지·`feed.rss`/`feed.atom`·`sitemap.xml`·`search.php`·글 페이지 전부 byte-불변, 클린 빌드 2회 결정성 동일(combined sha256 `bac1e2c6…`). 단위 313 · 진단 6/6 승계. 부수 발견(이번 변경과 *직교*): 불변 아카이브 `siheonlee.com_v1.0.0` 의 *shipped* `dist/index.html`(홈) 이 v1.0.0 코드 클린 재빌드와 1파일 불일치 — v1.0.0 자체의 사전 staleness 라 baseline 을 shipped dist 가 아니라 v1.0.0 *코드* 클린 재빌드로 잡아(v0.8.3 식 클린-vs-클린) 순수 코드 델타를 격리했다. v1.0.0 폴더는 불변이라 손대지 않았다 (이번 릴리스의 byte-불변 주장은 v1.0.0 *코드* 기준이며 shipped v1.0.0/dist 의 그 1파일과는 별개).
 > v1.0.2 는 메인페이지(홈 Recent posts) **기본 출력 개수 코드 디폴트를 5 → 10** 으로 바꾼 사용자 정책 릴리스. `scripts/builder.py` 의 `Builder.HOME_PER_PAGE_DEFAULT` 상수를 `5` → `10` 으로 바꾸고, README § 11 ("`Articles/meta.yaml` … 없으면 `per_page=10`") 와 `Articles/README.md` 의 per_page 예시·디폴트 표기를 정합. 이 상수는 `Articles/meta.yaml` 에 `per_page` 가 **없을 때만** 발효하는데 정본 `Articles/meta.yaml` 은 `per_page: 10` 을 명시하므로 상수는 dormant — 디폴트 변경이 어떤 페이지도 바꾸지 않아 **dist 영향이 0** 이다. 무결성 = 코드 릴리스 형이되 *산출물 byte-불변형*: 정본 Articles 고정, v1.0.1 *코드* 클린 재빌드(불변 `siheonlee.com_v1.0.1` 을 손대지 않는 4번째-숫자 검증 복사본 `siheonlee.com_v1.0.1.1`) vs v1.0.2 클린 재빌드의 dist 가 **786=786, 0 added/0 removed/0 changed = byte-완전 동일** (소분류 헤더 v1.0.1 변경분도 양쪽 코드에 동일하게 들어가 상쇄 — v1.0.2 의 순수 효과는 dormant 상수 하나뿐). `Articles/README.md` 표기도 10 으로 정합했으나 그 파일은 글 폴더(meta.yaml+content)가 아니라 빌더 스캔 대상이 아니므로 dist 로 새지 않는다 (위 0-diff 로 실측 확인). 클린 빌드 2회 결정성 동일, `__version__` 1.0.1→1.0.2 의 dist 누수 0 (B1 유지), 단위 313 · 진단 6/6 승계. (정책 자체: 메인페이지 Recent posts 기본 출력 개수는 앞으로 10 — `Articles/meta.yaml` 에서 페이지별로 여전히 오버라이드 가능.)
+> v1.1.0 은 **로컬 글쓰기 도구 `admin.php` 추가** — 기능 릴리스지만 빌드 로직 0 변경. `build.py` 가 "루트의 얇은 진입점 + `src/scripts/` 로직" 인 것을 그대로 미러: 루트의 얇은 라우터 `admin.php` + 로직 일체 `src/admin/` (`lib/` PHP 4 + `views/` PHP 5 + `render_one.py`·`slug_one.py`). PHP 내장 서버(`php -S 127.0.0.1:8001 admin.php`)로만 뜨는 **로컬 전용 단일 사용자** 저작 프런트엔드 — 글 작성/수정, 카테고리 이동(폴더 rename·`slug` 불변→URL 영구, 설계 원칙 1), 비공개(`_` 접두 토글), 삭제(`Articles/.trash/` 이동 — `.` 접두라 빌드 자동 제외·파일 잔존 복구 가능, 영구삭제 UI 의도적 부재), 2분할 편집(좌 본문 `content.md`/`.html` frontmatter 금지 — 본문↔메타 분리 원칙 / 우 핵심 메타 폼 + 접이식 raw `meta.yaml` + 실시간 미리보기), **원클릭 `python build.py`**. 미리보기·slug 는 별도 엔진/2차 구현을 두지 않고 빌더가 쓰는 실제 `scripts.markdown`·`scripts.slugs` 를 `render_one.py`/`slug_one.py` 가 그대로 호출 (설계 원칙 6·9 파서/토크나이저 단일 진실원 보존) — 미리보기 *본문* 은 빌더 `_render_articles` 본문식(`resolve_section_markers(render_article_md(…))` / `process_html(…)`)과 **byte-동일**, 헤더/nav·`<meta>`·JSON-LD 등 풀페이지 chrome 은 만들지 않으므로 풀페이지 정확본은 빌드 후 `dist/` 로 확인(의도된 분담). 보안: `admin.php` 는 PHP 내장 서버(`cli-server`)+루프백이 아니면 스스로 403 (다층 방어), CSRF 토큰, 인증은 없음(로컬 단일 사용자 — §15 ⓐ 한계 명시); §13 `rsync` 는 `dist/` 만 올려 admin 은 빌드 머신을 안 떠난다. raw `meta.yaml` 이 저장 진실원(주석·고급 키·`styles` 보존, 서버는 헤더 주석 한 줄만 보장 — 부분집합 파서가 인라인 주석 미보존이라 폼 저장 시 커스텀 주석 유실은 raw 칸으로 회피). 빌더는 `Articles/` 만 스캔하므로 `admin.php`·`src/admin/` 은 빌더 입력도 산출물도 아니다 — 무결성 = **도구 추가형·산출물 byte-불변형**: 정본 Articles 고정, 불변 `siheonlee.com_v1.0.2` 를 손대지 않는 4번째-숫자 검증 복사본 `siheonlee.com_v1.0.2.3` 의 v1.0.2 *코드* 클린 재빌드 vs v1.1.0 클린 재빌드의 dist 가 **786=786, 0 added/0 removed/0 changed = byte-완전 동일** (combined sha256 `f340c5a91765d13ff9cc99bbbec2a5a9519564bc2384b9a4bb691e2cab511fee` 양쪽 일치). 빌더 *로직* 모듈 `src/scripts/`·`src/templates/`·`src/assets/` 는 byte-불변; `build.py` 는 docstring(버전 헤더·폴더 구조 노트 — 매 버전 갱신해 온 관례)만, `src/scripts/__init__.py` 는 `__version__` 1.0.2→1.1.0 만 바뀐다 — 둘 다 주석 내지 B1 디커플링 대상이라 산출물에 도달하지 않으며 위 dist 0-diff 가 이를 실증한다. admin 은 빌드 *앞단* 의 별도 저작 도구 — 설계 원칙 5 "`Articles/` 읽기만, 소스 자동수정 안 함" 은 *빌드* 의 불변식이고 admin 은 빌드가 아니라 그 입력을 만드는 별개 프런트엔드라 무손상. `__version__` 1.0.2→1.1.0 자체의 dist 누수는 0 (v0.8.2 B1 유지 — dist 0-diff 가 실측 확인). 클린 빌드 2회 결정성 동일, 단위 313→**317** (`src/tests/test_render_one.py` — 미리보기↔빌드 본문 패리티 게이트 4: 커스텀문법+섹션마커, 최소, content.html PHP 시뮬, 비ASCII slug/폴더), 진단 6/6 승계.
 
 | 버전 | 날짜 | 요약 |
 |---|---|---|
-| **v1.0.2** | 2026-05-19 | 홈 기본 출력 개수 디폴트 5→10 (정책 릴리스) — 사용자 결정: 메인페이지 Recent posts 기본 출력 개수를 앞으로 **10**. `scripts/builder.py` `Builder.HOME_PER_PAGE_DEFAULT` 상수 `5`→`10`, README § 11 ("없으면 `per_page=10`")·`Articles/README.md` per_page 예시·디폴트 표기 정합. 상수는 `Articles/meta.yaml` 에 `per_page` 미설정 시에만 발효하는데 정본은 `per_page: 10` 명시라 dormant → **dist 영향 0**. 무결성 = 코드 릴리스 형·산출물 byte-불변형 (정본 Articles 고정, 불변 `siheonlee.com_v1.0.1` 손대지 않는 4번째-숫자 검증 복사본 `siheonlee.com_v1.0.1.1` 의 v1.0.1 *코드* 클린 재빌드 vs v1.0.2 클린 재빌드): dist 786=786, 0 added/0 removed/0 changed = **byte-완전 동일**. `Articles/README.md`(운영자 문서, 빌더 스캔 대상 아님 → dist 미포함, 0-diff 로 실측 확인) 표기만 10 정합. 클린 빌드 2회 결정성 동일, `__version__` 1.0.1→1.0.2 dist 누수 0 (B1). 단위 313 · 진단 6/6 승계. (`Articles/meta.yaml` 에서 페이지별 오버라이드는 그대로 가능.) |
+| **v1.1.0** | 2026-05-19 | 로컬 글쓰기 `admin.php` 추가 (기능 릴리스, 빌드 로직 0 변경) — `build.py` 패턴 미러: 루트 얇은 라우터 `admin.php` + 로직 `src/admin/` (`lib/` PHP 4 · `views/` PHP 5 · `render_one.py`·`slug_one.py`). `php -S 127.0.0.1:8001 admin.php` 로만 뜨는 로컬 전용 단일 사용자 저작 도구 — 작성/수정·이동(폴더 rename·slug 불변→URL 영구)·비공개(`_`)·삭제(`.trash`→빌드 자동 제외·복구 가능)·2분할 편집(본문↔메타 분리, raw `meta.yaml` 진실원)·실시간 본문 미리보기·원클릭 `python build.py`. 미리보기/slug 는 빌더의 실제 `scripts.markdown`/`scripts.slugs` 를 `render_one.py`/`slug_one.py` 가 재사용(2차 구현 없음, 설계 원칙 6·9) → 미리보기 본문 = 빌더 본문식 byte-동일(풀페이지 chrome 은 빌드로 — 의도된 분담). 보안: cli-server+루프백 아니면 403, CSRF, 인증 없음(로컬 단일 사용자, §15 ⓐ), `rsync dist/` 만 배포라 비유출. 무결성 = 도구 추가형·산출물 byte-불변형 (정본 Articles 고정, 불변 `siheonlee.com_v1.0.2` 미수정·4번째-숫자 검증 복사본 `siheonlee.com_v1.0.2.3` 의 v1.0.2 *코드* 클린 재빌드 vs v1.1.0): dist **786=786, 0 added/0 removed/0 changed = byte-완전 동일** (combined sha256 `f340c5a9…` 양쪽 일치); 빌더 로직 `src/scripts`·`templates`·`assets` byte-불변, `build.py`/`__init__.py` 변경은 docstring/`__version__`뿐(주석·B1 — dist 미도달, 0-diff 실증). 클린 2회 결정성 동일, 단위 313→**317** (`test_render_one` 패리티 4 신설) · 진단 6/6 승계. 사용·보안 [§ 17](#17-로컬-글쓰기--adminphp). |
+| v1.0.2 | 2026-05-19 | 홈 기본 출력 개수 디폴트 5→10 (정책 릴리스) — 사용자 결정: 메인페이지 Recent posts 기본 출력 개수를 앞으로 **10**. `scripts/builder.py` `Builder.HOME_PER_PAGE_DEFAULT` 상수 `5`→`10`, README § 11 ("없으면 `per_page=10`")·`Articles/README.md` per_page 예시·디폴트 표기 정합. 상수는 `Articles/meta.yaml` 에 `per_page` 미설정 시에만 발효하는데 정본은 `per_page: 10` 명시라 dormant → **dist 영향 0**. 무결성 = 코드 릴리스 형·산출물 byte-불변형 (정본 Articles 고정, 불변 `siheonlee.com_v1.0.1` 손대지 않는 4번째-숫자 검증 복사본 `siheonlee.com_v1.0.1.1` 의 v1.0.1 *코드* 클린 재빌드 vs v1.0.2 클린 재빌드): dist 786=786, 0 added/0 removed/0 changed = **byte-완전 동일**. `Articles/README.md`(운영자 문서, 빌더 스캔 대상 아님 → dist 미포함, 0-diff 로 실측 확인) 표기만 10 정합. 클린 빌드 2회 결정성 동일, `__version__` 1.0.1→1.0.2 dist 누수 0 (B1). 단위 313 · 진단 6/6 승계. (`Articles/meta.yaml` 에서 페이지별 오버라이드는 그대로 가능.) |
 | v1.0.1 | 2026-05-19 | 소분류 헤더 링크화 (기능 릴리스) — 톱레벨 카테고리 페이지(예: `/blog/`)의 자식 소분류 section 헤더에서 (1) 우측 → 화살표 폐지, (2) 소분류명 글씨 *자체*를 그 소분류의 자기 페이지(`/{top}/{sub}/`)로 가는 a 태그로 (글씨 클릭 시 그 소분류 글만; 사용자 요청 "소분류명 자체에 a태그를 스타일 없이·깔끔하게"). `scripts/builder.py` `_render_section` `more_url` 분기 `{이름} <a class='more-link'>→</a>` → `<a class='subcat-link'>{이름}</a>`; `src/assets/common_template.css` 의 `.more-link` 관련 3 룰(`.gap .more-link`·`:hover`·`* a:link.more-link`) → `.gap .subcat-link` 한 룰(`color: inherit; text-decoration: none;`, 호버 효과 없음 — 링크지만 본문 글씨와 동일 외양, 클릭 암시는 브라우저 기본 포인터 커서뿐). `more_url` 없는 section(카테고리 직속 글)·홈의 정적 "Recent posts" 갭은 무영향. 무결성 = 코드 릴리스 형 (정본 Articles 고정, 불변 `siheonlee.com_v1.0.0` 를 손대지 않는 4번째-숫자 검증 복사본 `siheonlee.com_v1.0.0.1` 의 v1.0.0 *코드* 클린 재빌드 vs v1.0.1 클린 재빌드 열거 diff): **5 파일** = `assets/common_template.css` + `blog`·`project`·`research`·`study`/`index.html` (자식 소분류 둔 4 톱레벨 카테고리), 0 added/0 removed, 781 byte-동일(786=786); 홈(`index.html`)·소분류 말단 페이지·`feed.rss`/`feed.atom`·`sitemap.xml`·`search.php`·글 페이지 전부 byte-불변, 클린 빌드 2회 결정성 동일(combined sha256 `bac1e2c6…`). `__version__` 1.0.0→1.0.1 dist 누수 0 (B1 유지). 부수 발견(이번 변경과 직교): 불변 아카이브 `siheonlee.com_v1.0.0` 의 *shipped* `dist/index.html` 이 v1.0.0 코드 클린 재빌드와 1파일 불일치 = v1.0.0 자체의 사전 staleness; baseline 을 shipped dist 가 아니라 v1.0.0 *코드* 클린 재빌드로 잡아 순수 코드 델타 격리(v0.8.3 식 클린-vs-클린), v1.0.0 폴더 불변 유지. 단위 313 · 진단 6/6 승계. |
 | v1.0.0 | 2026-05-19 | 첫 정식 릴리스 (기능 릴리스) — (1) **기본 og:image 자산 패스스루**: `_copy_site_assets` 가 `site.default_og_image` 가 가리키는 자산만 webp 변환·variant 등록을 건너뛰고 원본 그대로 `dist/assets/` 에 (og:image 소비자=SNS 링크 언퍼ler, 고정 URL 하나·다중해상도 무의미, KakaoTalk·일부 FB 는 WebP og:image 미렌더, `resolve_og_image` 가 문자열 그대로 써 변환 시 404). 실제 `src/assets/default-og.png`(1200×480, 도메인 워드마크) 동반 — v0.8.4 까지 `/assets/default-og.png` 파일 부재로 본문 이미지 없는 모든 페이지 og:image 가 죽은 404 였던 latent 결함 해소. `default_og_image` 외부 URL/assets 밖이면 무동작. (2) **`About` 검색 비허용**: `Articles/About/meta.yaml` `noindex: true` → robots noindex + sitemap·search 제외 (v0.4.0·v0.6.0 정책 일관; feed 는 윈도우 밖이라 no-op). dist 는 v0.8.4 대비 **실측** (786 vs 785 파일) `+assets/default-og.png`, Δ `about/index.html`(robots 한 줄)·`sitemap.xml`·`search.php`; `feed.rss`/`feed.atom` 은 byte-불변 (About 이 date 2025-01-01 로 feed 최신 20개 윈도우 밖 — noindex 가 피드엔 no-op), 그 외 전부 byte-불변·클린 빌드 2회 결정성 동일 (combined sha256 `bf4293c7…`). `__version__` 0.8.4→1.0.0 의 dist 누수 0 (B1 유지). 무결성 = 코드 릴리스 형 (결정성 + v0.8.4 기준 실측 열거 diff), 단위 313 · 진단 6/6 승계. |
 | v0.8.4 | 2026-05-19 | v0.8.3 문서 안정화 — 빵부스러기/JSON-LD·진단 로직 무변경. v0.8.3 README 에만 남아 있던 잘못된 수치/표현을 § 16 정정값에 정합: 단위 `266→297`→`266→313` (실제 스위트 313), `run_diagnostics.py (5 항목)`→`(6 항목)` ([6] 은 v0.8.3 신설), 한 줄 요약 박스·§ 3 노트의 미검증 하드 수치(`글 페이지 47개/738 파일`) framing → § 16 의 정성 서술(`글 렌더 페이지에 한정`, `비-글 산출물 byte-동일`)로 일치. `src/tests/diagnostics_report.txt` 는 stale 가 아니었음 — `[6]=37/36` 은 게이트가 article `index.html` 만 보는 확정 스코프상 정확 (47 ld+json 중 10 글은 `index.php` 라 [6] 범위 밖; [6] 확정 설계). v0.8.4 클린 재빌드 후 재생성은 리포트 임베드 경로·실행 메타를 v0.8.4 로 갱신하고 게이트를 재증명한 것이며 결과 불변 ([1]=313, [2] 결정성, [6]=37/36 violations 0, 6/6). 코드 동작 변경 0, dist 는 v0.8.3 과 byte-동일 (실측 785=785 sha256, 0 missing/extra/changed; `__version__` 0.8.3→0.8.4 는 B1 으로 dist 누수 0 — 무결성 계약 = 직전 코드 복사본 v0.8.3 과 dist sha256 동일), 단위 313 · 진단 6/6 승계. |
@@ -728,4 +745,44 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 
 ---
 
-*siheonlee.com v1.0.2 — 빌드 Python + Pillow, 런타임 PHP. 검색 Okapi BM25 메타데이터 3-필드 인라인 인덱스, 이미지 WebP 다중 해상도 자동, 글/홈/카테고리 통일 SEO 메타 + 외부 CSS·`template:` 지원, schema.org JSON-LD (글 페이지 `Article`+`BreadcrumbList`, 기존 메타 태그 보강·off 스위치 동반). 빵부스러기는 정확한 의미로 출시 — 중간 조상=자기 중첩 URL, 글 말단=글 제목 (nav-tracker/JSON-LD 단일 공유 소스); JSON-LD 의미 게이트 [6] 동반. v1.0.0 첫 정식 릴리스(기본 og:image 자산 패스스루 + `About` 검색 비허용). v1.0.1 소분류 헤더 링크화 — 우측 → 화살표 폐지, 소분류명 글씨 자체가 그 소분류 페이지로 가는 스타일 없는 깔끔한 링크(`.gap .subcat-link`: color inherit·밑줄·호버 없음); 정본 Articles 고정 v1.0.0 코드 클린 재빌드(불변 v1.0.0 미수정·4번째-숫자 검증 복사본) 대비 실측 5파일 열거 diff(`assets/common_template.css` + `blog`·`project`·`research`·`study`/`index.html`, 786=786·0 add/rm·781 byte-동일)·그 외 byte-불변, 클린 2회 결정성 동일, 단위 313·진단 6/6 승계. v1.0.2 메인페이지 Recent posts 기본 출력 개수 코드 디폴트 5→10 (사용자 정책; `HOME_PER_PAGE_DEFAULT` + 문서 정합) — 정본 `Articles/meta.yaml` 이 `per_page:10` 명시라 상수 dormant, v1.0.1 코드 클린 재빌드 대비 dist 786=786·0 changed = byte-완전 동일. (2026-05-19)*
+## 17. 로컬 글쓰기 — admin.php
+
+`v1.1.0` 신설. 글 작성·수정·카테고리 이동·비공개·삭제와 **실시간 본문 미리보기**·**원클릭 빌드**를 파일 탐색기 대신 브라우저로 하는 **로컬 전용 단일 사용자** 도구. `build.py` 패턴을 그대로 미러한다 — 버전 폴더 루트의 얇은 진입점 `admin.php` + 로직 일체 `src/admin/`. 빌더는 `Articles/` 만 스캔하므로 이 둘은 **`dist/` 에 새지 않고** 빌드 결정성·산출물과 무관하다 (admin 은 빌드 *앞단* 의 저작 도구 — `Articles/` 를 쓰고, `build.py` 는 여전히 읽기만: 설계 원칙 5 무손상).
+
+### 17-1. 실행
+
+버전 폴더에서:
+
+```bash
+php -S 127.0.0.1:8001 admin.php
+```
+
+브라우저로 `http://127.0.0.1:8001/`. 빌드 머신 기준 **PHP 7.4+** (개발은 8.x 권장) + **Python 3** (미리보기·slug·빌드가 실제 `scripts.*` 를 부른다). 종료는 터미널 `Ctrl+C`.
+
+### 17-2. 보안 — 절대 공개 서버에 두지 말 것
+
+로컬 단일 사용자 전제. 다층 가드:
+
+- **SAPI+루프백 가드** — `admin.php` 는 PHP 내장 서버(`cli-server`) + `127.0.0.1`/`::1` 이 아니면 스스로 **403**. Apache `mod_php`/`php-fpm` 에 얹혀도 열리지 않는다.
+- **배포 비포함** — §13 의 `rsync` 는 `dist/` 만 올린다. `admin.php`·`src/admin/` 은 빌드 머신을 떠나지 않으며, DocumentRoot 도 `dist/` 라 라우터가 그 안에 없다.
+- **CSRF** — 상태 변경(저장/생성/이동/삭제/빌드)은 세션 토큰 검증. 인증은 두지 않는다 (로컬 단일 사용자라 불필요 — 한계로 §15 ⓐ 명시).
+
+### 17-3. 기능
+
+- **목록** (`/`) — 글 트리. 각 글: 편집 · 카테고리 이동(드롭다운) · 공개/비공개 토글 · 삭제. `.trash` 내용도 표시.
+- **새 글** (`?a=new`) — 카테고리 선택 + 폴더명(한국어 가능) → `slug_one.py` 가 빌드와 **같은** 규칙으로 slug 자동 제안(비ASCII면 hex 경고). 폴더 + `content.md`(또는 `.html`) + `meta.yaml`(정본 헤더 주석 포함) 생성.
+- **편집** (`?a=edit&id=…`) — **2분할**: 좌=본문(`content.md`/`.html`, frontmatter 금지 — 본문↔메타 분리 원칙), 우=메타 폼 + 접이식 **raw `meta.yaml`** + 실시간 미리보기. 핵심 입력칸(title·slug·date·updated·tags·`seo.description`·noindex)은 *보조* — 바꾸면 raw YAML 을 패치한다. **저장은 raw `meta.yaml` 기준**(주석·고급 키·`styles` 보존), 서버는 헤더 주석 한 줄만 보장. 즉 raw 가 진실원.
+- **이동** — 폴더 rename. `slug` 불변이라 **URL 영구**(설계 원칙 1). **비공개** — 폴더명 `_` 접두 토글. **삭제** — `Articles/.trash/` 로 이동: `.` 접두라 빌드 자동 제외, 파일은 남아 복구 가능(영구 삭제 UI 는 의도적으로 두지 않음 — 복구는 파일 탐색기에서 `.trash` 밖으로).
+- **원클릭 빌드** — 상단 버튼이 `python build.py`(`--clean` 체크 가능)를 버전 폴더 cwd 로 실행하고 출력을 표시. 사이트(`dist/`)에 반영하는 단계.
+
+### 17-4. 미리보기 = 본문 충실도 (파서 단일화)
+
+별도 마크다운 엔진을 두지 않는다. `src/admin/render_one.py` 가 빌더가 글 본문을 만들 때 쓰는 **그 `scripts.markdown` 경로**를 그대로 재사용 — `.md` 는 `resolve_section_markers(render_article_md(…))`, `.html` 은 `process_html(…)` 로 빌더 `_render_articles` 와 1:1 동일. 따라서 미리보기 *본문* 은 산출물과 byte-동일(같은 imgBox/imgSlideBox·같은 자산 경로 재작성). 미리보기 창은 사이트 공통 CSS 를 입히고 자산을 소스 폴더에서 프록시해 보여 준다. 헤더/nav/푸터·`<meta>`·JSON-LD 등 풀페이지 chrome 은 만들지 않으므로 — 그건 템플릿 채움 단계 — **풀페이지 정확본은 빌드 후 `dist/`** 로 확인한다(의도된 분담). 이 패리티는 `src/tests/test_render_one.py` 가 빌더 경로와 byte 비교로 잠근다(누가 다른 엔진/경로로 바꾸면 깨짐).
+
+### 17-5. 제약 (§15 ⓐ 와 동일)
+
+본문↔메타 분리는 강제(폼이 frontmatter 를 본문에 섞지 않음). 부분집합 YAML 파서는 인라인 주석을 보존 못 하므로 폼 저장 시 헤더 외 커스텀 주석은 유실 — 유지하려면 raw 칸으로 저장. 로컬 단일 사용자·인증 없음·동시 편집 비대상. Windows 비ASCII 폴더명은 PHP 8.x 의 UTF-8 파일시스템 처리에 의존(PHP 8.3 검증) — 폴더명은 출력 무관이라(slug 가 URL) 사이트 산출물에는 영향 없다.
+
+---
+
+*siheonlee.com v1.1.0 — 빌드 Python + Pillow, 런타임 PHP. 검색 Okapi BM25 메타데이터 3-필드 인라인 인덱스, 이미지 WebP 다중 해상도 자동, 글/홈/카테고리 통일 SEO 메타 + 외부 CSS·`template:` 지원, schema.org JSON-LD (글 페이지 `Article`+`BreadcrumbList`, 기존 메타 태그 보강·off 스위치 동반). 빵부스러기는 정확한 의미로 출시 — 중간 조상=자기 중첩 URL, 글 말단=글 제목 (nav-tracker/JSON-LD 단일 공유 소스); JSON-LD 의미 게이트 [6] 동반. v1.0.0 첫 정식 릴리스(기본 og:image 자산 패스스루 + `About` 검색 비허용). v1.0.1 소분류 헤더 링크화 — 우측 → 화살표 폐지, 소분류명 글씨 자체가 그 소분류 페이지로 가는 스타일 없는 깔끔한 링크(`.gap .subcat-link`: color inherit·밑줄·호버 없음); 정본 Articles 고정 v1.0.0 코드 클린 재빌드(불변 v1.0.0 미수정·4번째-숫자 검증 복사본) 대비 실측 5파일 열거 diff(`assets/common_template.css` + `blog`·`project`·`research`·`study`/`index.html`, 786=786·0 add/rm·781 byte-동일)·그 외 byte-불변, 클린 2회 결정성 동일, 단위 313·진단 6/6 승계. v1.0.2 메인페이지 Recent posts 기본 출력 개수 코드 디폴트 5→10 (사용자 정책; `HOME_PER_PAGE_DEFAULT` + 문서 정합) — 정본 `Articles/meta.yaml` 이 `per_page:10` 명시라 상수 dormant, v1.0.1 코드 클린 재빌드 대비 dist 786=786·0 changed = byte-완전 동일. v1.1.0 로컬 글쓰기 `admin.php` 추가 (§ 17) — `build.py` 패턴 미러(얇은 진입점 + `src/admin/`), 로컬 전용 단일 사용자, 미리보기는 `scripts.markdown` 재사용으로 본문 byte-충실(`test_render_one` 게이트), 빌드 로직 0 변경이라 dist 는 v1.0.2 와 byte-동일. (2026-05-19)*

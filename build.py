@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.0.2 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.1.0 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -11,12 +11,16 @@
     Articles/    글 소스 (최초엔 참고용 자료들)
     dist/        빌드 산출물 (최초엔 빈 폴더)
     src/         빌더 일체 — scripts/ (Python 패키지) · templates/ ·
-                 assets/ · tests/
+                 assets/ · tests/ · admin/ (v1.1.0 로컬 글쓰기 도구)
+    admin.php    로컬 글쓰기 진입점 (v1.1.0 — 얇은 라우터; 빌더 무관,
+                 dist 미포함. 이 파일과 직교한 별도 저작 도구)
     build.py     빌드 진입점 (이 파일)
     README.md    문서
     site.yaml    전역 설정
-  최상위에는 위 6 개만 보인다. build.py 가 자기 폴더의 src/ 를 sys.path
-  맨 앞에 올려 `import scripts...` 가 src/scripts/ 를 가리킨다.
+  최상위에는 위 7 개만 보인다 (v1.1.0 에서 admin.php 1 개 추가 — 빌더는
+  Articles/ 만 스캔하므로 admin.php·src/admin/ 은 dist 에 새지 않는다).
+  build.py 가 자기 폴더의 src/ 를 sys.path 맨 앞에 올려 `import
+  scripts...` 가 src/scripts/ 를 가리킨다.
 
 Usage:
     python build.py                # full build (캐시 사용)
