@@ -1,4 +1,4 @@
-# siheonlee.com v1.2.0 — 사용설명서
+# siheonlee.com v1.2.1 — 사용설명서
 
 **글마다 폴더 하나**를 만들어 본문·첨부를 관리하고, `python build.py` 한 번으로 사이트를 만드는 **PHP 기반 경량 웹 사이트 생성기**입니다.
 
@@ -12,7 +12,7 @@
 | **글 단위 색인 제어** | 기본 색인 허용. 빼고 싶은 글만 `noindex: true` 한 줄. |
 | **사이트 내 검색** | 클라이언트 JS 0. BM25 + 토크나이저 + 인덱스가 `search.php` 한 파일에 인라인. |
 
-> **v1.2.0 한 줄 요약** — v1.1.5 의 안정화 릴리스. 코드·dist 무변경, README 정리(§16 v1.x.x 인용구를 표 행으로 압축·stale 표기 정합). 누적 기능은 [§ 16](#16-업데이트-로그) 표 참조.
+> **v1.2.1 한 줄 요약** — 운영 잡음 정리. noindex 글의 `seo.description` 필수 검사 면제 + `warn_on_stale_updated` 워닝 (+ 설정·검사·문서) 일괄 폐기. dist byte-불변. 누적 기능은 [§ 16](#16-업데이트-로그) 표 참조.
 
 ## 목차
 
@@ -118,7 +118,7 @@ cd dist && python -m http.server 8000   # → http://localhost:8000/
 ## 3. 폴더 구조
 
 ```
-siheonlee.com_v1.2.0/        ← 보이는 것은 아래 7 개뿐 (v1.1.0 부터 admin.php 포함)
+siheonlee.com_v1.2.1/        ← 보이는 것은 아래 7 개뿐 (v1.1.0 부터 admin.php 포함)
 │
 ├── Articles/                ← ★ 모든 글 (최초엔 참고 자료)
 │   ├── About/                   ← 톱레벨 글 (meta.yaml + content.html + 자산)
@@ -366,7 +366,7 @@ python build.py --clean    # dist/ + .build_cache/ 폐기 후 빌드
 | 분류 | 의미 | 사례 |
 |---|---|---|
 | **issue** (보완 필요) | 작성자가 손볼 글 단위 문제. 그 글만 부분 누락 | `seo.description` 누락, slug 정규식/예약어/중복 충돌, date 형식 오류, `tags` 비-list |
-| **warning** (살펴볼 사항) | 산출물 정상, 한 번 볼 가치 | 비ASCII 폴더명 hex 변환, stale `updated`, 자산 누락, 빈 카테고리, 이미지 최적화 실패 |
+| **warning** (살펴볼 사항) | 산출물 정상, 한 번 볼 가치 | 비ASCII 폴더명 hex 변환, 자산 누락, 빈 카테고리, 이미지 최적화 실패 |
 
 **빌드 중단 (시스템 결함만)** — 콘텐츠 작성자가 통제 못 하는 결함만 즉시 중단:
 
@@ -447,7 +447,7 @@ dist/
 
 **기호 그룹** — 같은 기호 = 최종적으로 같은 값으로 수렴하는 체인: ◆ = `<title>` 값 · ● = `meta description` 값 · ▲ = `og:image` 값 · ■ = `canonical` 값. (기호 없는 행은 독립 / `twitter:*` 는 og 경유라 ◆●▲ 셋 다 해당.)
 
-**폴백 결과가 빈 문자열이면 태그 자체를 출력 안 함.** `''` 와 `None` 은 산출물에선 동일(태그 누락)하나, `seo.description` 만 `''` 를 작성자 실수로 간주해 BuildReport 에 기록.
+**폴백 결과가 빈 문자열이면 태그 자체를 출력 안 함.** `''` 와 `None` 은 산출물에선 동일(태그 누락)하나, `seo.description` 만 `''` 를 작성자 실수로 간주해 BuildReport 에 기록. 단 `noindex: true` 글은 description 필수 검사 면제 (v1.2.1) — SERP·피드 미노출 페이지라 description 부재가 외부 노출용 빠뜨림이 아니므로. og:description 은 적고 싶으면 그대로 적을 수 있다 (검사 면제일 뿐 출력 경로 불변).
 
 **색인 정책 (v0.4.0)** — 기본 색인 허용. `noindex: true` 글만 그 페이지 `<head>` 에 `<meta robots noindex>`. search.php 만 `noindex,follow` 별도 차단. (`noindex: true` 인 글은 sitemap.xml·`search.php` 인덱스 + (피드 윈도우 안이면) RSS/Atom 피드에서도 제외 — v0.6.0 부터 일관. 본 릴리스의 `About` 이 그 예: robots noindex + sitemap·검색 비노출. 단 피드는 최신 20개(`DEFAULT_MAX_ENTRIES`)만 담는데 About 은 date 2025-01-01 로 그 윈도우 밖이라 v0.8.4 에서도 이미 미수록 — 이번 noindex 는 피드 산출물엔 no-op.)
 
@@ -495,7 +495,6 @@ category_preview_per_page: 5
 description_truncate: 150             # 피드 summary 의 seo.description 절단 최대 글자 (단어 경계 존중; 본문 자동추출 아님)
 warn_on_underscore_ref: true          # `_` 접두 경로 참조 시 워닝
 warn_on_missing_asset: true           # meta.yaml 지정 자산 누락 시 워닝
-warn_on_stale_updated: true           # updated 가 date 보다 과거면 워닝
 robots_txt_main: |
   User-agent: *
   Allow: /
@@ -694,10 +693,10 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 7. **글 단위 표현 제어** — meta.yaml 에서 선언적으로.
 8. **글 단위 색인 (v0.4.0)** — 기본 허용, `noindex: true` 글만 제외.
 9. **단일 진실원 토크나이저 (v0.4.0)** — Py/PHP 패리티 빌드마다 자동 검증.
-10. **본문 ↔ 메타데이터 분리 (v0.5.5)** — SEO/OG/피드 카피는 본문이 아니라 author 가 `seo:` 블록에 직접 쓴 값에서만. 본문=독자용, 메타=SERP/소셜용 — 다른 글이어야 함. SSG 는 추측하지 않음. `seo.description` 필수(누락 시 issue, 빌드는 통과). `og_image` 부재 시 본문 추출이 아니라 `site.default_og_image`.
+10. **본문 ↔ 메타데이터 분리 (v0.5.5)** — SEO/OG/피드 카피는 본문이 아니라 author 가 `seo:` 블록에 직접 쓴 값에서만. 본문=독자용, 메타=SERP/소셜용 — 다른 글이어야 함. SSG 는 추측하지 않음. `seo.description` 필수(누락 시 issue, 빌드는 통과; v1.2.1 부터 `noindex: true` 글은 SERP·피드 미노출이라 검사 면제). `og_image` 부재 시 본문 추출이 아니라 `site.default_og_image`.
 11. **`template:` 가로지르기 — 허용하되 알린다 (v0.6.4)** — 페이지 종류와 다른 템플릿 지정 가능. 빌더가 못 채우는 placeholder 는 strip + warning (자동 거부도 silent strip 도 아닌, 알림 + author 판정).
 
-**현재 한계 (v1.2.0)** — 두 부류. ⓐ 현 능력의 *내재적* 한계, ⓑ *의도적으로 보류한* 확장. **둘 다 현 상황에서는 도입하지 않는다** (사용자 합의 2026-05-18 — 사유가 유효한 동안 유지, 필요해질 때 재검토).
+**현재 한계 (v1.2.1)** — 두 부류. ⓐ 현 능력의 *내재적* 한계, ⓑ *의도적으로 보류한* 확장. **둘 다 현 상황에서는 도입하지 않는다** (사용자 합의 2026-05-18 — 사유가 유효한 동안 유지, 필요해질 때 재검토).
 
 **ⓐ 내재적 한계**
 
@@ -728,7 +727,8 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 
 | 버전 | 날짜 | 요약 |
 |---|---|---|
-| **v1.2.0** | 2026-05-21 | v1.1.5 의 **안정화 릴리스** (문서 전용) — 빌드 로직·테스트·dist 산출물 무변경, `__version__` 1.1.5→1.2.0 자체의 dist 누수 0 (B1). README 정리: §16 v1.x.x 변경 인용구(>)를 표 행으로 압축, 한 줄 요약을 실제 한 줄로(v1.1.2 의 장황한 박스 제거), §3 폴더명·§15 한계 헤더·바닥글의 stale 표기 정합. 무결성 = 문서 전용 형 (정본 Articles 고정, 직전 코드 복사본 `siheonlee.com_v1.1.5` 와 클린 재빌드 dist sha256 동일 — v0.8.4↔v0.8.3 선례). 단위 · 진단 v1.1.5 승계. |
+| **v1.2.1** | 2026-05-21 | **운영 잡음 정리** (코드 릴리스, dist byte-불변) — 두 변경: (1) `noindex: true` 글의 `seo.description` 필수 검사 면제 — robots noindex + sitemap/feed/검색 인덱스 제외 글은 SERP 스니펫·피드 summary 가 무의미해 description 부재가 더는 외부 노출 빠뜨림이 아님 (정본 `About` 글의 1 issue 가 0 으로). og:description 은 author 가 원하면 그대로 적을 수 있음 (검사 면제일 뿐 출력 경로 불변). 빈 문자열 `''` 도 동일 (`m.noindex` 가 3-상태 분기에 선행). 비-noindex 글의 v0.5.5 description 필수 정책은 그대로. (2) `warn_on_stale_updated` 워닝 일괄 폐기 — content.md mtime 이 meta.yaml `updated` 보다 새로울 때 띄우던 warning (의도적 mtime>updated 케이스가 흔해 빌드 잡음). builder.py 검사 블록 + `Date` import + `SiteConfig.warn_on_stale_updated` 필드 + 4 테스트 kwarg + site.yaml 행/주석 + README §11·§7·report.py docstring 일괄 삭제 (no-migration — 옛 site.yaml 의 잔존 키는 silently 무시). updated 자체 의미 (피드/sitemap lastmod) 와 `updated < date` 형식 검사는 무변경. 무결성 = **코드 릴리스 형이되 dist byte-불변 형** (정본 `siheonlee.com_v1.2.0.1/Articles` 고정 — 사용자 서비스용 조정본, 2026-05-21 부터 모든 빌드의 Articles 기본; site.yaml 도 v1.2.0.1 본 승계하되 dead key `warn_on_stale_updated` 한 줄 제거). 비교 baseline = `siheonlee.com_v1.2.0.1/dist` 클린 재빌드. dist byte-동일 추론: noindex `_issue` 및 stale_updated `_warning` 호출 변화는 BuildReport.entries (dist 미경유, 터미널·build-report.md 표시 전용), 그 외 코드 경로 무변경, site.yaml 의 키 제거는 운영자 입력 (default True 였고 v1.2.1 에선 코드가 키 자체 미읽음 — 같은 분기 path). 클린 빌드 2회 결정성 동일. `__version__` 1.2.0→1.2.1 dist 누수 0 (B1 유지). 단위 364→**367** (`NoindexDescriptionExemptionTests` 3 신설: 누락 면제·빈문자열 면제·공개 글 대조군) · 진단 **6/6** 승계. |
+| v1.2.0 | 2026-05-21 | v1.1.5 의 **안정화 릴리스** (문서 전용) — 빌드 로직·테스트·dist 산출물 무변경, `__version__` 1.1.5→1.2.0 자체의 dist 누수 0 (B1). README 정리: §16 v1.x.x 변경 인용구(>)를 표 행으로 압축, 한 줄 요약을 실제 한 줄로(v1.1.2 의 장황한 박스 제거), §3 폴더명·§15 한계 헤더·바닥글의 stale 표기 정합. 무결성 = 문서 전용 형 (정본 Articles 고정, 직전 코드 복사본 `siheonlee.com_v1.1.5` 와 클린 재빌드 dist sha256 동일 — v0.8.4↔v0.8.3 선례). 단위 · 진단 v1.1.5 승계. |
 | v1.1.5 | 2026-05-20 | **AdSense URL 기반 광고 차단** (기능 릴리스, 기본값 byte-불변) — v1.1.4 의 `exclude_pages` (page-type 5종) 를 `exclude_urls` (사이트 내 임의 URL 목록) 로 교체. 매칭은 정확 일치(case-sensitive · trailing-slash 포함). 페이지별 canonical URL: 홈=`/`, 글=`/<slug>/`, 카테고리=`/<slug_path>/`, 404=`/404.html`, 검색=`/search.php`. page-type enum 폐기 — **개별 글 차단**(예: `/about/`·`/clear/`)이 자연스럽게 가능. 빈 리스트면 v1.1.3 과 동일(전체 주입). 빈 `head_script` = 전체 차단 의미 유지. 호환성: v1.1.4 의 `exclude_pages` 는 v1.1.5 파서가 무시 → 옛 site.yaml 자동으로 "전체 주입" 안전 폴백(compat shim 없음). `AdSenseConfig.exclude_pages` → `exclude_urls`, 파서 leading `/` 보정 + `str().strip()` + frozenset(대소문자 보존). 헬퍼 시그니처 `page_type` → `page_url`; 5 호출 위치 모두 자기 URL 전달. 새 빌더 속성 `self._adsense_seen_urls` + `_check_exclude_urls()` 가 매칭 안 되는 entry 를 BuildReport warning(오타·삭제된 글 감지). 무결성 = **코드 릴리스 형이되 기본값 byte-불변 형** (v1.1.4.2 baseline `exclude_pages: []` vs v1.1.5 `exclude_urls: []` 의 dist byte-완전 동일 목표 — 두 빈 frozenset 이 v1.1.3·v1.1.4 와 동일 분기 경로). 운영자가 실제 URL 추가 시 매칭된 페이지 HTML 에서 자동광고 스크립트 한 줄 제거가 유일한 변화. 클린 빌드 2회 결정성 동일. `__version__` 1.1.4→1.1.5 dist 누수 0(B1). 단위 `test_adsense.py` 갱신(URL 분기 + 신규: leading-`/` 보정, case-sensitive, trailing-slash 엄격, 개별 글 차단, seen-URL 적재) · 진단 6/6 승계. |
 | v1.1.4 | 2026-05-20 | **AdSense 페이지 타입 제외 리스트** (기능 릴리스, 기본값 byte-불변) — `site.yaml` `google_adsense:` 에 `exclude_pages` 필드 신설(문자열·정수 리스트, 식별자 5종 `article`/`home`/`category`/`404`/`search`). 매칭된 페이지 타입은 그 페이지 head 의 `{{ADSENSE_HEAD}}` placeholder 가 line-eating 으로 제거 = auto-ads 로더 스크립트 미주입 → Google auto-ads JS 미로드 → 광고 **원천 차단**(v1.1.3 의 전역 단일 토글 한계 해소·페이지 단위 on/off 가능; 인-페이지 광고 위치는 여전히 Google auto-ads 결정 영역). 빈 문자열 `head_script` 의 전체 차단 의미 유지. 모르는 식별자는 자연 무시(forward compat). `AdSenseConfig.exclude_pages: frozenset[str]` 신설, 파서가 리스트/단일 스칼라 수용 + `str.strip().lower()` + frozenset 변환(yaml `404` int 도 str() 캐스팅 흡수). `_apply_adsense_head_placeholder(tpl, page_type)` 시그니처 확장, 5 호출 위치가 자기 식별자 전달. 무결성 = **코드 릴리스 형이되 기본값 byte-불변 형** (정본 Articles 고정, 불변 `siheonlee.com_v1.1.3` 미수정·4번째-숫자 검증 복사본 `siheonlee.com_v1.1.3.1` 의 v1.1.3 *코드* 클린 재빌드 vs v1.1.4 클린 재빌드 with `exclude_pages: []`): dist **787=787, 0 added/0 removed/0 changed = byte-완전 동일** (모든 부재 상태가 동일 `frozenset()` 으로 정규화돼 v1.1.3 와 같은 분기 경로). 운영자가 실제 페이지 타입을 추가하면 매칭된 페이지의 HTML 에서 자동광고 스크립트 한 줄만 사라짐 — 그 외 산출물 byte-불변. 클린 빌드 2회 결정성 동일. `site.yaml` 값은 운영자 입력이라 코드 무결성 항목 아님. `__version__` 1.1.3→1.1.4 dist 누수 0(B1). 단위 v1.1.3 승계 + `exclude_pages` 파싱·page_type 분기 테스트 신규 · 진단 6/6 승계. |
 | v1.1.3 | 2026-05-20 | **Google AdSense 통합 + 기본 og:image 자산 교체** (기능 릴리스) — (1) `site.yaml` `google_adsense:` 신설(`ads_txt` + `head_script`, `AdSenseConfig` dataclass; ImageConfig/JsonLdConfig 패턴). 두 필드 모두 빈 문자열/키 부재 시 자동 비활성(SeoMeta 3-state 일관, 별도 enabled 토글 없음). `ads_txt` 는 새 빌드 단계 [11b] `_build_ads_txt` 가 `dist/ads.txt` 로 기록(빈 값 미생성 + 잔존 자동 삭제=stale 가드). `head_script` 는 5 템플릿(article·home·category·404·search.php) `<head>` 에 새 `{{ADSENSE_HEAD}}` placeholder 로 raw 주입(escape 없음 — author 신뢰); 빈 값이면 placeholder 라인 자체 strip(ROBOTS_META·JSONLD·COMMON_CSS 와 동일 line-eating, 공용 헬퍼 `_apply_adsense_head_placeholder`). `admin.php`/`src/admin/` 은 빌더가 `Articles/` 만 스캔하므로 자연 제외. (2) `src/assets/default-og.png` 1200×480→**1200×630** 표준 OG 규격으로 교체(Pretendard SemiBold). v1.0.0 패스스루 예외 그대로 — webp 변환 없이 원본 복사. 무결성 = **코드 릴리스 형·dist 의도적 변경형** (정본 Articles 고정, 불변 `siheonlee.com_v1.1.2` 미수정·4번째-숫자 검증 복사본 `siheonlee.com_v1.1.2.1` 의 v1.1.2 *코드* 클린 재빌드 vs v1.1.3): `+dist/ads.txt`, 모든 HTML/PHP head 에 자동광고 스크립트 한 줄 삽입, `dist/assets/default-og.png` byte 교체; 그 외 자산·feed·sitemap·검색 인덱스 등 본문 무관 산출물 byte-불변. 클린 빌드 2회 결정성 동일. `site.yaml` 값은 운영자 입력이라 코드 무결성 항목 아님(비활성=빈 블록 검증에서 default-og.png 1줄 교체 외 모든 산출물 v1.1.2 와 byte-동일 — line-eating 으로 빈 줄·잔재 없음). `__version__` 1.1.2→1.1.3 dist 누수 0(B1). 단위 **337** 승계 · 진단 6/6 승계. |
@@ -814,4 +814,4 @@ php -S 127.0.0.1:8001 admin.php
 
 ---
 
-*siheonlee.com v1.2.0 — 빌드 Python + Pillow, 런타임 PHP. 검색 Okapi BM25 메타데이터 3-필드 인라인 인덱스, 이미지 WebP 다중 해상도 자동, 글/홈/카테고리 통일 SEO 메타 + 외부 CSS·`template:` 지원, schema.org JSON-LD (글 페이지 `Article`+`BreadcrumbList`, off 스위치 동반), 로컬 글쓰기 `admin.php` (§ 17), Google AdSense 통합 + URL 기반 광고 차단 (페이지별 canonical URL 정확 일치, 개별 글 차단 가능). 누적 릴리스 내역은 [§ 16](#16-업데이트-로그). (2026-05-21)*
+*siheonlee.com v1.2.1 — 빌드 Python + Pillow, 런타임 PHP. 검색 Okapi BM25 메타데이터 3-필드 인라인 인덱스, 이미지 WebP 다중 해상도 자동, 글/홈/카테고리 통일 SEO 메타 + 외부 CSS·`template:` 지원, schema.org JSON-LD (글 페이지 `Article`+`BreadcrumbList`, off 스위치 동반), 로컬 글쓰기 `admin.php` (§ 17), Google AdSense 통합 + URL 기반 광고 차단 (페이지별 canonical URL 정확 일치, 개별 글 차단 가능). `noindex: true` 글은 description 필수 검사 면제 (v1.2.1). 누적 릴리스 내역은 [§ 16](#16-업데이트-로그). (2026-05-21)*

@@ -47,8 +47,6 @@ reserved_slugs:
 warn_on_underscore_ref: true
 # meta.yaml 에 지정된 자산이 누락되었을 때 워닝 / true / false
 warn_on_missing_asset: true
-# updated 가 date 보다 과거일 때 워닝 / true / false
-warn_on_stale_updated: true
 
 # 카테고리 자기 페이지의 페이지당 글 수 / 양수 (카테고리 meta.yaml 의 per_page 로 오버라이드)
 category_per_page: 20
@@ -130,4 +128,27 @@ google_adsense:
   #   404       = /404.html
   #   검색      = /search.php
   # 예: ['/', '/404.html', '/search.php', '/about/'] — 홈/404/검색/about 차단.
-  exclude_urls: []
+  exclude_urls: [
+    '/',
+    '/404.html',
+    '/search.php',
+    '/blog/',
+    '/blog/3d-printing/',
+    '/blog/cinema/',
+    '/blog/gallery/',
+    '/blog/moments/',
+    '/project/',
+    '/project/01-side-project/',
+    '/project/02-sw-development-request/',
+    '/project/03-capstone-project/',
+    '/project/04-personal-research/',
+    '/project/05-my-website/',
+    '/research/',
+    '/research/research-notes-cs/',
+    '/research/research-notes-dh/',
+    '/study/',
+    '/study/lecture-notes/',
+    '/study/literature/',
+    '/study/paper-review-dh/',
+    '/study/programming/'
+  ]

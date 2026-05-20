@@ -422,7 +422,6 @@ import os
 import re
 import shutil
 import sys
-from datetime import date as Date
 from pathlib import Path
 
 from .yaml_parser import yaml_load
@@ -806,7 +805,6 @@ class Builder:
             reserved_slugs=get('reserved_slugs') or [],
             warn_on_underscore_ref=bool(get('warn_on_underscore_ref', True)),
             warn_on_missing_asset=bool(get('warn_on_missing_asset', True)),
-            warn_on_stale_updated=bool(get('warn_on_stale_updated', True)),
             description_truncate=int(get('description_truncate') or 150),
             robots_txt_main=get('robots_txt_main') or 'User-agent: *\nAllow: /\n',
             # v0.4.5: i18n + 카테고리 페이지네이션 디폴트.
@@ -1566,24 +1564,6 @@ class Builder:
                     self.articles_dir.joinpath(*cat.path),
                 )
 
-        if self.site.warn_on_stale_updated:
-            for article in self.articles:
-                if article.meta.updated and article.content_file:
-                    try:
-                        mtime = Date.fromtimestamp(
-                            article.content_file.stat().st_mtime
-                        ).isoformat()
-                        if mtime > article.meta.updated:
-                            self._warning(
-                                'article', article.meta.slug,
-                                f'meta.yaml 의 updated ({article.meta.updated}) '
-                                f'가 content 파일의 수정 시각 ({mtime}) 보다 '
-                                f'오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.',
-                                article.content_file,
-                            )
-                    except Exception:
-                        pass
-
     def _build_category_tree(self):
         """v0.4.5: 카테고리 폴더의 meta.yaml 도 파싱한다.
 
@@ -2187,8 +2167,20 @@ class Builder:
             #     <description> 태그 자체가 출력되지 않음, gallery 도 description
             #     없이 그라데이션 플레이스홀더만).
             #   - 본문 폴백 없음. rr.first_paragraph / rr.first_image 참조 제거.
+            # v1.2.1: noindex 글은 description 필수 검사 면제. noindex 시맨틱
+            #   (검색엔진 미색인 + sitemap/feed/search.php 인덱스 제외) 상 SERP
+            #   스니펫·피드 summary 가 모두 무의미해, description 누락이 더이상
+            #   "외부 노출용 빠뜨림" 이 아니다. og:description 미리보기는 여전히
+            #   원하면 author 가 직접 적을 수 있다 (검사가 면제될 뿐 출력 경로는
+            #   불변). 빈 문자열 '' 도 동일 경로 — 의도적 비움/누락 구분이
+            #   noindex 안에서는 의미가 없다.
             desc_val = m.seo.description
-            if desc_val is None:
+            if m.noindex:
+                summary = (
+                    truncate_description(desc_val, self.site.description_truncate)
+                    if desc_val else ''
+                )
+            elif desc_val is None:
                 self._issue(
                     'article', m.slug,
                     "meta.yaml: 'seo.description' 필드가 없습니다 "

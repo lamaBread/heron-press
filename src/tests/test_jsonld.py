@@ -39,7 +39,6 @@ def _site(**overrides):
         reserved_slugs=[],
         warn_on_underscore_ref=True,
         warn_on_missing_asset=True,
-        warn_on_stale_updated=True,
         description_truncate=160,
         robots_txt_main='',
     )

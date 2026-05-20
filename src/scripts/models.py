@@ -232,7 +232,6 @@ class SiteConfig:
     reserved_slugs: list
     warn_on_underscore_ref: bool
     warn_on_missing_asset: bool
-    warn_on_stale_updated: bool
     description_truncate: int
     robots_txt_main: str
     # v0.4.5: i18n + 카테고리 페이지네이션 디폴트.

@@ -1,4 +1,4 @@
-"""siheonlee.com v1.2.0 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.2.1 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -237,6 +237,42 @@ __version__:
   코드 복사본 `siheonlee.com_v1.1.5` 와 클린 재빌드 dist sha256 동일).
   `__version__` 1.1.5→1.2.0 의 dist 누수 0 (B1 유지).
 
+  v1.2.1 은 **운영 잡음 정리** 릴리스 — *코드* 릴리스이되 dist 산출물
+  byte-불변 (issue/warning 보고는 BuildReport·터미널·build-report.md 의
+  표시일 뿐 dist 에 새지 않으므로). 두 가지 변경: (1) **noindex 글의
+  `seo.description` 필수 검사 면제** — `noindex: true` 글은 robots
+  noindex + sitemap/feed/검색 인덱스에서 모두 제외되므로 SERP 스니펫·
+  피드 summary 가 무의미해, description 부재가 더는 "외부 노출용
+  빠뜨림" 이 아니다 (정본 `About` 글이 그 예 — 1 issue 가 0 으로 떨어
+  진다). og:description 미리보기는 여전히 author 가 원하면 적을 수
+  있다 (검사가 면제될 뿐 출력 경로는 불변). 빈 문자열 `''` 도 동일
+  경로 (`m.noindex` 가 None/''/text 3-상태 분기에 *선행*). `_render
+  _articles` 의 description 분기에 `if m.noindex` 가 맨 앞에 끼어
+  들어, 비-noindex 글에 대한 v0.5.5 description 필수 정책은 그대로
+  (행 1 갱신). (2) **`warn_on_stale_updated` 워닝 제거 (코드·필드·
+  설정·문서 일괄)** — content.md 파일의 mtime 이 meta.yaml 의
+  `updated` 보다 새로울 때 "갱신이 누락된 것은 아닌지" 라고 알리던
+  warning. 운영자의 reality 상 의도적 mtime > updated 케이스가 흔하고
+  (붙임글 보강·정자체 다듬기·서식 보존 편집 등 "갱신 의미 없는 손
+  댐") 매 빌드 14 줄씩 쌓이는 잡음이라 사용자 결정으로 완전 폐기 —
+  builder.py 의 검사 블록 + `Date` import + `SiteConfig.warn_on_stale_
+  updated` 필드 + 4 테스트의 kwarg + site.yaml 행/주석 + README §11
+  예시·§7 분류표·report.py docstring 예시 일괄 삭제 (no-migration —
+  옛 site.yaml 에 키가 남아 있어도 파서가 silently 무시). updated 자체
+  의 의미 (피드/sitemap lastmod) 와 `updated < date` 형식 검사는
+  무변경. 무결성 = **코드 릴리스 형이되 dist byte-불변 형** (정본
+  `siheonlee.com_v1.2.0.1/Articles` 고정 — 사용자가 서비스용으로
+  다듬은 정본, 2026-05-21 부터 모든 빌드의 Articles 기본; site.yaml
+  도 v1.2.0.1 의 service-tuned 본을 승계하되 `warn_on_stale_updated`
+  한 줄만 추가 제거). 비교 baseline = `siheonlee.com_v1.2.0.1/dist`
+  의 클린 재빌드. dist byte-동일 보장 추론: noindex `_issue` 및
+  stale_updated `_warning` 호출 변화는 모두 BuildReport.entries (dist
+  미경유), 그 외 코드 경로 무변경, site.yaml 의 키 제거는 운영자
+  입력 (v1.2.0.1 에서 default True 였고 v1.2.1 에선 코드가 키 자체를
+  안 읽음 — 둘 다 같은 분기 path). `__version__` 1.2.0→1.2.1 의 dist
+  누수 0 (B1 유지). 단위 364→**367** (`NoindexDescriptionExemption
+  Tests` 3 신설: 누락·빈문자열 면제, 공개 글 대조군). 진단 6/6 승계.
+
   v1.1.5 는 **AdSense URL 기반 광고 차단** 릴리스 — *기능* 릴리스이되
   v1.1.4 의 `exclude_pages` (page-type 5종) 를 `exclude_urls` (사이트 내
   임의 URL 목록) 로 교체. 매칭은 정확 일치 (site-relative URL · case-
@@ -345,4 +381,4 @@ __version__:
   v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.2.0'
+__version__ = '1.2.1'

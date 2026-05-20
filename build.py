@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.2.0 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.2.1 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -43,6 +43,30 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v1.2.1 변경 사항 (vs v1.2.0) — 운영 잡음 정리 릴리스 (코드, dist byte-불변):
+  - **noindex 글의 `seo.description` 필수 검사 면제** — `noindex: true` 인
+    글은 robots noindex + sitemap/feed/검색 인덱스에서 모두 제외되므로 SERP
+    스니펫·피드 summary 가 무의미. description 부재가 더는 "외부 노출용
+    빠뜨림" 이 아니다 (정본 `About` 이 그 예). og:description 미리보기는
+    여전히 author 가 원하면 적을 수 있다 (검사 면제일 뿐 출력 경로 불변).
+    빈 문자열 `''` 도 동일 경로 (m.noindex 분기가 None/''/text 3-상태에
+    선행). 비-noindex 글에 대한 v0.5.5 정책은 그대로.
+  - **`warn_on_stale_updated` 워닝 일괄 제거** — content.md 파일 mtime 이
+    meta.yaml `updated` 보다 새로울 때 띄우던 warning. 의도적 mtime>updated
+    케이스가 흔해 매 빌드 잡음이라 사용자 결정으로 완전 폐기 (builder.py
+    검사 블록 + `Date` import + `SiteConfig.warn_on_stale_updated` 필드 +
+    4 테스트 kwarg + site.yaml 행/주석 + README §11·§7·report.py docstring
+    일괄 삭제, no-migration). updated 자체 의미 (lastmod) 와 `updated <
+    date` 형식 검사는 무변경.
+  - **무결성** = 코드 릴리스 형이되 *dist byte-불변* 형. 정본 Articles 기본
+    이 2026-05-21 부터 `siheonlee.com_v1.2.0.1/Articles` (사용자 서비스용
+    조정본). 비교 baseline = `siheonlee.com_v1.2.0.1/dist` 클린 재빌드.
+    dist byte-동일 추론: noindex `_issue`·stale_updated `_warning` 호출
+    변화는 BuildReport.entries (dist 미경유, 터미널·build-report.md 표시
+    전용), 그 외 코드 경로 무변경. `__version__` 1.2.0→1.2.1 dist 누수 0
+    (B1 유지). 단위 364→**367** (`NoindexDescriptionExemptionTests` 3
+    신설). 진단 6/6 승계.
 
 v1.2.0 변경 사항 (vs v1.1.5) — 안정화 릴리스 (문서 전용, dist byte-불변):
   - **빌드 로직·테스트·dist 산출물 무변경** — v1.1.5 의 URL 기반 광고 차단

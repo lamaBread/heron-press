@@ -30,7 +30,7 @@ def _site():
         copyright_holder='Author', copyright_year_start=2020,
         reserved_slugs=[],
         warn_on_underscore_ref=False, warn_on_missing_asset=False,
-        warn_on_stale_updated=False, description_truncate=160,
+        description_truncate=160,
         robots_txt_main='',
     )
 

@@ -89,7 +89,7 @@ class WrapPageTitleTests(unittest.TestCase):
             copyright_holder='A', copyright_year_start=2020,
             reserved_slugs=[],
             warn_on_underscore_ref=False, warn_on_missing_asset=False,
-            warn_on_stale_updated=False, description_truncate=160,
+            description_truncate=160,
             robots_txt_main='',
         )
         defaults.update(site_overrides)
@@ -697,6 +697,86 @@ class BuildReportResetTests(unittest.TestCase):
             len(b1.report.entries),
             b1.report.issue_count() + b1.report.warning_count(),
         )
+
+
+class NoindexDescriptionExemptionTests(unittest.TestCase):
+    """v1.2.1: `noindex: true` 글은 `seo.description` 누락 issue 가 면제된다.
+    noindex 시맨틱(검색엔진 미색인 + sitemap/feed/검색 인덱스 제외) 상 SERP
+    스니펫·피드 summary 가 무의미해, 동일 글 description 부재가 더는 "외부
+    노출용 빠뜨림" 이 아니기 때문. 비-noindex 글의 description 필수 정책은
+    그대로(v0.5.5)."""
+
+    SITE_YAML = StylesFrontmatterTests.SITE_YAML
+
+    def _make_site(self, *, noindex_desc=None, public_desc='A demo.'):
+        """noindex 글 + 공개 글 한 쌍을 둔 최소 사이트.
+
+        noindex_desc=None 이면 noindex 글에 seo.description 키 자체를 생략
+        (= None case). 빈 문자열을 넘기면 `description: ''` 로 적어 빈
+        문자열 case 도 같은 면제가 되는지 검증할 수 있다.
+        """
+        tmp = Path(tempfile.mkdtemp(prefix='ssg-v121-noindex-'))
+        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
+        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
+        articles_dir = tmp / 'Articles'
+        articles_dir.mkdir(parents=True)
+        (articles_dir / 'meta.yaml').write_text(
+            "seo:\n  description: Site root.\n", encoding='utf-8',
+        )
+        # noindex 글: description 누락/빈 문자열 — issue 가 *나지 말아야* 한다.
+        hidden = articles_dir / 'Hidden'
+        hidden.mkdir()
+        seo_block = ''
+        if noindex_desc is not None:
+            seo_block = f"seo:\n  description: {noindex_desc!r}\n"
+        (hidden / 'meta.yaml').write_text(
+            "slug: hidden\ntitle: Hidden\ndate: 2026-01-01\n"
+            "noindex: true\n" + seo_block,
+            encoding='utf-8',
+        )
+        (hidden / 'content.md').write_text('# Hidden\n', encoding='utf-8')
+        # 공개 글: description 누락 — issue 가 *나야* 한다 (대조군).
+        public = articles_dir / 'Public'
+        public.mkdir()
+        (public / 'meta.yaml').write_text(
+            "slug: public\ntitle: Public\ndate: 2026-01-02\n"
+            + (f"seo:\n  description: {public_desc!r}\n" if public_desc else ''),
+            encoding='utf-8',
+        )
+        (public / 'content.md').write_text('# Public\n', encoding='utf-8')
+        return tmp
+
+    def _desc_issues_for(self, report, slug):
+        return [e for e in report.entries
+                if e.severity == 'issue'
+                and e.scope == 'article'
+                and e.target == slug
+                and 'seo.description' in e.message]
+
+    def test_noindex_article_missing_description_no_issue(self):
+        """noindex 글의 description 키 누락 = issue 면제."""
+        tmp = self._make_site(noindex_desc=None, public_desc='A demo.')
+        b = Builder(base_dir=tmp)
+        b.build()
+        self.assertEqual(self._desc_issues_for(b.report, 'hidden'), [],
+                         'noindex 글은 description 누락에 issue 없어야 함')
+
+    def test_noindex_article_empty_description_no_issue(self):
+        """noindex 글의 description='' (빈 문자열) 도 면제 (None 과 동일 경로)."""
+        tmp = self._make_site(noindex_desc='', public_desc='A demo.')
+        b = Builder(base_dir=tmp)
+        b.build()
+        self.assertEqual(self._desc_issues_for(b.report, 'hidden'), [],
+                         'noindex 글은 description=\'\' 에도 issue 없어야 함')
+
+    def test_public_article_missing_description_still_issues(self):
+        """대조군 — 공개 글의 description 누락은 v0.5.5 정책대로 여전히 issue."""
+        tmp = self._make_site(noindex_desc=None, public_desc=None)
+        b = Builder(base_dir=tmp)
+        b.build()
+        self.assertEqual(len(self._desc_issues_for(b.report, 'public')), 1,
+                         '공개 글은 description 누락에 issue 1건 유지')
 
 
 class CrumbPartsForTests(unittest.TestCase):

@@ -1,16 +1,16 @@
 # siheonlee.com 빌드 리포트
 
-- **버전**: v1.2.0
-- **빌드 시각**: 2026-05-21 00:28:57
-- **소요**: 346.5s
+- **버전**: v1.2.1
+- **빌드 시각**: 2026-05-21 02:05:45
+- **소요**: 246.0s
 - **결과**: 47 글 · 19 카테고리
-- **보완 필요**: 0건 · **살펴볼 사항**: 14건
+- **보완 필요**: 0건 · **살펴볼 사항**: 1건
 - **증분 캐시**: 0 히트 / 47 미스 (글 47건)
 
 ## 빌드 진행
 
 ```
-빌드 시작 - siheonlee.com v1.2.0 (2026-05-21 00:23:11)
+빌드 시작 - siheonlee.com v1.2.1 (2026-05-21 02:01:39)
 [ 1/16] 설정 로드 (site.yaml / 토크나이저 패리티)
 [ 2/16] 글 폴더 스캔 (Articles/)
 [ 3/16] meta.yaml 파싱
@@ -30,84 +30,18 @@
 [15/16] 검색 인덱스 (dist/search.php)
 [16/16] 고아 산출물 정리
 
-빌드 완료: 47 글, 19 카테고리, 0 보완 필요, 14 살펴볼 사항. (346.5s)
+빌드 완료: 47 글, 19 카테고리, 0 보완 필요, 1 살펴볼 사항. (246.0s)
 증분 캐시: 0 히트 / 47 미스 (글 47건).
 산출물: dist/ (siheonlee.com).
 ```
 
 ## 살펴볼 사항 (산출물 정상)
 
-### [article] picture-frame
+### [site]
 
-- meta.yaml 의 updated (2025-01-07) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Blog\3D Printing\picture_frame\content.html`
+- google_adsense.exclude_urls 의 "/[" 가 빌드 결과 어느 페이지 URL 과도 매칭되지 않습니다 — 오타 또는 삭제된 글일 가능성 (광고 차단 없음).
 
-### [article] ron-mueck
-
-- meta.yaml 의 updated (2025-05-24) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Blog\Gallery\Ron_Mueck\content.html`
-
-### [article] the-hanging-gardens-of-babylon
-
-- meta.yaml 의 updated (2025-10-26) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Blog\Gallery\THE_HANGING_GARDENS_OF_BABYLON\content.html`
-
-### [article] algorithm-dictionary
-
-- meta.yaml 의 updated (2025-05-03) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Project\01 - Side Project\Algorithm Dictionary\content.html`
-
-### [article] automatic-grading
-
-- meta.yaml 의 updated (2025-06-12) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Project\01 - Side Project\Automatic Grading\content.html`
-
-### [article] movie-go-watch
-
-- meta.yaml 의 updated (2024-05-21) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Project\01 - Side Project\Movie\content.html`
-
-### [article] radish-pang-leaderboard
-
-- meta.yaml 의 updated (2025-05-03) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Project\01 - Side Project\Radish Pang Leaderboard\content.html`
-
-### [article] u-hof
-
-- meta.yaml 의 updated (2025-05-04) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Project\02 - SW Development Request\U-hof\content.html`
-
-### [article] clear
-
-- meta.yaml 의 updated (2025-06-12) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Project\03 - Capstone Project\CLEAR\content.html`
-
-### [article] hacking-practice-and-alert-page
-
-- meta.yaml 의 updated (2025-06-12) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Project\03 - Capstone Project\Hacking Practice Site and AlertPage\content.html`
-
-### [article] lightweight-log-analysis
-
-- meta.yaml 의 updated (2026-02-20) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Research\Research Notes (CS)\A Lightweight Software Solution for Log Analysis\content.md`
-
-### [article] fic-time
-
-- meta.yaml 의 updated (2026-02-01) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Research\Research Notes (DH)\fic-time\content.md`
-
-### [article] criticism-fire-was-there
-
-- meta.yaml 의 updated (2026-02-20) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Study\Literature\[Criticism] 상처를 안고 기억 속에 박제되어버린 나를 바라보며\content.md`
-
-### [article] criticism-twenty-winters-anniversary
-
-- meta.yaml 의 updated (2026-02-20) 가 content 파일의 수정 시각 (2026-05-20) 보다 오래되었습니다 — 갱신이 누락된 것은 아닌지 확인.
-  - 위치: `F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.2.0\Articles\Study\Literature\[Criticism] 스무 번도 넘는 겨울이 지나서야 극복한 과거의 자신이란\content.md`
-
-> **빌드 리포트 요약**: 보완 필요 0건, 살펴볼 사항 14건.
+> **빌드 리포트 요약**: 보완 필요 0건, 살펴볼 사항 1건.
 
 ---
 
