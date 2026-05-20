@@ -1,4 +1,4 @@
-"""siheonlee.com v1.1.0 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.1.3 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -229,6 +229,39 @@ __version__:
   **337** 승계(신규 테스트 없음 — 순수 CSS/JS 자산 변경, v1.0.1·
   v1.0.2 선례 일치), 진단 **6/6** 승계([6] ld+json 47/46 그대로).
   `__version__` 1.1.1→1.1.2 의 dist 누수 0 (B1 유지).
+
+  v1.1.3 은 **Google AdSense 통합 + 기본 og:image 자산 교체** 릴리스 —
+  *기능* 릴리스로 dist 가 바뀐다 (B1 유지라 `__version__` 1.1.2→1.1.3
+  자체의 dist 누수는 0). 두 변경:
+    (1) site.yaml `google_adsense:` 블록 신설 (`ads_txt` + `head_script`
+        두 문자열 필드, ImageConfig/JsonLdConfig 와 같은 dataclass 패턴
+        = `AdSenseConfig`). 두 필드는 빈 문자열/키 부재 시 자동 비활성
+        (SeoMeta 의 3-state None/''/'text' 원칙 일관 — 별도 enabled
+        마스터 토글 없음). `ads_txt` 는 빌더 [11b] 단계 `_build_ads_txt`
+        가 `dist/ads.txt` 로 그대로 기록(robots.txt 와 같은 패턴);
+        빈 값이면 미생성하고 이전 빌드의 잔존 `dist/ads.txt` 가 있으면
+        삭제(stale 가드). `head_script` 는 5 개 템플릿(article·home·
+        category·404·search.php)의 `<head>` 에 새 `{{ADSENSE_HEAD}}`
+        placeholder 로 raw 그대로 주입(escape 없음 — author 명시 스크
+        립트 신뢰); 빈 값이면 placeholder 라인 자체를 strip(ROBOTS_META
+        · JSONLD · COMMON_CSS 와 동일 line-eating 패턴). 적용 대상은
+        사용자가 방문하는 5 개 dist 페이지 종류 — `admin.php`/
+        `src/admin/` 은 빌더가 dist 에 내보내지 않으므로 자연 제외.
+    (2) `src/assets/default-og.png` 표준 OG 규격으로 교체(1200×480 →
+        1200×630, Pretendard SemiBold 폰트). v1.0.0 의 default_og_image
+        패스스루 예외 그대로 — 이 자산은 webp 변환 없이 원본 그대로
+        `dist/assets/` 로 복사돼 SNS 언퍼ler 가 고정 URL 로 가져간다.
+  무결성 = 코드 릴리스 형·dist 의도적 변경형 (정본 Articles 고정,
+  불변 `siheonlee.com_v1.1.2` 미수정·4번째-숫자 검증 복사본 `siheonlee
+  .com_v1.1.2.1` 의 v1.1.2 *코드* 클린 재빌드 vs v1.1.3 클린 재빌드
+  의 *열거된* diff): `+dist/ads.txt`, 모든 HTML/PHP head 에 자동광고
+  스크립트 한 줄 삽입, `dist/assets/default-og.png` byte 교체. 그 외
+  자산·feed·sitemap·검색 인덱스 등 본문 무관 산출물 byte-불변. 클린
+  빌드 2회 결정성 동일. `__version__` 1.1.2→1.1.3 의 dist 누수 0 (B1
+  유지). 비활성 검증(google_adsense 블록을 비우거나 지운 상태)에서
+  default-og.png 1줄 교체를 제외한 모든 산출물이 v1.1.2 와 byte-동일
+  하다 — placeholder line-eating 이 깨끗하게 작동해 빈 줄·잔재 없이
+  v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.1.2'
+__version__ = '1.1.3'

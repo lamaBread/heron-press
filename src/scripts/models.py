@@ -2,6 +2,15 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
+v1.1.3 변경 — Google AdSense 통합:
+  - AdSenseConfig dataclass 신설. site.yaml 의 `google_adsense:` 블록
+    (`ads_txt` + `head_script` 두 문자열 필드). SiteConfig 에
+    `google_adsense` 필드 추가. ImageConfig / JsonLdConfig 와 같은 패턴.
+    두 필드는 빈 문자열/키 부재 시 각각 자동 비활성 (SeoMeta 의 3-state
+    원칙과 일관). 실제 로직은 builder._build_ads_txt (dist/ads.txt 생성)
+    와 5 개 템플릿 head 의 `{{ADSENSE_HEAD}}` placeholder 치환, 여기엔
+    순수 데이터만.
+
 v1.1.1 변경 — PHP 서명 변수(배포 사고 수정):
   - SiteConfig 에 `php_globals: dict` 추가. 정본 lama.pe.kr 의
     `PHP/GlobalVariables.php`($reference_hanbyeol 등)가 auto_prepend
@@ -146,6 +155,32 @@ class JsonLdConfig:
 
 
 @dataclass
+class AdSenseConfig:
+    """site.yaml 의 `google_adsense:` 블록 (v1.1.3).
+
+    Google AdSense 두 가지 통합 자산을 보유:
+      - ads_txt    : /ads.txt 본문 (사이트 루트에 정적 파일로 노출).
+      - head_script: 모든 페이지 `<head>` 에 그대로 삽입할 자동광고 스크립트.
+
+    두 필드 모두 빈 문자열/키 부재 시 자동 비활성 (SeoMeta 의 3-state
+    None/''/'text' 원칙과 일관) — 별도 `enabled` 마스터 토글은 두지 않는다.
+    각 필드는 독립적으로 비활성화 가능 (ads.txt 만 두고 스크립트는 비우는
+    조합 등). 둘 다 비우면 v1.1.2 와 동일한 dist (광고 미통합 상태).
+
+    ads_txt: 빈 문자열이면 `dist/ads.txt` 를 만들지 않고, 이전 빌드의
+             `dist/ads.txt` 가 남아 있으면 삭제 (설정을 비웠는데 옛 파일이
+             살아 stale 가드).
+    head_script: 빈 문자열이면 5 개 템플릿(article/home/category/404/
+                 search)의 `{{ADSENSE_HEAD}}` placeholder 라인을 통째로
+                 제거 (ROBOTS_META · JSONLD 와 동일한 line-eating 패턴).
+                 비어있지 않으면 raw 그대로 head 에 주입 (escape 없음 —
+                 author 가 명시한 스크립트 문자열을 신뢰).
+    """
+    ads_txt: str = ''
+    head_script: str = ''
+
+
+@dataclass
 class SiteConfig:
     domain: str
     base_url: str
@@ -183,6 +218,10 @@ class SiteConfig:
     # imgBox 캡션의 `{$name}` 보간을 빌드 시점에 치환 (markdown.py
     # parse_php_globals / _interpolate_php). 키 부재 시 {} = 보간 없음.
     php_globals: dict = field(default_factory=dict)
+    # v1.1.3: Google AdSense 통합 (ads.txt + head_script). 두 필드 모두
+    # 빈 문자열/키 부재 시 자동 비활성 — site.yaml 에 `google_adsense:`
+    # 블록 자체가 없으면 v1.1.2 와 동일한 동작 (광고 미통합).
+    google_adsense: AdSenseConfig = field(default_factory=AdSenseConfig)
 
 
 @dataclass

@@ -100,6 +100,7 @@ if ($q === '') {
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    {{ADSENSE_HEAD}}
     <meta name='robots' content='noindex,follow'>
     <link href='/assets/common_template.css' rel='stylesheet' type='text/css'>
     <title>{{PAGE_TITLE}}</title>

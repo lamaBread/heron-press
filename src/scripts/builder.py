@@ -428,7 +428,7 @@ from pathlib import Path
 from .yaml_parser import yaml_load
 from .models import (
     SiteConfig, ArticleMeta, SeoMeta, CategoryMeta, Article, Category,
-    JsonLdConfig,
+    JsonLdConfig, AdSenseConfig,
 )
 from .slugs import (
     category_slug_from_name, is_excluded_path, is_excluded_name, has_non_ascii,
@@ -826,6 +826,9 @@ class Builder:
             jsonld=self._parse_jsonld_config(get('jsonld') or {}),
             # v1.1.1: PHP 서명 변수 (imgBox 캡션 `{$name}` 보간).
             php_globals=parse_php_globals(get('php_globals')),
+            # v1.1.3: Google AdSense (ads.txt + head_script). 블록 부재 시
+            # 기본값(두 필드 모두 빈 문자열 = 자동 비활성) → v1.1.2 와 동일 동작.
+            google_adsense=self._parse_adsense_config(get('google_adsense') or {}),
         )
 
         # v0.4.6: 사용자가 옛 home_* 키를 site.yaml 에 그대로 두면 알아채지
@@ -934,6 +937,33 @@ class Builder:
         enabled_raw = raw.get('enabled')
         enabled = True if enabled_raw is None else bool(enabled_raw)
         return JsonLdConfig(enabled=enabled)
+
+    def _parse_adsense_config(self, raw) -> AdSenseConfig:
+        """site.yaml 의 `google_adsense:` 블록을 AdSenseConfig 로 파싱 (v1.1.3).
+
+        `_parse_image_config` / `_parse_jsonld_config` 와 같은 패턴 — 비어
+        있거나 dict 가 아니면 기본값(두 필드 모두 빈 문자열 = 자동 비활성).
+        site.yaml 에 `google_adsense:` 블록이 없으면 옛 빌드와 byte-동일.
+
+        두 필드는 문자열로 정규화 — None/누락은 빈 문자열로 (비활성), 값이
+        있으면 str() 캐스팅 후 보존. literal block(`|`)으로 적힌 경우의
+        말미 줄바꿈은 yaml 파서가 보존 → ads.txt 가 trailing newline 으로
+        끝나는 표준 텍스트 파일 형식을 자연스럽게 따른다.
+        """
+        if not isinstance(raw, dict):
+            raw = {}
+        def _s(key):
+            v = raw.get(key)
+            return '' if v is None else str(v)
+        # ads_txt: trailing newline 보존 (텍스트 파일 표준).
+        # head_script: trailing newline strip — yaml literal block `|` 이
+        # 자동으로 붙이는 마지막 \n 이 placeholder 치환 시 head 에 빈 줄
+        # 하나를 더하는 결과를 방지. yaml flow 인용 ("…") 형태로 적든
+        # literal block 으로 적든 head 출력이 일관된다.
+        return AdSenseConfig(
+            ads_txt=_s('ads_txt'),
+            head_script=_s('head_script').rstrip('\n'),
+        )
 
     # ── [2] Content scan ──────────────────────────────────────
 
@@ -1153,6 +1183,27 @@ class Builder:
                 '', tpl, flags=re.MULTILINE,
             )
         return tpl
+
+    def _apply_adsense_head_placeholder(self, tpl: str) -> str:
+        """v1.1.3: 다섯 페이지 공용 — `{{ADSENSE_HEAD}}` line-eating.
+
+        site.yaml 의 `google_adsense.head_script` 가 비어 있으면 placeholder
+        가 자리한 라인 자체를 통째로 제거 (ROBOTS_META · JSONLD · COMMON_CSS
+        와 동일한 패턴). 비어 있지 않으면 placeholder 를 그대로 두어 호출자
+        의 `_render_template` 가 vars_ 의 ADSENSE_HEAD 값으로 raw 치환한다
+        (escape 없음 — author 가 명시한 스크립트 문자열을 신뢰).
+
+        호출자는 이 헬퍼로 템플릿을 전처리한 뒤 vars_ 에
+        'ADSENSE_HEAD' 키를 항상 채워 둔다 (비어 있으면 빈 문자열).
+        비활성일 때는 위에서 라인 자체가 strip 되어 substitution 이
+        no-op, 활성일 때는 vars_ 값이 치환된다.
+        """
+        if self.site.google_adsense.head_script:
+            return tpl
+        return re.sub(
+            r'^[ \t]*\{\{ADSENSE_HEAD\}\}[ \t]*\r?\n',
+            '', tpl, flags=re.MULTILINE,
+        )
 
     # ── [3] Frontmatter parse ────────────────────────────────
 
@@ -2227,6 +2278,9 @@ class Builder:
                 stylesheets_html=page_stylesheets,
             )
 
+            # v1.1.3: ADSENSE_HEAD line-eating (비활성 시 placeholder 라인 제거).
+            tpl_local = self._apply_adsense_head_placeholder(tpl_local)
+
             # v0.4.3: <title> 에 글 제목 사용. full_title 은
             # build_meta_tags 가 만든 `{prefix}{title}{suffix}` 문자열.
             page_title = full_title or self.site.name
@@ -2240,6 +2294,9 @@ class Builder:
                 # v0.8.3: 비출력이면 위에서 라인 자체를 strip 했으므로 이
                 # 키는 무해하게 미사용. 출력이면 placeholder 를 치환.
                 'JSONLD': jsonld_html,
+                # v1.1.3: ADSENSE_HEAD — 비활성이면 위에서 라인 strip, 활성이면
+                # raw 스크립트 문자열을 치환.
+                'ADSENSE_HEAD': self.site.google_adsense.head_script,
                 'PAGE_STYLES': page_styles,
                 'PAGE_TITLE': escape_html(page_title),
                 'MAIN_TITLE': escape_html(self.site.main_title),
@@ -2758,10 +2815,13 @@ class Builder:
             use_common_css=cat.meta.use_common_css,
             stylesheets_html=page_stylesheets,
         )
+        # v1.1.3: ADSENSE_HEAD line-eating.
+        tpl_local = self._apply_adsense_head_placeholder(tpl_local)
 
         vars_ = {
             'LANG': escape_html(page_lang),
             'META_TAGS': meta_tags,
+            'ADSENSE_HEAD': self.site.google_adsense.head_script,
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_TRACKER': nav_tracker,
@@ -2875,10 +2935,13 @@ class Builder:
             use_common_css=self.home_meta.use_common_css,
             stylesheets_html=page_stylesheets,
         )
+        # v1.1.3: ADSENSE_HEAD line-eating.
+        tpl_local = self._apply_adsense_head_placeholder(tpl_local)
 
         vars_ = {
             'LANG': escape_html(page_lang),
             'META_TAGS': meta_tags,
+            'ADSENSE_HEAD': self.site.google_adsense.head_script,
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
@@ -2984,12 +3047,15 @@ class Builder:
 
     def _build_404(self):
         tpl = _load_template(self.templates_dir, '404.html')
+        # v1.1.3: ADSENSE_HEAD line-eating.
+        tpl = self._apply_adsense_head_placeholder(tpl)
         # v0.5.4: 404 <title> 폴백 체인.
         # 본문 = site.error_404_title. 양옆 = site.default_title_prefix/suffix
         # (404 는 meta.yaml 이 없으므로 override 불가능 — site.yaml 한 군데에서만).
         page_title = self._wrap_page_title(self.site.error_404_title)
         vars_ = {
             'LANG': escape_html(self.site.lang),
+            'ADSENSE_HEAD': self.site.google_adsense.head_script,
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
@@ -3000,13 +3066,31 @@ class Builder:
         self.dist.mkdir(parents=True, exist_ok=True)
         (self.dist / '404.html').write_text(page_html, encoding='utf-8')
 
-    # ── [11] robots.txt ───────────────────────────────────────
+    # ── [11] robots.txt + ads.txt ────────────────────────────
 
     def _build_robots(self):
         self.dist.mkdir(parents=True, exist_ok=True)
         (self.dist / 'robots.txt').write_text(
             self.site.robots_txt_main, encoding='utf-8'
         )
+
+    def _build_ads_txt(self):
+        """v1.1.3: Google AdSense `dist/ads.txt` 생성.
+
+        site.yaml 의 `google_adsense.ads_txt` 가 비어 있지 않으면 그 본문을
+        그대로 `dist/ads.txt` 에 쓴다 (robots.txt 와 같은 패턴). 빈 문자열/
+        키 부재 시에는 파일을 만들지 않고, 이전 빌드의 잔존 `dist/ads.txt`
+        가 있으면 삭제 (설정을 비웠는데 옛 파일이 살아 있어 stale 정보가
+        노출되는 사고 방지 — v0.5.2 의 옛 `dist/src/` 잔재 정리와 같은
+        결).
+        """
+        ads_txt = self.site.google_adsense.ads_txt
+        dst = self.dist / 'ads.txt'
+        if ads_txt:
+            self.dist.mkdir(parents=True, exist_ok=True)
+            dst.write_text(ads_txt, encoding='utf-8')
+        elif dst.exists():
+            dst.unlink()
 
     # ── [12] sitemap.xml ──────────────────────────────────────
 
@@ -3139,8 +3223,12 @@ class Builder:
         # + site.default_title_prefix/suffix. search 도 meta.yaml 이 없는 시스템
         # 페이지라 site.yaml 에서만 설정한다.
         search_title = self._wrap_page_title(self.site.search_title)
+        # v1.1.3: ADSENSE_HEAD line-eating (search.php 도 사용자가 방문하는
+        # dist 페이지이므로 자동광고 스크립트 주입 대상).
+        tpl = self._apply_adsense_head_placeholder(tpl)
         vars_ = {
             'LANG': escape_html(self.site.lang),
+            'ADSENSE_HEAD': self.site.google_adsense.head_script,
             'PAGE_TITLE': escape_html(search_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
@@ -3332,8 +3420,9 @@ class Builder:
         self._build_home()                     # [9]
         self._step(11, '404 페이지')
         self._build_404()                      # [10]
-        self._step(12, 'robots.txt')
+        self._step(12, 'robots.txt / ads.txt')
         self._build_robots()                   # [11]
+        self._build_ads_txt()                  # [11b] (v1.1.3) Google AdSense
         self._step(13, 'sitemap.xml')
         self._build_sitemap()                  # [12]
         self._step(14, 'RSS / Atom 피드')

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.1.2 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.1.3 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -43,6 +43,35 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v1.1.3 변경 사항 (vs v1.1.2) — Google AdSense 통합 + 기본 og:image 자산 교체 (기능 릴리스):
+  - **(1) AdSense 통합** — site.yaml `google_adsense:` 블록 신설
+    (`ads_txt` + `head_script` 두 문자열 필드, `AdSenseConfig`
+    dataclass). 두 필드는 빈 문자열/키 부재 시 자동 비활성 (SeoMeta 의
+    3-state 원칙 일관 — 별도 enabled 마스터 토글 없음). `ads_txt` 는
+    새 빌드 단계 [11b] `_build_ads_txt` 가 `dist/ads.txt` 로 그대로
+    기록(robots.txt 와 같은 패턴); 빈 값이면 미생성 + 이전 빌드의
+    잔존 ads.txt 가 있으면 삭제 (stale 가드). `head_script` 는 5 개
+    템플릿(article·home·category·404·search.php)의 `<head>` 에 새
+    `{{ADSENSE_HEAD}}` placeholder 로 raw 그대로 주입 (escape 없음);
+    빈 값이면 placeholder 라인 자체 strip (ROBOTS_META · JSONLD ·
+    COMMON_CSS 와 동일 line-eating 패턴, 공용 헬퍼
+    `_apply_adsense_head_placeholder`). 적용 대상은 사용자가 방문하는
+    5 개 dist 페이지 종류 — `admin.php`/`src/admin/` 은 빌더가 dist
+    에 내보내지 않으므로 자연 제외.
+  - **(2) 기본 og:image 자산 교체** — `src/assets/default-og.png` 를
+    표준 OG 규격으로 갱신 (1200×480 → 1200×630, Pretendard SemiBold).
+    v1.0.0 의 default_og_image 패스스루 예외 그대로 — webp 변환 없이
+    원본 그대로 `dist/assets/` 로 복사돼 SNS 언퍼ler 가 고정 URL 로
+    가져간다.
+  - **결정성·산출물** — 코드 릴리스 형·dist 의도적 변경형. 정본
+    Articles 고정, 불변 `siheonlee.com_v1.1.2` 미수정·4번째-숫자 검증
+    복사본 `siheonlee.com_v1.1.2.1` 의 v1.1.2 *코드* 클린 재빌드 vs
+    v1.1.3 클린 재빌드의 *열거된* diff: `+dist/ads.txt`, 모든 HTML/PHP
+    head 에 자동광고 스크립트 한 줄 삽입, `dist/assets/default-og.png`
+    byte 교체. 그 외 자산·feed·sitemap·검색 인덱스 등 본문 무관
+    산출물 byte-불변. 클린 빌드 2회 결정성 동일. `__version__`
+    1.1.2→1.1.3 의 dist 누수 0 (B1 유지).
 
 v1.0.2 변경 사항 (vs v1.0.1) — 홈 기본 출력 개수 디폴트 5→10 (정책 릴리스):
   - **메인페이지 Recent posts 코드 디폴트 5 → 10** — 사용자 결정.

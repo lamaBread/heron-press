@@ -94,3 +94,23 @@ jsonld:
 php_globals:
   reference_hanbyeol: "Character illustration by 김한별 (kakao ID: zzang767401)"
   reference_hanbyeol_webDesign: "Illustration and Web Design by 김한별 (kakao ID: zzang767401)"
+
+# Google AdSense 통합 (v1.1.3).
+# 두 필드 모두 빈 문자열/키 부재 시 자동 비활성 — 블록을 통째로 비우거나
+# 지우면 v1.1.2 와 동일한 dist (광고 미통합) 가 된다. 별도 enabled 마스터
+# 토글은 두지 않는다 (SeoMeta 의 3-state None/''/'text' 원칙과 일관).
+google_adsense:
+  # /ads.txt 본문 / 여러 줄 문자열 (literal `|` 블록 권장 — trailing
+  # newline 자동 보존). 빈 문자열이면 dist/ads.txt 미생성 + 이전 빌드의
+  # 잔존 ads.txt 가 있으면 자동 삭제. 외부에 노출되는 사이트 루트 정적
+  # 파일이므로 https://siheonlee.com/ads.txt 로 직접 검증 가능.
+  ads_txt: |
+    google.com, pub-1074439863900363, DIRECT, f08c47fec0942fa0
+  # 모든 페이지 <head> 에 raw 그대로 삽입할 자동광고 스크립트 (escape
+  # 없음 — author 가 명시한 문자열을 신뢰). 빈 문자열이면 5 페이지 모두
+  # 미주입 (placeholder 라인 자체가 제거되어 빈 줄도 남지 않음). 적용
+  # 대상 = 글·홈·카테고리·404·search.php. admin.php·src/admin/ 은 dist
+  # 에 누수되지 않으므로 자연 제외.
+  head_script: |
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1074439863900363"
+         crossorigin="anonymous"></script>
