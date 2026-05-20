@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.1.5 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.2.0 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -43,6 +43,21 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v1.2.0 변경 사항 (vs v1.1.5) — 안정화 릴리스 (문서 전용, dist byte-불변):
+  - **빌드 로직·테스트·dist 산출물 무변경** — v1.1.5 의 URL 기반 광고 차단
+    기능을 그대로 승계. `__version__` 1.1.5→1.2.0 자체의 dist 누수 0
+    (B1 유지 — v0.8.2 의 generator 디커플링 그대로).
+  - **README 정리** — v1.1.5 까지 누적된 §16 v1.x.x 변경 인용구(>)를 표
+    행으로 압축, 한 줄 요약을 진짜 한 줄로(v1.1.2 의 장황한 박스 제거),
+    §3 폴더명(`siheonlee.com_v1.1.0/` → `_v1.2.0/`)·§15 "현재 한계
+    (v1.1.2)" → "(v1.2.0)"·바닥글의 stale 표기·v1.1.5 인용구 순서 어긋남
+    교정. `__init__.py`·`build.py` docstring 도 v1.2.0 헤더 + v1.2.0
+    changelog 단락 추가.
+  - **무결성** = 문서 전용 형 (정본 Articles 고정, 직전 코드 복사본
+    `siheonlee.com_v1.1.5` 의 v1.1.5 *코드* 클린 재빌드 vs v1.2.0 클린
+    재빌드의 dist 가 sha256 byte-완전 동일 — 모든 docstring/README 변경은
+    빌더 입력이 아니다). v0.8.4 ↔ v0.8.3 선례와 일치.
 
 v1.1.5 변경 사항 (vs v1.1.4) — AdSense URL 기반 광고 차단 (기능 릴리스, 기본값 byte-불변):
   - **`exclude_pages` → `exclude_urls` 교체** — v1.1.4 의 page-type 5종

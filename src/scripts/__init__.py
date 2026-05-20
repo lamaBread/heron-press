@@ -1,4 +1,4 @@
-"""siheonlee.com v1.1.5 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.2.0 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -230,6 +230,13 @@ __version__:
   v1.0.2 선례 일치), 진단 **6/6** 승계([6] ld+json 47/46 그대로).
   `__version__` 1.1.1→1.1.2 의 dist 누수 0 (B1 유지).
 
+  v1.2.0 은 v1.1.5 의 **안정화 릴리스** — 빌드 로직·테스트·dist 산출물
+  무변경. v1.1.5 까지 누적된 §16 의 v1.x.x 변경 인용구(>)를 표 행으로
+  압축하고, README 의 한 줄 요약·바닥글·§3 폴더명·§15 한계 헤더 등의
+  stale 표기를 정합. 무결성 = 문서 전용 형 (정본 Articles 고정, 직전
+  코드 복사본 `siheonlee.com_v1.1.5` 와 클린 재빌드 dist sha256 동일).
+  `__version__` 1.1.5→1.2.0 의 dist 누수 0 (B1 유지).
+
   v1.1.5 는 **AdSense URL 기반 광고 차단** 릴리스 — *기능* 릴리스이되
   v1.1.4 의 `exclude_pages` (page-type 5종) 를 `exclude_urls` (사이트 내
   임의 URL 목록) 로 교체. 매칭은 정확 일치 (site-relative URL · case-
@@ -338,4 +345,4 @@ __version__:
   v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.1.5'
+__version__ = '1.2.0'
