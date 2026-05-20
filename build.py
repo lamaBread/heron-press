@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.1.3 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.1.4 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -43,6 +43,35 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v1.1.4 변경 사항 (vs v1.1.3) — AdSense 페이지 타입 제외 리스트 (기능 릴리스, 기본값 byte-불변):
+  - **AdSense `exclude_pages` 필드 추가** — site.yaml `google_adsense:`
+    블록에 `exclude_pages` 신설 (문자열·정수 리스트). 매칭된 페이지 타입은
+    `{{ADSENSE_HEAD}}` placeholder 가 line-eating 으로 제거되어 그 페이지
+    head 에 auto-ads 로더 스크립트가 들어가지 않는다 = Google auto-ads JS
+    자체가 로드되지 않아 광고 원천 차단. 페이지 단위 on/off 메커니즘 —
+    인-페이지 광고 위치는 여전히 Google auto-ads 알고리즘이 결정한다.
+    식별자 5종: `article` / `home` / `category` / `404` / `search`.
+    모르는 식별자는 자연 무시 (forward compat). `AdSenseConfig
+    .exclude_pages: frozenset[str]` 신설 + 파서가 리스트(또는 단일 스칼라)
+    수용 + `str.strip().lower()` 정규화 + frozenset 변환 (yaml `404` 의
+    int 파싱도 str() 캐스팅으로 흡수). `_apply_adsense_head_placeholder
+    (tpl, page_type)` 헬퍼 시그니처에 `page_type` 추가, 5 호출 위치가
+    각자 식별자(`'article'` / `'category'` / `'home'` / `'404'` /
+    `'search'`)를 넘긴다. v1.1.3 의 `head_script` 빈 문자열 = 전체 차단
+    의미는 유지 — 빈 문자열이면 exclude_pages 와 무관하게 5 페이지 모두
+    미주입.
+  - **결정성·산출물** — 코드 릴리스 형이되 *기본값 byte-불변* 형. 정본
+    Articles 고정, 불변 `siheonlee.com_v1.1.3` 미수정·4번째-숫자 검증
+    복사본 `siheonlee.com_v1.1.3.1` 의 v1.1.3 *코드* 클린 재빌드 vs
+    v1.1.4 클린 재빌드 with `exclude_pages: []`(=기본값)의 dist 가
+    **787=787, 0 added/0 removed/0 changed = byte-완전 동일** (모든
+    부재 상태 — 키 부재·빈 리스트·None — 가 동일 frozenset() 으로
+    정규화돼 v1.1.3 와 같은 분기 경로). 운영자가 실제 페이지 타입을
+    추가하면(예 `[404, search]`) 그 페이지들의 HTML 에서
+    `<script async src=...adsbygoogle...>` 한 줄이 사라지는 것만이
+    변화 — 그 외 자산·feed·sitemap·검색 인덱스 byte-불변. 클린 빌드
+    2회 결정성 동일. `__version__` 1.1.3→1.1.4 의 dist 누수 0 (B1 유지).
 
 v1.1.3 변경 사항 (vs v1.1.2) — Google AdSense 통합 + 기본 og:image 자산 교체 (기능 릴리스):
   - **(1) AdSense 통합** — site.yaml `google_adsense:` 블록 신설

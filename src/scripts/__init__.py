@@ -1,4 +1,4 @@
-"""siheonlee.com v1.1.3 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.1.4 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -230,6 +230,44 @@ __version__:
   v1.0.2 선례 일치), 진단 **6/6** 승계([6] ld+json 47/46 그대로).
   `__version__` 1.1.1→1.1.2 의 dist 누수 0 (B1 유지).
 
+  v1.1.4 는 **AdSense 페이지 타입 제외 리스트** 릴리스 — *기능* 릴리스
+  지만 운영자가 새 필드를 사용하지 않으면 dist byte-불변 (B1 유지라
+  `__version__` 1.1.3→1.1.4 자체의 dist 누수도 0). 한 가지 변경:
+    site.yaml `google_adsense:` 에 `exclude_pages` 필드 신설 (문자열·
+    정수 리스트). 식별자 5종: `article` / `home` / `category` / `404` /
+    `search`. 매칭된 페이지 타입은 `{{ADSENSE_HEAD}}` placeholder 가
+    line-eating 으로 제거되어 그 페이지 head 에 auto-ads 로더가 들어가지
+    않는다 = Google auto-ads JS 자체가 로드되지 않아 광고 원천 차단.
+    페이지 단위 on/off 메커니즘 — 인-페이지 광고 *위치* 는 여전히 Google
+    auto-ads 알고리즘이 결정하므로 이 필드가 줄 수 있는 통제 끝단은 "이
+    페이지 타입에 로더를 둘지 말지". 모르는 식별자는 자연 무시 (forward
+    compat). v1.1.3 의 `head_script` 빈 문자열 = 전체 차단 의미는 유지 —
+    빈 문자열이면 exclude_pages 와 무관하게 5 페이지 모두 미주입.
+    `_apply_adsense_head_placeholder(tpl, page_type)` 헬퍼가 인자에
+    `page_type` 추가, 5 호출 위치(`_render_articles`='article',
+    `_build_category_page`='category', `_build_home`='home', `_build_404`
+    ='404', `_build_search`='search')가 각각 자기 식별자를 넘긴다.
+    `AdSenseConfig.exclude_pages: frozenset[str]` (immutable), 파서
+    `_parse_adsense_config` 가 리스트(또는 단일 스칼라)를 받아
+    `str.strip().lower()` 정규화 + frozenset 변환 — yaml 의 `404` 가
+    int 로 파싱되는 것도 str() 캐스팅으로 흡수.
+  무결성 = 코드 릴리스 형이되 *기본값 byte-불변* 형 (정본 Articles 고정,
+  불변 `siheonlee.com_v1.1.3` 미수정·4번째-숫자 검증 복사본 `siheonlee
+  .com_v1.1.3.1` 의 v1.1.3 *코드* 클린 재빌드 vs v1.1.4 클린 재빌드
+  with `exclude_pages: []`(=기본값)의 dist 가 **787=787, 0 added/0
+  removed/0 changed = byte-완전 동일**). exclude_pages 의 모든 부재
+  상태(키 부재·빈 리스트·None) 는 동일 frozenset() 으로 정규화돼
+  `head_script and not excluded` 분기에서 v1.1.3 와 동일 경로를 탄다.
+  운영자가 실제로 페이지 타입을 추가하면(예 `[404, search]`) 그
+  페이지들의 HTML 에서 `<script async src=...adsbygoogle...>` 한 줄이
+  사라지는 것만이 변화 — 그 외 자산·feed·sitemap·검색 인덱스 등 본문
+  무관 산출물 byte-불변. 클린 빌드 2회 결정성 동일, `__version__`
+  1.1.3→1.1.4 의 dist 누수 0 (B1 유지), 단위는 v1.1.3 승계(+ exclude_pages
+  파싱·헬퍼 분기 테스트 신규, 실측치는 §16/diagnostics 참조), 진단 6/6
+  승계. site.yaml 의 `exclude_pages: []` 추가는 운영자 입력 (코드
+  무결성 항목 아님 — config-driven dist 변화 평가는 코드-vs-코드 diff
+  에서 공통 인자라 상쇄).
+
   v1.1.3 은 **Google AdSense 통합 + 기본 og:image 자산 교체** 릴리스 —
   *기능* 릴리스로 dist 가 바뀐다 (B1 유지라 `__version__` 1.1.2→1.1.3
   자체의 dist 누수는 0). 두 변경:
@@ -264,4 +302,4 @@ __version__:
   v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.1.3'
+__version__ = '1.1.4'

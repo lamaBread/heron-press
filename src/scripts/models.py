@@ -2,6 +2,17 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
+v1.1.4 변경 — AdSense 페이지 타입 제외 리스트:
+  - AdSenseConfig 에 `exclude_pages: frozenset[str]` 필드 추가. site.yaml
+    의 `google_adsense.exclude_pages` 리스트(예: [404, search])를 파싱한
+    결과. 매칭되는 페이지 타입은 `{{ADSENSE_HEAD}}` 라인이 line-eating
+    제거되어 그 페이지에 한해 auto-ads 로더 스크립트가 head 에 들어가지
+    않는다 = 해당 페이지에서 광고 원천 차단 (Google auto-ads JS 자체가
+    로드되지 않음). 페이지 타입 식별자 5종: 'article' / 'home' /
+    'category' / '404' / 'search'. 비활성/빈 리스트면 v1.1.3 과 동일
+    (5 페이지 전체 주입). page_type 의 정규화/검증은 builder 측 책임,
+    여기엔 컨테이너만.
+
 v1.1.3 변경 — Google AdSense 통합:
   - AdSenseConfig dataclass 신설. site.yaml 의 `google_adsense:` 블록
     (`ads_txt` + `head_script` 두 문자열 필드). SiteConfig 에
@@ -156,16 +167,18 @@ class JsonLdConfig:
 
 @dataclass
 class AdSenseConfig:
-    """site.yaml 의 `google_adsense:` 블록 (v1.1.3).
+    """site.yaml 의 `google_adsense:` 블록 (v1.1.3 · v1.1.4 확장).
 
-    Google AdSense 두 가지 통합 자산을 보유:
-      - ads_txt    : /ads.txt 본문 (사이트 루트에 정적 파일로 노출).
-      - head_script: 모든 페이지 `<head>` 에 그대로 삽입할 자동광고 스크립트.
+    Google AdSense 통합 자산:
+      - ads_txt      : /ads.txt 본문 (사이트 루트에 정적 파일로 노출).
+      - head_script  : 모든 페이지 `<head>` 에 그대로 삽입할 자동광고 스크립트.
+      - exclude_pages: head_script 주입에서 제외할 페이지 타입 집합 (v1.1.4).
 
-    두 필드 모두 빈 문자열/키 부재 시 자동 비활성 (SeoMeta 의 3-state
-    None/''/'text' 원칙과 일관) — 별도 `enabled` 마스터 토글은 두지 않는다.
-    각 필드는 독립적으로 비활성화 가능 (ads.txt 만 두고 스크립트는 비우는
-    조합 등). 둘 다 비우면 v1.1.2 와 동일한 dist (광고 미통합 상태).
+    ads_txt / head_script 는 빈 문자열/키 부재 시 자동 비활성 (SeoMeta 의
+    3-state None/''/'text' 원칙과 일관) — 별도 `enabled` 마스터 토글은
+    두지 않는다. 각 필드는 독립적으로 비활성화 가능 (ads.txt 만 두고
+    스크립트는 비우는 조합 등). 셋 모두 기본값이면 v1.1.2 와 동일한 dist
+    (광고 미통합 상태).
 
     ads_txt: 빈 문자열이면 `dist/ads.txt` 를 만들지 않고, 이전 빌드의
              `dist/ads.txt` 가 남아 있으면 삭제 (설정을 비웠는데 옛 파일이
@@ -175,9 +188,19 @@ class AdSenseConfig:
                  제거 (ROBOTS_META · JSONLD 와 동일한 line-eating 패턴).
                  비어있지 않으면 raw 그대로 head 에 주입 (escape 없음 —
                  author 가 명시한 스크립트 문자열을 신뢰).
+    exclude_pages (v1.1.4): head_script 가 활성이어도 이 집합에 속한 페이지
+                 타입은 placeholder 라인이 제거되어 그 페이지 head 에 로더
+                 스크립트가 들어가지 않는다. 즉 Google auto-ads JS 자체가
+                 로드되지 않아 광고가 원천 차단된다. 페이지 타입 식별자:
+                 'article' / 'home' / 'category' / '404' / 'search'.
+                 모르는 식별자는 빌더가 무시 (no-op). 빈 frozenset 이 기본
+                 값 = v1.1.3 동작 (전체 주입). 인-페이지 광고 배치는 여전히
+                 Google 의 auto-ads 알고리즘 영역이고, 이 필드는 "이
+                 페이지에 로더를 두느냐" 의 페이지 단위 on/off 만 제어한다.
     """
     ads_txt: str = ''
     head_script: str = ''
+    exclude_pages: frozenset = field(default_factory=frozenset)
 
 
 @dataclass
