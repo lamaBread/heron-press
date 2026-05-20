@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.1.4 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.1.5 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -43,6 +43,45 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v1.1.5 변경 사항 (vs v1.1.4) — AdSense URL 기반 광고 차단 (기능 릴리스, 기본값 byte-불변):
+  - **`exclude_pages` → `exclude_urls` 교체** — v1.1.4 의 page-type 5종
+    식별자(`article`/`home`/`category`/`404`/`search`) 방식은 폐기. 새 필드
+    `exclude_urls` 는 사이트 내 임의 URL 의 절대 경로 리스트(예
+    `['/', '/about/', '/404.html']`) 로 정확 일치 매칭(case-sensitive ·
+    trailing-slash 포함). 페이지별 canonical URL: 홈=`/`, 글=`/<slug>/`,
+    카테고리=`/<slug_path>/`, 404=`/404.html`, 검색=`/search.php`. 이로써
+    v1.1.4 의 "어느 페이지 *타입*" 단위 통제가 "어느 *URL*" 단위로 일원화
+    되어, 개별 글 차단 (예: `/about/`·`/clear/`) 이 자연스럽게 가능. 빈
+    리스트/키 부재면 v1.1.3 과 동일 동작 (5 페이지 전체 주입). 빈
+    `head_script` = 전체 차단 의미는 유지 — 빈 문자열이면 `exclude_urls`
+    와 무관하게 5 페이지 모두 미주입.
+  - **호환성** — v1.1.4 의 `exclude_pages` 키는 v1.1.5 파서가 무시
+    (`raw.get('exclude_urls')` 만 본다) → 옛 site.yaml 이 자동으로
+    "전체 주입" 으로 안전 폴백. compat shim 없이 깨끗한 교체.
+  - **검증 워닝** — 매 페이지 렌더 시 `_apply_adsense_head_placeholder`
+    가 자기 URL 을 `self._adsense_seen_urls` 에 적재; 빌드 종료 직후
+    새 `_check_exclude_urls()` 가 `exclude_urls - seen` 차집합을
+    BuildReport warning 으로 보고(오타·삭제된 글 감지). 산출물 영향 0
+    — quiet check, `_step` 번호 추가 없음.
+  - **코드 변경** — `AdSenseConfig.exclude_pages: frozenset[str]` →
+    `exclude_urls: frozenset[str]`. 파서 `_parse_adsense_config` 가
+    `raw.get('exclude_urls')` 를 받아 leading `/` 보정 (`about/` →
+    `/about/`) + `str().strip()` 정규화 + frozenset 변환(대소문자 보존).
+    헬퍼 `_apply_adsense_head_placeholder(tpl, page_url)` 시그니처에서
+    `page_type` → `page_url` 로 교체. 5 호출 위치 모두 자기 페이지 URL
+    전달. 빌더 클래스 변수 `_ADSENSE_PAGE_TYPES` 폐지(URL 매칭으로 enum
+    의미 사라짐). 빌더 인스턴스 속성 `self._adsense_seen_urls: set[str]`
+    신설(build() 진입 시 reset).
+  - **결정성·산출물** — 코드 릴리스 형이되 *기본값 byte-불변* 형. 정본
+    Articles 고정, 불변 `siheonlee.com_v1.1.4` 미수정·4번째-숫자 검증
+    복사본 `siheonlee.com_v1.1.4.2` 의 v1.1.4 *코드* 클린 재빌드 with
+    `exclude_pages: []` vs v1.1.5 클린 재빌드 with `exclude_urls: []` 의
+    dist 가 **byte-완전 동일** 목표(두 빈 리스트는 동일 `frozenset()` 으로
+    정규화돼 5 호출 위치에서 v1.1.3·v1.1.4 와 동일 분기 경로). 운영자가
+    실제 URL 을 추가하면 매칭된 페이지들의 HTML 에서 자동광고 스크립트
+    한 줄이 사라지는 것만이 변화 — 그 외 산출물 byte-불변. 클린 빌드 2회
+    결정성 동일. `__version__` 1.1.4→1.1.5 의 dist 누수 0 (B1 유지).
 
 v1.1.4 변경 사항 (vs v1.1.3) — AdSense 페이지 타입 제외 리스트 (기능 릴리스, 기본값 byte-불변):
   - **AdSense `exclude_pages` 필드 추가** — site.yaml `google_adsense:`

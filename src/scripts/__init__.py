@@ -1,4 +1,4 @@
-"""siheonlee.com v1.1.4 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.1.5 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -230,6 +230,42 @@ __version__:
   v1.0.2 선례 일치), 진단 **6/6** 승계([6] ld+json 47/46 그대로).
   `__version__` 1.1.1→1.1.2 의 dist 누수 0 (B1 유지).
 
+  v1.1.5 는 **AdSense URL 기반 광고 차단** 릴리스 — *기능* 릴리스이되
+  v1.1.4 의 `exclude_pages` (page-type 5종) 를 `exclude_urls` (사이트 내
+  임의 URL 목록) 로 교체. 매칭은 정확 일치 (site-relative URL · case-
+  sensitive · trailing-slash 포함). 페이지별 canonical URL: 홈=`/`,
+  글=`/<slug>/`, 카테고리=`/<slug_path>/`, 404=`/404.html`, 검색=
+  `/search.php`. 이로써 v1.1.4 의 "어느 페이지 *타입*" 단위 통제가 "어느
+  *URL*" 단위로 일원화되어, 개별 글 차단 (예: `/about/`, `/clear/`) 이
+  자연스럽게 가능해졌고 5 종 식별자 enum 도 사라졌다. 운영자가 빈
+  리스트로 두면 v1.1.3 와 동일 (전체 주입). 빈 `head_script` = 전체 차단
+  의미는 그대로. 코드 변경: `AdSenseConfig.exclude_pages: frozenset[str]`
+  → `exclude_urls: frozenset[str]`, 파서가 leading `/` 보정 (`about/` →
+  `/about/`) + `str.strip()` 정규화 + frozenset 변환 (대소문자 보존 —
+  URL 표준). 헬퍼 `_apply_adsense_head_placeholder(tpl, page_url)` 시그
+  니처에서 `page_type` → `page_url` 로 교체. 5 호출 위치 모두 자기
+  페이지 URL 을 전달 (`_render_articles`=`f'/{m.slug}/'`,
+  `_build_category_page`=`url_prefix`, `_build_home`=`'/'`, `_build_404`
+  =`'/404.html'`, `_build_search`=`'/search.php'`). 추가로 빌더 인스턴스
+  속성 `self._adsense_seen_urls: set[str]` 신설 — 매 헬퍼 호출 시 URL
+  적재, 빌드 종료 직후 `_check_exclude_urls()` 가 `exclude_urls - seen`
+  차집합을 BuildReport warning 으로 보고 (오타·삭제된 글 감지). 무결성
+  = **코드 릴리스 형이되 *기본값 byte-불변* 형** (정본 Articles 고정,
+  불변 `siheonlee.com_v1.1.4` 미수정·4번째-숫자 검증 복사본 `siheonlee
+  .com_v1.1.4.2` 의 v1.1.4 *코드* 클린 재빌드 with `exclude_pages: []` vs
+  v1.1.5 클린 재빌드 with `exclude_urls: []` 의 dist 가 **byte-완전 동일**
+  목표). 두 빈 리스트는 동일 `frozenset()` 으로 정규화돼 모든 5 호출
+  위치에서 `head_script and not excluded` 분기가 v1.1.3·v1.1.4 와 동일
+  경로를 탄다 (변경된 인자는 page_type → page_url 이지만 매칭이 항상
+  False 라 결과 동일). 운영자가 실제 URL 을 추가하면 매칭된 페이지의
+  HTML 에서 자동광고 스크립트 한 줄이 사라지는 것만이 변화. site.yaml
+  의 `exclude_urls: []` 는 운영자 입력이라 코드 무결성 항목 아님.
+  `__version__` 1.1.4→1.1.5 dist 누수 0 (B1 유지). 호환성: v1.1.4 의
+  `exclude_pages` 키는 v1.1.5 파서가 무시 → 옛 site.yaml 이 자동으로
+  "전체 주입" 으로 폴백 (compat shim 없이 안전). 단위 v1.1.4 의
+  `test_adsense.py` 갱신 (page_type → page_url 분기 + 신규: leading-`/`
+  보정, case-sensitive, trailing-slash 엄격, 개별 글 차단, seen-URL 적재).
+
   v1.1.4 는 **AdSense 페이지 타입 제외 리스트** 릴리스 — *기능* 릴리스
   지만 운영자가 새 필드를 사용하지 않으면 dist byte-불변 (B1 유지라
   `__version__` 1.1.3→1.1.4 자체의 dist 누수도 0). 한 가지 변경:
@@ -302,4 +338,4 @@ __version__:
   v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.1.4'
+__version__ = '1.1.5'

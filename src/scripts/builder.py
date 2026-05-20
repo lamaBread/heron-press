@@ -938,12 +938,6 @@ class Builder:
         enabled = True if enabled_raw is None else bool(enabled_raw)
         return JsonLdConfig(enabled=enabled)
 
-    # v1.1.4: 페이지 타입 식별자 5종 (exclude_pages 의 유효 멤버 집합).
-    # _apply_adsense_head_placeholder 의 page_type 인자도 이 집합 안에서만
-    # 의미를 가진다 — 모르는 값이 와도 빌드는 통과하되 매칭이 안 돼
-    # no-op 가 된다 (위해 없음, forward-compat).
-    _ADSENSE_PAGE_TYPES = frozenset({'article', 'home', 'category', '404', 'search'})
-
     def _parse_adsense_config(self, raw) -> AdSenseConfig:
         """site.yaml 의 `google_adsense:` 블록을 AdSenseConfig 로 파싱 (v1.1.3).
 
@@ -956,10 +950,12 @@ class Builder:
         말미 줄바꿈은 yaml 파서가 보존 → ads.txt 가 trailing newline 으로
         끝나는 표준 텍스트 파일 형식을 자연스럽게 따른다.
 
-        v1.1.4: exclude_pages 추가. 리스트 (또는 단일 스칼라) 를 받아
-        str.strip().lower() 정규화 + frozenset 로 변환. yaml 의 `404` 는
-        정수로 파싱되므로 str() 캐스팅으로 흡수. 알 수 없는 식별자는
-        그대로 보존되지만 헬퍼에서 매칭이 안 돼 자연 무시.
+        v1.1.5: v1.1.4 의 `exclude_pages` 를 `exclude_urls` 로 교체.
+        리스트(또는 단일 스칼라)를 받아 str().strip() 후 leading `/` 보정
+        → frozenset. 매칭은 case-sensitive (URL 표준) 이고 trailing-slash
+        도 그대로 유지 — 운영자가 페이지의 canonical URL 과 정확히 일치
+        시키도록 한다. 매칭 안 되는 entry 는 빌드 종료 시점에 BuildReport
+        warning 으로 보고 (`_check_exclude_urls`).
         """
         if not isinstance(raw, dict):
             raw = {}
@@ -971,22 +967,29 @@ class Builder:
         # 자동으로 붙이는 마지막 \n 이 placeholder 치환 시 head 에 빈 줄
         # 하나를 더하는 결과를 방지. yaml flow 인용 ("…") 형태로 적든
         # literal block 으로 적든 head 출력이 일관된다.
-        excl_raw = raw.get('exclude_pages')
+        excl_raw = raw.get('exclude_urls')
         if excl_raw is None:
             excl_items = []
         elif isinstance(excl_raw, list):
             excl_items = excl_raw
         else:
-            # 스칼라 한 개를 적은 경우 (예: `exclude_pages: 404`) 도 흡수.
+            # 스칼라 한 개를 적은 경우 (예: `exclude_urls: /about/`) 도 흡수.
             excl_items = [excl_raw]
+        # leading `/` 보정 — `about/` 처럼 적어도 `/about/` 로 정규화.
+        # 그 외 trailing slash·대소문자는 손대지 않는다 (URL 의미 보존).
+        def _norm(x):
+            s = str(x).strip()
+            if not s:
+                return ''
+            return s if s.startswith('/') else '/' + s
         excl = frozenset(
-            str(x).strip().lower()
-            for x in excl_items if x is not None and str(x).strip() != ''
+            u for u in (_norm(x) for x in excl_items
+                       if x is not None) if u != ''
         )
         return AdSenseConfig(
             ads_txt=_s('ads_txt'),
             head_script=_s('head_script').rstrip('\n'),
-            exclude_pages=excl,
+            exclude_urls=excl,
         )
 
     # ── [2] Content scan ──────────────────────────────────────
@@ -1208,7 +1211,7 @@ class Builder:
             )
         return tpl
 
-    def _apply_adsense_head_placeholder(self, tpl: str, page_type: str) -> str:
+    def _apply_adsense_head_placeholder(self, tpl: str, page_url: str) -> str:
         """v1.1.3: 다섯 페이지 공용 — `{{ADSENSE_HEAD}}` line-eating.
 
         site.yaml 의 `google_adsense.head_script` 가 비어 있으면 placeholder
@@ -1222,22 +1225,49 @@ class Builder:
         비활성일 때는 위에서 라인 자체가 strip 되어 substitution 이
         no-op, 활성일 때는 vars_ 값이 치환된다.
 
-        v1.1.4: `page_type` 인자 추가. site.yaml 의
-        `google_adsense.exclude_pages` 에 매칭되는 페이지 타입은 head_script
-        가 비어 있을 때와 동일하게 placeholder 라인이 제거된다 = 그 페이지
-        에 한해 auto-ads 로더가 head 에 들어가지 않음 → 광고 원천 차단.
-        page_type 식별자 5종: 'article' / 'home' / 'category' / '404' /
-        'search' (`_ADSENSE_PAGE_TYPES`). 매칭은 lower-case 단순 set
-        membership (파서 측에서 미리 정규화되어 있음).
+        v1.1.5: v1.1.4 의 `page_type` 인자를 `page_url` 로 교체.
+        호출자가 자기 페이지의 canonical URL (site-relative, '/' 로 시작)
+        을 넘기고, site.yaml 의 `google_adsense.exclude_urls` 에 정확히
+        일치하면 (case-sensitive · trailing-slash 포함) head_script 가
+        비어 있을 때와 동일하게 placeholder 라인이 제거된다 = 그 페이지에
+        한해 auto-ads 로더가 head 에 들어가지 않음 → 광고 원천 차단.
+        매 호출마다 `self._adsense_seen_urls` 에 URL 을 적재 — 빌드 종료
+        시점 `_check_exclude_urls` 가 exclude_urls - seen 의 차집합을
+        warning 으로 보고 (오타·삭제된 글 감지).
         """
         adsense = self.site.google_adsense
-        excluded = page_type.lower() in adsense.exclude_pages
+        # 빌드 단위 URL 집합 — 빈 string 이 와도 set 의 자연 처리. 호출자
+        # 가 빈 string 을 넘기지는 않지만 방어적으로 (시그니처 신뢰).
+        if page_url:
+            self._adsense_seen_urls.add(page_url)
+        excluded = page_url in adsense.exclude_urls
         if adsense.head_script and not excluded:
             return tpl
         return re.sub(
             r'^[ \t]*\{\{ADSENSE_HEAD\}\}[ \t]*\r?\n',
             '', tpl, flags=re.MULTILINE,
         )
+
+    def _check_exclude_urls(self):
+        """v1.1.5: `exclude_urls` 의 매칭 안 되는 entry 를 warning 으로 보고.
+
+        매 페이지 렌더 시 `_apply_adsense_head_placeholder` 가
+        `self._adsense_seen_urls` 에 자기 URL 을 적재해 두므로, 이 메서드
+        는 빌드 종료 시점 (`_build_search` 직후) 에 호출되어
+        exclude_urls - seen 의 차집합을 BuildReport warning 으로 보고한다.
+        오타 (예: `/abuot/`) 또는 삭제된 글 (예: 예전엔 있었으나 지금은
+        없는 slug) 을 감지한다. 산출물 자체는 정상이라 issue 가 아니라
+        warning ("살펴볼 사항") 스코프.
+        """
+        excl = self.site.google_adsense.exclude_urls
+        orphans = sorted(excl - self._adsense_seen_urls)
+        for url in orphans:
+            self._warning(
+                'site', '',
+                f'google_adsense.exclude_urls 의 "{url}" 가 빌드 결과 '
+                f'어느 페이지 URL 과도 매칭되지 않습니다 — 오타 또는 '
+                f'삭제된 글일 가능성 (광고 차단 없음).',
+            )
 
     # ── [3] Frontmatter parse ────────────────────────────────
 
@@ -2313,9 +2343,11 @@ class Builder:
             )
 
             # v1.1.3: ADSENSE_HEAD line-eating (비활성 시 placeholder 라인 제거).
-            # v1.1.4: page_type='article' — site.yaml exclude_pages 에 'article'
-            # 이 포함돼 있으면 head_script 활성이어도 이 페이지 placeholder 제거.
-            tpl_local = self._apply_adsense_head_placeholder(tpl_local, 'article')
+            # v1.1.5: page_url=/<slug>/ — site.yaml exclude_urls 에 이 URL 이
+            # 포함돼 있으면 head_script 활성이어도 이 글의 placeholder 제거.
+            tpl_local = self._apply_adsense_head_placeholder(
+                tpl_local, f'/{m.slug}/',
+            )
 
             # v0.4.3: <title> 에 글 제목 사용. full_title 은
             # build_meta_tags 가 만든 `{prefix}{title}{suffix}` 문자열.
@@ -2852,8 +2884,8 @@ class Builder:
             stylesheets_html=page_stylesheets,
         )
         # v1.1.3: ADSENSE_HEAD line-eating.
-        # v1.1.4: page_type='category' — exclude_pages 매칭 시 placeholder 제거.
-        tpl_local = self._apply_adsense_head_placeholder(tpl_local, 'category')
+        # v1.1.5: page_url=url_prefix (=/<slug_path>/) — exclude_urls 매칭 시 제거.
+        tpl_local = self._apply_adsense_head_placeholder(tpl_local, url_prefix)
 
         vars_ = {
             'LANG': escape_html(page_lang),
@@ -2973,8 +3005,8 @@ class Builder:
             stylesheets_html=page_stylesheets,
         )
         # v1.1.3: ADSENSE_HEAD line-eating.
-        # v1.1.4: page_type='home' — exclude_pages 매칭 시 placeholder 제거.
-        tpl_local = self._apply_adsense_head_placeholder(tpl_local, 'home')
+        # v1.1.5: page_url='/' — exclude_urls 매칭 시 placeholder 제거.
+        tpl_local = self._apply_adsense_head_placeholder(tpl_local, '/')
 
         vars_ = {
             'LANG': escape_html(page_lang),
@@ -3086,8 +3118,8 @@ class Builder:
     def _build_404(self):
         tpl = _load_template(self.templates_dir, '404.html')
         # v1.1.3: ADSENSE_HEAD line-eating.
-        # v1.1.4: page_type='404' — exclude_pages 매칭 시 placeholder 제거.
-        tpl = self._apply_adsense_head_placeholder(tpl, '404')
+        # v1.1.5: page_url='/404.html' — exclude_urls 매칭 시 placeholder 제거.
+        tpl = self._apply_adsense_head_placeholder(tpl, '/404.html')
         # v0.5.4: 404 <title> 폴백 체인.
         # 본문 = site.error_404_title. 양옆 = site.default_title_prefix/suffix
         # (404 는 meta.yaml 이 없으므로 override 불가능 — site.yaml 한 군데에서만).
@@ -3264,8 +3296,8 @@ class Builder:
         search_title = self._wrap_page_title(self.site.search_title)
         # v1.1.3: ADSENSE_HEAD line-eating (search.php 도 사용자가 방문하는
         # dist 페이지이므로 자동광고 스크립트 주입 대상).
-        # v1.1.4: page_type='search' — exclude_pages 매칭 시 placeholder 제거.
-        tpl = self._apply_adsense_head_placeholder(tpl, 'search')
+        # v1.1.5: page_url='/search.php' — exclude_urls 매칭 시 placeholder 제거.
+        tpl = self._apply_adsense_head_placeholder(tpl, '/search.php')
         vars_ = {
             'LANG': escape_html(self.site.lang),
             'ADSENSE_HEAD': self.site.google_adsense.head_script,
@@ -3428,6 +3460,11 @@ class Builder:
         self.article_render_meta = {}
         self._cache_hits = 0
         self._cache_misses = 0
+        # v1.1.5: AdSense exclude_urls 검증용 — 매 페이지 렌더 시
+        # _apply_adsense_head_placeholder 가 자기 URL 을 적재한다. 빌드
+        # 종료 시점 _check_exclude_urls 가 exclude_urls - seen 차집합을
+        # warning 으로 보고 (오타·삭제된 글 감지).
+        self._adsense_seen_urls = set()
 
         # v0.5.1: 이미지 최적화 도입으로 asset 단계가 article render 보다
         # 먼저 와야 한다. asset 단계가 raster 이미지를 webp 변종으로 만들고
@@ -3469,6 +3506,10 @@ class Builder:
         self._build_feeds()                    # [12b] (v0.5.3) RSS/Atom
         self._step(15, '검색 인덱스 (dist/search.php)')
         self._build_search()                   # [13]
+        # v1.1.5: exclude_urls 의 매칭 안 되는 entry 를 warning 으로 보고.
+        # 5 페이지 렌더가 모두 끝난 직후라 self._adsense_seen_urls 가 완성된
+        # 상태. _step 번호를 추가하지 않는 quiet check — 산출물에 영향 없음.
+        self._check_exclude_urls()
         self._step(16, '고아 산출물 정리')
         self._prune_orphans()                  # [14]
 
