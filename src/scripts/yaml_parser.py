@@ -6,13 +6,14 @@
   - key:        → null
   - key: "str" / 'str'
   - key: [a, b]  (inline list)
+  - key: [\n  a,\n  b\n]  (multi-line inline list; v1.2.2 추가)
   - key:\n  - item  (block list)
   - key:\n  subkey: val  (block map; nested mapping)
   - key: |  (literal block scalar)
   - # comments
 
-v0.4.0 변경 없음 (v0.3 의 nested mapping 지원 유지).
-PyYAML 도입 검토는 v0.4.1 이후로 미룸.
+v1.2.2: `[` 로 시작하고 같은 줄에 `]` 가 없으면 후속 줄을 누적해 `]` 까지
+        모은 뒤 inline list 로 파싱. 줄 단위 trailing comma 와 주석 줄 허용.
 """
 import re
 
@@ -64,6 +65,31 @@ def yaml_load(text: str) -> dict:
         if cur.strip():
             items.append(parse_scalar(cur.strip()))
         return items
+
+    def parse_inline_list_multiline(first_val: str) -> list:
+        # first_val 은 '[' 로 시작하지만 같은 줄에 ']' 가 없는 경우.
+        # 후속 줄을 ']' 가 나올 때까지 모아 inline list 로 파싱한다.
+        # 종료 시 i[0] 은 ']' 가 포함된 줄을 가리킨다 (호출자가 +1).
+        parts = []
+        remainder = first_val[1:].strip().rstrip(',').strip()
+        if remainder:
+            parts.append(remainder)
+        while True:
+            i[0] += 1
+            if i[0] >= n:
+                break
+            stripped = lines[i[0]].strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if stripped == ']':
+                break
+            if stripped.endswith(']'):
+                body = stripped[:-1].strip().rstrip(',').strip()
+                if body:
+                    parts.append(body)
+                break
+            parts.append(stripped.rstrip(',').strip())
+        return parse_inline_list(','.join(parts))
 
     def parse_literal_block(base_indent: int) -> str:
         result = []
@@ -130,8 +156,11 @@ def yaml_load(text: str) -> dict:
             if v == '|':
                 i[0] += 1
                 out[k] = parse_literal_block(map_indent)
-            elif v.startswith('[') and v.endswith(']'):
-                out[k] = parse_inline_list(v[1:-1])
+            elif v.startswith('['):
+                if v.endswith(']'):
+                    out[k] = parse_inline_list(v[1:-1])
+                else:
+                    out[k] = parse_inline_list_multiline(v)
                 i[0] += 1
             elif v == '':
                 i[0] += 1
@@ -187,8 +216,11 @@ def yaml_load(text: str) -> dict:
         if val_str == '|':
             i[0] += 1
             result[key] = parse_literal_block(base_indent)
-        elif val_str.startswith('[') and val_str.endswith(']'):
-            result[key] = parse_inline_list(val_str[1:-1])
+        elif val_str.startswith('['):
+            if val_str.endswith(']'):
+                result[key] = parse_inline_list(val_str[1:-1])
+            else:
+                result[key] = parse_inline_list_multiline(val_str)
             i[0] += 1
         elif val_str == '':
             i[0] += 1

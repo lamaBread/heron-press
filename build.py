@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.2.1 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.2.2 — PHP 기반 경량 웹 사이트 생성기.
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래
@@ -43,6 +43,26 @@ v0.8.1 과 1:1 동일.
     Python 3.10+ stdlib
     Pillow (PIL fork) — 이미지 자동 최적화 (`pip install Pillow`).
         site.yaml 의 images.enabled=false 로 두면 Pillow 없어도 동작.
+
+v1.2.2 변경 사항 (vs v1.2.1) — yaml_parser 멀티라인 inline list 지원 (코드, dist 의도 변경):
+  - **`yaml_parser` 멀티라인 inline list 지원** — v0.4.0 의 분기가
+    `val.startswith('[') and val.endswith(']')` 라 같은 줄에 `]` 가 없는
+    `exclude_urls: [\n  '/',\n  ...\n]` 같은 multi-line 형이 silently 스칼
+    라 `'['` 로 파싱돼 frozenset(['/[']) 로 정규화 → URL 매칭 0건 (의도된
+    AdSense 차단 미작동). 헬퍼 `parse_inline_list_multiline(first_val)` 신설
+    — `[` 로 시작하고 `]` 가 후속 줄에 있으면 `]` 줄까지 누적해 inline list
+    로 파싱. 줄 단위 trailing comma · 단독 주석 줄 허용. 두 호출 사이트
+    (top-level loop · `parse_block_map`) 를 `startswith('[')` 단일 검사로
+    통일 후 `endswith(']')` 여부로 single/multi-line 분기. single-line 케이스
+    동치 분기 그대로 — v0.4.0 의 모든 yaml 호환.
+  - **무결성** = 코드 릴리스 형이되 dist 가 *의도된* 1줄 변화. 정본
+    Articles 기본은 그대로 `siheonlee.com_v1.2.0.1/Articles`. site.yaml 도
+    v1.2.1 의 service-tuned 본 그대로(`exclude_urls` multi-line 형). 비교
+    baseline = `siheonlee.com_v1.2.0.1/dist`. 변화: 26 URL 의 자동광고
+    로더 한 줄이 마침내 사라진다(v1.2.1 까진 파싱 실패로 dormant). 그
+    외 자산·feed·sitemap·검색 인덱스 등 본문 무관 산출물 byte-불변.
+    `__version__` 1.2.1→1.2.2 dist 누수 0 (B1 유지). 단위 367→**374**
+    (`MultilineInlineListTests` 7 신설). 진단 6/6 승계.
 
 v1.2.1 변경 사항 (vs v1.2.0) — 운영 잡음 정리 릴리스 (코드, dist byte-불변):
   - **noindex 글의 `seo.description` 필수 검사 면제** — `noindex: true` 인

@@ -64,6 +64,56 @@ class InlineListTests(unittest.TestCase):
                          {'xs': [1, 'two', True]})
 
 
+class MultilineInlineListTests(unittest.TestCase):
+    # v1.2.2: `[` 가 시작 줄에만 있고 `]` 가 후속 줄에 오는 형태 지원.
+
+    def test_multiline_inline_list_each_item_own_line(self):
+        src = "xs: [\n  'a',\n  'b',\n  'c'\n]"
+        self.assertEqual(yaml_load(src), {'xs': ['a', 'b', 'c']})
+
+    def test_multiline_inline_list_closing_on_last_item(self):
+        src = "xs: [\n  'a',\n  'b']"
+        self.assertEqual(yaml_load(src), {'xs': ['a', 'b']})
+
+    def test_multiline_inline_list_with_comments(self):
+        src = (
+            "xs: [\n"
+            "  # 첫 항목\n"
+            "  'a',\n"
+            "  'b'  # (트레일링 주석 미지원 — 단독 줄만)\n"
+            "]"
+        )
+        # 단독 주석 줄은 건너뛰고, 항목 줄은 그대로 파싱.
+        d = yaml_load(src)
+        self.assertEqual(d['xs'][0], 'a')
+
+    def test_multiline_inline_list_empty(self):
+        src = "xs: [\n]"
+        self.assertEqual(yaml_load(src), {'xs': []})
+
+    def test_multiline_inline_list_multiple_items_per_line(self):
+        src = "xs: [1, 2,\n  3, 4]"
+        self.assertEqual(yaml_load(src), {'xs': [1, 2, 3, 4]})
+
+    def test_multiline_inline_list_followed_by_next_key(self):
+        # 후속 키가 정확히 같은 indent 에서 이어져야 함.
+        src = "xs: [\n  'a',\n  'b'\n]\ny: 1"
+        d = yaml_load(src)
+        self.assertEqual(d, {'xs': ['a', 'b'], 'y': 1})
+
+    def test_multiline_inline_list_in_nested_map(self):
+        src = (
+            "outer:\n"
+            "  xs: [\n"
+            "    'a',\n"
+            "    'b'\n"
+            "  ]\n"
+            "  y: 2\n"
+        )
+        d = yaml_load(src)
+        self.assertEqual(d, {'outer': {'xs': ['a', 'b'], 'y': 2}})
+
+
 class BlockListTests(unittest.TestCase):
 
     def test_block_list(self):

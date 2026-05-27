@@ -1,4 +1,4 @@
-"""siheonlee.com v1.2.1 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.2.2 — 빌더 내부 모듈 묶음.
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -237,6 +237,37 @@ __version__:
   코드 복사본 `siheonlee.com_v1.1.5` 와 클린 재빌드 dist sha256 동일).
   `__version__` 1.1.5→1.2.0 의 dist 누수 0 (B1 유지).
 
+  v1.2.2 는 **`yaml_parser` 멀티라인 inline list 지원** 릴리스 — *코드*
+  릴리스이되 dist 산출물 byte-불변. v1.1.5 도입 `site.yaml` 의
+  `exclude_urls` 를 운영자가 여러 줄에 걸쳐 작성한 `[ \n 'a',\n 'b'\n ]`
+  형태로 적었을 때 v0.4.0 의 inline-list 분기가 `val.startswith('[')
+  and val.endswith(']')` 단일 조건이라 `]` 가 다음 줄에 있으면 분기에서
+  탈락 → val 이 scalar `'['` 로 파싱되고 정규화 단계의 `frozenset(['/['])`
+  로 떨어져 매칭이 0건 (의도된 URL 차단 미작동, build-report 의 "살펴볼
+  사항" 1줄로만 신호). 사용자 결정에 따라 site.yaml 을 block-list 로
+  바꾸는 대신 *파서* 쪽을 보강 — `parse_inline_list_multiline(first_val)`
+  헬퍼 신설: `[` 로 시작하고 같은 줄에 `]` 가 없으면 후속 줄을 누적해
+  `]` 줄에서 종료, 줄 단위 trailing comma·단독 주석 줄 허용 (트레일링
+  inline 주석은 비지원 — 단독 줄 주석만). 두 호출 사이트 (top-level
+  loop · `parse_block_map`) 모두 `startswith('[')` 단일 검사로 통일한
+  뒤 `endswith(']')` 여부로 single/multi-line 분기. v0.4.0 의 single-line
+  inline list 케이스는 동치 분기 그대로 (모든 기존 yaml 호환 — 신규
+  v0.4.0 inline-list 테스트 3건 + 신규 multi-line 7건 = 10건). 무결성 =
+  **코드 릴리스 형이되 dist byte-불변 형** (정본 `siheonlee.com_v1.2.0
+  .1/Articles` 고정 — 사용자가 서비스용으로 다듬은 정본, 2026-05-21
+  부터 모든 빌드의 Articles 기본; site.yaml 은 v1.2.1 의 service-tuned
+  본을 그대로 승계 — `exclude_urls` 의 multi-line 형태도 v1.2.1 baseline
+  과 동일하나 그 baseline 에서는 silently scalar `'['` 로 파싱돼 26 URL
+  차단이 무효, v1.2.2 에선 정상 파싱돼 26 URL 차단이 의도대로 발효).
+  비교 baseline = `siheonlee.com_v1.2.0.1/dist` 와 *같은 yaml* 의
+  v1.2.2 빌드. dist byte-동일성은 *깨진다* — 의도된 변화로:
+  `exclude_urls` 가 처음으로 발효해 26 페이지의 자동광고 로더 한 줄이
+  사라진다. 그 외 자산·feed·sitemap·검색 인덱스 등은 byte-불변.
+  `__version__` 1.2.1→1.2.2 의 dist 누수 0 (B1 유지). 단위 367→**374**
+  (`MultilineInlineListTests` 7 신설: 각줄 한 항목·마지막 줄 `]` 동행·
+  주석 줄 허용·빈 리스트·줄당 다중 항목·후행 키 연결·중첩 맵 안 사용).
+  진단 6/6 승계.
+
   v1.2.1 은 **운영 잡음 정리** 릴리스 — *코드* 릴리스이되 dist 산출물
   byte-불변 (issue/warning 보고는 BuildReport·터미널·build-report.md 의
   표시일 뿐 dist 에 새지 않으므로). 두 가지 변경: (1) **noindex 글의
@@ -381,4 +412,4 @@ __version__:
   v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.2.1'
+__version__ = '1.2.2'
