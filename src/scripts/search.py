@@ -43,10 +43,11 @@ v0.4.0 → v0.5.0 → v0.6.0 흐름:
   - v0.5.0: BM25 도입 (필드별 IDF / TF 포화 / 길이 정규화). 본문 + 제목.
   - v0.6.0: 본문 색인 폐기 → 메타데이터 3-필드 색인 + 정적 PHP 인라인 인덱스.
 """
+import hashlib
+import json
 import math
 import re
 import subprocess
-import json
 from pathlib import Path
 
 
@@ -288,8 +289,33 @@ def _php_tokenize_one(text: str, tokenizer_php: Path, php_bin: str = 'php') -> l
     return json.loads(proc.stdout.decode('utf-8'))
 
 
-def run_parity_test(templates_dir: Path, php_bin: str, warn_fn, die_fn) -> bool:
-    """fixture 입력에 대해 Py↔PHP 토크나이저 출력 동등성 검증."""
+def _parity_cache_key(scripts_dir: Path, templates_dir: Path,
+                      php_version: str) -> str:
+    """parity cache key — search.py + search_tokenize.php + PHP -v 합성 sha256.
+
+    v1.3.0 (E 항목): 토크나이저 코드(Py/PHP 양쪽) 와 PHP 바이너리 버전이 모두
+    같으면 parity 결과가 같다는 사실을 활용. 두 파일 + php_version 첫 줄을
+    바이트열로 합쳐 sha256 — 어느 하나 바뀌면 캐시 자동 무효화.
+    """
+    h = hashlib.sha256()
+    for p in (scripts_dir / 'search.py',
+              templates_dir / 'search_tokenize.php'):
+        if p.exists():
+            h.update(p.read_bytes())
+    h.update(php_version.encode('utf-8'))
+    return h.hexdigest()
+
+
+def run_parity_test(templates_dir: Path, php_bin: str, warn_fn, die_fn,
+                    *, cache_dir: Path = None,
+                    scripts_dir: Path = None) -> bool:
+    """fixture 입력에 대해 Py↔PHP 토크나이저 출력 동등성 검증.
+
+    v1.3.0 (E 항목): cache_dir + scripts_dir 가 주어지면 결과를
+    `<cache_dir>/parity.json` 에 캐시. 같은 코드 + 같은 PHP 버전이면 다음
+    빌드에서 18 fixture subprocess 호출 (~3s) 건너뛴다. 캐시 파일 누락/손상
+    또는 cache_dir 미전달 시 (--no-cache) 매 빌드 풀 검증.
+    """
     tokenizer_php = templates_dir / 'search_tokenize.php'
     if not tokenizer_php.exists():
         die_fn(f'search_tokenize.php not found at {tokenizer_php}')
@@ -306,6 +332,27 @@ def run_parity_test(templates_dir: Path, php_bin: str, warn_fn, die_fn) -> bool:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         warn_fn('PHP not available — skipping tokenizer parity test.')
         return False
+
+    php_version = ''
+    if probe.stdout:
+        first_line = probe.stdout.decode('utf-8', errors='replace').splitlines()
+        if first_line:
+            php_version = first_line[0]
+
+    # 캐시 hit 체크 — cache_dir 와 scripts_dir 가 같이 주어진 경우만.
+    key = None
+    if cache_dir is not None and scripts_dir is not None:
+        try:
+            key = _parity_cache_key(scripts_dir, templates_dir, php_version)
+            cache_file = cache_dir / 'parity.json'
+            if cache_file.exists():
+                data = json.loads(cache_file.read_text(encoding='utf-8'))
+                if data.get('key') == key and data.get('passed') is True:
+                    print(f'[search] tokenizer parity (cached: '
+                          f'{len(PARITY_FIXTURES)} fixtures)')
+                    return True
+        except (OSError, json.JSONDecodeError):
+            pass  # 캐시 깨졌으면 그냥 실행 후 새로 저장.
 
     mismatches = []
     for fixture in PARITY_FIXTURES:
@@ -324,6 +371,18 @@ def run_parity_test(templates_dir: Path, php_bin: str, warn_fn, die_fn) -> bool:
             lines.append(f"    Python: {py}")
             lines.append(f"    PHP   : {php}")
         die_fn('\n'.join(lines))
+
+    # 통과 → 캐시 저장.
+    if cache_dir is not None and key is not None:
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            (cache_dir / 'parity.json').write_text(
+                json.dumps({'key': key, 'passed': True, 'php': php_version},
+                           ensure_ascii=False, sort_keys=True),
+                encoding='utf-8',
+            )
+        except OSError:
+            pass  # 캐시 쓰기 실패는 빌드 실패가 아님.
 
     print(f'[search] tokenizer parity OK ({len(PARITY_FIXTURES)} fixtures)')
     return True

@@ -1,4 +1,43 @@
-"""siheonlee.com v1.2.2 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.3.0 — 빌더 내부 모듈 묶음.
+
+v1.3.0 변경 — **빌드 속도 향상** (코드 릴리스이되 dist byte-불변):
+  네 항목 (A·B·D·E) 의 묶음. C 는 ROI 미흡으로 보류 ([[feedback_deferred_extensions]] ③ 유지).
+  - **A. 단계별 timing 계측** — Builder._step 이 직전 단계 종료시간을
+    self._step_times 에 기록. build() 끝의 _step_close() 가 마지막 단계
+    마감. _write_build_report 가 build-report.md 에 16 단계 시간 표를
+    직렬화. 리포트는 dist 밖이라 결정성 무관. 이 데이터로 (1단계 토크나이저
+    parity 3.31s, 5단계 이미지 250s, 8단계 글 렌더 1.47s) 후속 최적화의
+    ROI 산정 근거를 명시.
+  - **B. 이미지 최적화 멀티프로세스** — _sync_assets 를 세 패스로 분리
+    (분류 → raster 변환 → 비-raster 복사 + prune). raster_jobs 를
+    ProcessPoolExecutor (workers=min(cpu_count, len(jobs))) 로 fan-out,
+    워커 함수 _image_worker 는 모듈-레벨 자유 함수라 Windows spawn 에서도
+    pickle 가능. 결과 처리 (image_variants 등록 / 에러 BuildReport 라우팅)
+    는 메인에서 _handle_image_result 헬퍼로. raster_jobs < 4 또는 worker ≤ 1
+    이면 시리얼 폴백 (Windows 워커 spawn + Pillow import 비용 절약). cold
+    250s → 32s (-87%).
+  - **D. 자산 패스 통합** — _prune_article_assets 가 src rglob 을 한 번
+    더 도는 중복 패스 제거. _sync_assets 분류 단계에서 article_expected
+    set 을 같이 채우고, _handle_image_result 가 실제 생성된 variants.widths
+    를 expected 에 추가해 overrun width 변종도 보존. prune 은 dst rglob
+    한 번만 돌고 expected 와 비교. stale stem-W.webp (원본 raster 삭제 후
+    잔존) 가 자연 정리되는 옛 동작도 유지.
+  - **E. 1단계 tokenizer parity 캐시** — search.run_parity_test 가
+    .build_cache/parity.json 에 결과 캐싱. 키 = sha256(search.py +
+    search_tokenize.php + php -v 첫 줄). hit 시 18 fixture PHP subprocess
+    호출 (~3s) 건너뜀. --no-cache 시 매 빌드 풀 검증. 1단계 3.31s →
+    0.17s (-95%). compute_global_hash 의 mtime+size 캐시 (E 두 번째)는
+    예상 절감 50ms 이하라 보류.
+  실측 (v1.2.2 baseline 대비, 47 글 · 227 이미지):
+    - cold build:  270.1s → 33.1s  (-88%)
+    - warm build:  5.2s   → 2.7s   (-48%)
+  무결성 = **코드 릴리스 형이되 dist byte-불변** 형 — v1.2.2 shipped dist
+  와 v1.3.0 클린 재빌드 dist 가 787=787 file, 0 changed byte-완전 동일
+  (정본 Articles + 같은 site.yaml). 결정성 2회 동일 (진단 [2] PASS),
+  단위 374 → 3xx (NEW: ImageWorkerTests + ParityCacheTests + StepTimingTests),
+  진단 6/6 승계 ([6] ld+json 47/46 그대로). `__version__` 1.2.2→1.3.0 의
+  dist 누수 0 (B1 유지).
+
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
 일체가 src/ 아래로 이동). 프로젝트 루트의 build.py 가 자기 폴더의 src/
@@ -412,4 +451,4 @@ __version__:
   v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.2.2'
+__version__ = '1.3.0'

@@ -1,5 +1,30 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.2.2 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.3.0 — PHP 기반 경량 웹 사이트 생성기.
+
+v1.3.0 변경 — **빌드 속도 향상** (코드 릴리스이되 dist byte-불변):
+  네 항목 묶음 (A·B·D·E). 코드는 바뀌나 산출물은 v1.2.2 와 byte-완전
+  동일 (정본 Articles + 같은 site.yaml 기준 — v1.2.0/v1.2.1 과 같은 패턴):
+  - **A. 단계별 timing 계측** — _step / _step_close 가 단계별 경과시간을
+    self._step_times 에 누적, build-report.md 에 16 단계 시간 표.
+  - **B. 이미지 최적화 멀티프로세스** — _sync_assets 의 raster 변환을
+    ProcessPoolExecutor 로 fan-out (workers=min(cpu_count, len(jobs))).
+    워커 함수 `_image_worker` 는 모듈-레벨 자유 함수라 Windows spawn 도
+    OK. raster_jobs<4 또는 worker≤1 이면 시리얼 폴백 (spawn 비용 절약).
+  - **D. 자산 패스 통합** — _prune_article_assets 의 src rglob 중복 패스
+    제거. 분류 단계에서 expected set 까지 같이 채우고 prune 은 dst rglob
+    한 번만.
+  - **E. tokenizer parity 캐시** — search.run_parity_test 결과를
+    .build_cache/parity.json 에 캐싱. 키 = sha256(search.py +
+    search_tokenize.php + php -v 첫 줄). hit 시 18 fixture PHP subprocess
+    호출 (~3s) 건너뜀. --no-cache 시 매 빌드 풀 검증.
+  실측 (v1.2.2 baseline, 47글 · 227 이미지):
+    - cold: 270.1s → 33.1s (-88%)
+    - warm: 5.2s   → 2.7s  (-48%)
+  C (글 렌더 멀티코어) 는 ROI 미흡 (글 렌더 1.47s 의 멀티코어화 vs
+  광범위 self-메서드 리팩터) 으로 사용자 결정 보류 — [[feedback_deferred_extensions]] ③ 유지.
+  E 두 번째 (compute_global_hash mtime+size 캐시) 도 추정 절감 ~50ms 미만
+  이라 보류.
+
 
 이 파일은 빌드의 진입점(entry point) 일 뿐, 모든 실제 로직은
 `src/scripts/` 패키지 안에 모듈별로 나뉘어 있다 (v0.8.1 재배치 — 아래

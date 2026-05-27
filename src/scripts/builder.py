@@ -422,6 +422,8 @@ import os
 import re
 import shutil
 import sys
+import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from .yaml_parser import yaml_load
@@ -547,6 +549,22 @@ def _copy_if_newer(src: Path, dst: Path):
         return
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
+
+
+def _image_worker(args):
+    """ProcessPoolExecutor 워커 — 이미지 한 장을 webp 변종으로 변환.
+
+    v1.3.0 신설 (B 항목). 모듈-레벨 자유 함수라 Windows spawn 에서도 pickle
+    가능. `optimize_image` 가 이미 순수 함수 (사이드 이펙트 = 디스크 쓰기 +
+    반환값) 라 워커는 결과만 메인으로 돌려준다. 메인은 image_variants 등록
+    과 에러 라우팅 (BuildReport.warning) 을 담당.
+
+    args = (src_file, dst_dir, config). 키워드 인자 패킹이 아닌 위치 튜플 —
+    `ProcessPoolExecutor.map` 가 iterable 한 원소를 그대로 함수에 넘기는데,
+    map(fn, iterable) 형태에서 fn(item) 호출이므로 단일 인자로 받는다.
+    """
+    src_file, dst_dir, config = args
+    return optimize_image(src=src_file, dst_dir=dst_dir, config=config)
 
 
 def _remove_empty_dirs(root: Path):
@@ -689,6 +707,11 @@ class Builder:
         self._live_pending: bool = False
         self._live_lastlen: int = 0
         self._live_cols: int = 78
+        # v1.3.0: 단계별 timing. _step() 가 직전 단계를 닫고 새 단계를 연다.
+        # _step_close() 가 build() 끝에서 마지막 단계를 닫는다. 리포트에만
+        # 사용 — dist 산출물에 영향 없음 (결정성 무관).
+        self._step_times: list = []
+        self._step_current: tuple = ()
         try:
             self._stdout_isatty: bool = bool(sys.stdout.isatty())
         except Exception:
@@ -777,8 +800,29 @@ class Builder:
         self._live_pending = True
 
     def _step(self, n: int, label: str):
-        """`[ n/16] label` 단계 헤더 (총 16 단계 파이프라인)."""
+        """`[ n/16] label` 단계 헤더 (총 16 단계 파이프라인).
+
+        v1.3.0: 호출 시 직전 단계의 경과 시간을 self._step_times 에 기록한 뒤
+        새 단계를 연다. 마지막 단계는 build() 종료 직전 self._step_close() 가
+        닫는다.
+        """
+        now = time.perf_counter()
+        if self._step_current:
+            prev_n, prev_label, prev_start = self._step_current
+            self._step_times.append((prev_n, prev_label, now - prev_start))
+        self._step_current = (n, label, now)
         self._emit(f'[{n:2d}/16] {label}')
+
+    def _step_close(self):
+        """마지막으로 열려 있는 단계를 닫는다 (build() 종료 직전 호출).
+
+        idempotent — 닫을 게 없으면 no-op. _step() 와 짝이 되어 16 단계 모두
+        self._step_times 에 기록되도록 한다.
+        """
+        if self._step_current:
+            n, label, start = self._step_current
+            self._step_times.append((n, label, time.perf_counter() - start))
+            self._step_current = ()
 
     # ── [1] Config load ──────────────────────────────────────
 
@@ -842,9 +886,18 @@ class Builder:
         # 위배 — 검색 인덱스 신뢰도에 직결) 이라 abort 경로로 보낸다.
         # v0.8.2: warn_fn 은 이제 per-Builder report 로 라우팅 (옛 모듈 전역
         # warn(msg) == _report.warning('site','',msg) 의 1:1 어댑터).
+        # v1.3.0 (E 항목): 캐시 활성 시 .build_cache/parity.json 에 결과
+        # 캐시 — 토크나이저 코드와 PHP 버전이 모두 같으면 다음 빌드에서
+        # 18 fixture subprocess 호출 (~3s) 건너뜀. --no-cache 시 매 빌드
+        # 풀 검증.
+        parity_cache_dir = (
+            self.base / '.build_cache' if self.cache.enabled else None
+        )
         run_parity_test(self.templates_dir, php_bin='php',
                         warn_fn=lambda m: self._warning('site', '', m),
-                        die_fn=abort)
+                        die_fn=abort,
+                        cache_dir=parity_cache_dir,
+                        scripts_dir=self.src_dir / 'scripts')
 
         # v0.5.1: 이미지 최적화가 켜져 있는데 Pillow 가 없으면 워닝 (die 가 아닌
         # 워닝 — 이미지가 한 장도 없는 사이트는 빌드가 통과해야 하므로 _sync_assets
@@ -2432,18 +2485,43 @@ class Builder:
         `<img>` 의 src 를 webp + srcset 으로 치환할 때 참조한다. (rewrite_asset_path
         가 상대 경로를 `/{slug}/...` 로 절대화한 형태가 키.)
 
+        v1.3.0: 두 패스 분리 + raster 이미지 변환 멀티프로세스 병렬화.
+          1. 메인 스레드가 모든 글 폴더를 rglob 으로 한 번 훑어 raster 변환
+             대상과 그 외 복사 대상으로 분류 (raster_jobs / copy_jobs).
+          2. raster_jobs 를 ProcessPoolExecutor 로 fan-out — `optimize_image`
+             는 순수 함수라 워커가 독립적으로 디스크에 변종을 떨어뜨리고
+             VariantSet 만 메인으로 돌려준다. 결과 등록 (self.image_variants)
+             과 에러 라우팅 (self._warning) 은 메인에서.
+          3. copy_jobs 시리얼 처리 (단순 mtime 비교라 병렬화 가치 낮음) +
+             글마다 prune.
+          소형 잡 (raster_jobs < 4) 또는 워커 1 인 경우 시리얼 폴백 — Windows
+          spawn 비용 절약. 결정성: 변환 순서는 결과에 무관 (각 파일이 자기
+          dst 에 독립 기록, image_variants 는 dict lookup).
+
         SVG / WebP / 비이미지 파일은 v0.5.0 과 동일하게 그대로 복사.
         """
         # v0.7.2: 이미지 최적화가 빌드 시간의 대부분 — 글마다 + 이미지마다
         # in-place 진행 (TTY 전용). 사진이 많은 사이트에서 "멈춘 게 아니라
         # 변환 중" 이 보이게 한다.
         _n = len(self.articles)
-        img_done = 0
+
+        # ─ 패스 1: 분류 + per-article expected set 누적 ─────────
+        # raster_jobs:     (idx, slug, src_file, dst_file, url, rel)
+        # copy_jobs:       (idx, slug, src_file, dst_file, rel)
+        # article_expected: slug -> set[Path] (prune 단계의 보존 화이트리스트)
+        # v1.3.0 (D 항목): _prune_article_assets 가 다시 src rglob 도는
+        # 중복 패스를 제거. 분류 단계에서 expected 를 같이 채워, prune 은
+        # dst rglob 한 번만 돌고 expected 와 비교. raster 변종은 configured
+        # widths 의 기본 후보를 먼저 넣고, 변환 종료 후 실제 dst 디렉터리의
+        # 같은 stem-*.webp glob 으로 overrun width 변종까지 보강한다.
+        raster_jobs = []
+        copy_jobs = []
+        article_expected = {}
         for _i, article in enumerate(self.articles, 1):
             m = article.meta
             src_root = article.source_dir
             dst_root = self.dist / m.slug
-
+            expected = {dst_root / 'index.html', dst_root / 'index.php'}
             for src_file in src_root.rglob('*'):
                 if not src_file.is_file():
                     continue
@@ -2453,27 +2531,104 @@ class Builder:
                     continue
                 rel = src_file.relative_to(src_root)
                 dst_file = dst_root / rel
-
                 if self._should_optimize_image(src_file):
-                    img_done += 1
-                    self._live(f'  자산 글 {_i}/{_n}  {m.slug}  '
-                               f'(이미지 {img_done} 변환  {rel})')
-                    self._optimize_and_register(
-                        src_file=src_file,
-                        dst_file=dst_file,
-                        url_prefix=f'/{m.slug}/',
-                        rel_path=rel,
-                    )
+                    rel_str = str(rel).replace('\\', '/')
+                    url = f'/{m.slug}/' + rel_str
+                    raster_jobs.append((_i, m.slug, src_file, dst_file, url, rel))
+                    stem = src_file.stem
+                    for w in self.site.images.widths:
+                        expected.add(dst_root / rel.parent / f'{stem}-{w}.webp')
                 else:
-                    self._live(f'  자산 글 {_i}/{_n}  {m.slug}  ({rel})')
-                    _copy_if_newer(src_file, dst_file)
+                    copy_jobs.append((_i, m.slug, src_file, dst_file, rel))
+                    expected.add(dst_file)
+            article_expected[m.slug] = expected
 
-            self._prune_article_assets(article)
+        # ─ 패스 2: raster 변환 (병렬 또는 시리얼) ────────────────
+        img_done = 0
+        if raster_jobs:
+            if not _HAS_PIL:
+                abort(f"이미지 최적화가 켜져 있는데 Pillow 가 없습니다. "
+                      f"raster 이미지를 만났습니다: {raster_jobs[0][2]}\n"
+                      f"       pip install Pillow 로 설치하거나 "
+                      f"site.yaml 의 images.enabled 를 false 로 두세요.")
+            # 워커가 race 없이 쓸 수 있도록 dst 부모 디렉터리를 미리 만든다.
+            for _i, slug, src_file, dst_file, url, rel in raster_jobs:
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+            workers = min(os.cpu_count() or 1, len(raster_jobs))
+            cfg = self.site.images
+            # 소형 잡은 spawn 비용 (Windows 워커마다 Pillow import ~0.5s) 이
+            # 더 커서 시리얼이 빠르다. 4 미만이면 시리얼.
+            if workers <= 1 or len(raster_jobs) < 4:
+                for _i, slug, src_file, dst_file, url, rel in raster_jobs:
+                    variants, err = optimize_image(
+                        src=src_file, dst_dir=dst_file.parent, config=cfg,
+                    )
+                    self._handle_image_result(
+                        slug, src_file, dst_file, url, variants, err,
+                        article_expected[slug],
+                    )
+                    img_done += 1
+                    self._live(f'  자산 글 {_i}/{_n}  {slug}  '
+                               f'(이미지 {img_done} 변환  {rel})')
+            else:
+                # ProcessPoolExecutor.map 은 결과 순서를 입력 순서로 보장한다.
+                args = [
+                    (src_file, dst_file.parent, cfg)
+                    for _i, slug, src_file, dst_file, url, rel in raster_jobs
+                ]
+                with ProcessPoolExecutor(max_workers=workers) as pool:
+                    results = pool.map(_image_worker, args)
+                    for job, result in zip(raster_jobs, results):
+                        _i, slug, src_file, dst_file, url, rel = job
+                        variants, err = result
+                        self._handle_image_result(
+                            slug, src_file, dst_file, url, variants, err,
+                            article_expected[slug],
+                        )
+                        img_done += 1
+                        self._live(f'  자산 글 {_i}/{_n}  {slug}  '
+                                   f'(이미지 {img_done} 변환  {rel})')
+
+        # ─ 패스 3: 비-raster 복사 + per-article prune ────────────
+        for _i, slug, src_file, dst_file, rel in copy_jobs:
+            self._live(f'  자산 글 {_i}/{_n}  {slug}  ({rel})')
+            _copy_if_newer(src_file, dst_file)
+        for article in self.articles:
+            self._prune_article_assets(
+                article, article_expected.get(article.meta.slug, set()),
+            )
 
         # v0.7.2: 단계 요약 (리포트 트랜스크립트 한 줄).
         if _n:
             self._emit(f'        {_n} 글 자산 동기화 '
                        f'(이미지 {img_done} 변환).')
+
+    def _handle_image_result(self, slug, src_file, dst_file, url,
+                             variants, err, expected_set):
+        """워커 또는 시리얼 변환 결과를 메인에서 처리 — variants 등록 + 에러 라우팅.
+
+        v1.3.0 (B 항목 병렬화 분리에서 추출 + D 통합으로 expected_set 등록):
+        _optimize_and_register 의 결과 처리 절을 메인 전용 헬퍼로 옮기고,
+        실제 생성된 variant widths 를 expected_set 에 추가해 prune 단계가
+        overrun width (configured max 초과 원본을 추가 보존하는 케이스) 도
+        보존하도록 한다. 인코딩 실패 폴백 시에는 원본을 그대로 복사하므로
+        그 원본 dst 도 expected 로 등록.
+        """
+        if variants is None:
+            # 인코딩 실패 — 폴백으로 원본 복사. 워닝은 BuildReport 로 라우팅.
+            # 산출물 자체는 정상 (원본이 그대로 dist 에 들어감) → 'warning' 분류.
+            if err:
+                self._warning('site', '', err, location=src_file)
+            _copy_if_newer(src_file, dst_file)
+            expected_set.add(dst_file)
+            return
+        # URL 등록 — HTML 의 <img src> 가 갖는 형태와 정확히 일치해야 함.
+        self.image_variants[url] = variants
+        # 실제 생성된 widths 를 expected 에 추가 — overrun width 변종 보존.
+        stem = src_file.stem
+        rel_parent = dst_file.parent
+        for w in variants.widths:
+            expected_set.add(rel_parent / f'{stem}-{w}.webp')
 
     def _should_optimize_image(self, src: Path) -> bool:
         """이 파일이 WebP 변환 대상인지."""
@@ -2519,47 +2674,27 @@ class Builder:
         url = url_prefix + rel_str
         self.image_variants[url] = variants
 
-    def _prune_article_assets(self, article: Article):
+    def _prune_article_assets(self, article: Article, expected: set):
+        """글 폴더 dist/{slug}/ 의 고아 파일 정리.
+
+        v1.3.0 (D 항목): _sync_assets 패스 1 분류 단계가 채워둔 expected set
+        을 받아 src rglob 중복 패스를 제거. 패스 1 이 configured widths 의
+        후보 변종을 미리 등록하고, 패스 2 결과 처리 (_handle_image_result)
+        가 실제 생성된 variants.widths 를 expected 에 추가해 overrun width
+        변종도 보존된다. raster 가 빌드 사이에 삭제됐다면 그 stem 의 stale
+        stem-W.webp 는 expected 에 없어 자연 정리된다.
+
+        v0.5.2: 글 자산이 글의 index.html 과 같은 폴더에 동거 — 본체 산출물
+        (index.html / index.php) 도 보존 대상. expected 에 두 경로가 이미
+        등록된 채 들어온다.
+        """
         m = article.meta
-        src_root = article.source_dir
         dst_root = self.dist / m.slug
         if not dst_root.exists():
             return
-
-        expected = set()
-        # v0.5.2: 글 자산이 글의 index.html 과 같은 폴더에 동거하게 되어,
-        # asset 정리에서 글 본체 산출물 (index.html / index.php) 을 보존해야
-        # 한다. asset sync 단계가 article render 보다 먼저 돌긴 하지만,
-        # 두 번째 빌드부터는 이전 빌드의 결과가 이미 존재한다.
-        expected.add(dst_root / 'index.html')
-        expected.add(dst_root / 'index.php')
-
-        for src_file in src_root.rglob('*'):
-            if not src_file.is_file():
-                continue
-            if is_excluded_path(src_file, src_root):
-                continue
-            if src_file.name in ('meta.yaml', 'content.md', 'content.html'):
-                continue
-            rel = src_file.relative_to(src_root)
-            # v0.5.1: raster 이미지는 원본 자리에 webp 변종들이 떨어진다.
-            # expected 에 변종 파일명들을 등록 (원본 파일명은 dist 에 없음).
-            if self._should_optimize_image(src_file):
-                stem = src_file.stem
-                for w in self.site.images.widths:
-                    expected.add(dst_root / rel.parent / f'{stem}-{w}.webp')
-                # 더 큰 원본 width 변종도 있을 수 있으므로 (optimize_image 가
-                # 원본 width 가 max(widths) 보다 크면 그 변종도 만든다),
-                # dir 내의 같은 stem-*.webp 파일은 모두 보존 대상으로 간주.
-                for sibling in (dst_root / rel.parent).glob(f'{stem}-*.webp'):
-                    expected.add(sibling)
-            else:
-                expected.add(dst_root / rel)
-
         for existing in list(dst_root.rglob('*')):
             if existing.is_file() and existing not in expected:
                 existing.unlink()
-
         _remove_empty_dirs(dst_root)
 
     # ── [7] Category indexes ──────────────────────────────────
@@ -3416,6 +3551,9 @@ class Builder:
         self._console = []
         self._live_pending = False
         self._live_lastlen = 0
+        # v1.3.0: 단계별 timing 초기화 (build() 멱등성).
+        self._step_times = []
+        self._step_current = ()
         self._build_started = datetime.datetime.now()
         self._emit(f'빌드 시작 - siheonlee.com v{_SITE_VERSION} '
                    f'({self._build_started.strftime("%Y-%m-%d %H:%M:%S")})')
@@ -3504,6 +3642,8 @@ class Builder:
         self._check_exclude_urls()
         self._step(16, '고아 산출물 정리')
         self._prune_orphans()                  # [14]
+        # v1.3.0: 16 단계 모두 종료 — 마지막 단계 timing 닫기.
+        self._step_close()
 
         # v0.7.0: 캐시 매니페스트 commit. 캐시 비활성 시 no-op.
         self.cache.commit(current_version=_SITE_VERSION)
@@ -3581,6 +3721,18 @@ class Builder:
         lines.extend(self._console)
         lines.append('```')
         lines.append('')
+        # v1.3.0: 단계별 시간 표. _step() / _step_close() 가 채운
+        # self._step_times 로 16 단계 시간을 직렬화. 빈 경우 (build() 미호출)
+        # 생략. 단계 시간은 매 빌드 다른 값이므로 결정성 검증 대상 아님 —
+        # build-report.md 자체가 dist 밖이라 무관.
+        if self._step_times:
+            lines.append('## 단계별 시간')
+            lines.append('')
+            lines.append('| 단계 | 설명 | 시간(s) |')
+            lines.append('|---:|---|---:|')
+            for n, label, secs in self._step_times:
+                lines.append(f'| {n} | {label} | {secs:.2f} |')
+            lines.append('')
         lines.append(self.report.render_markdown())
         lines.append('')
         lines.append('---')
