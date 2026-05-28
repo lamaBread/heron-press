@@ -87,8 +87,8 @@ class WrapPageTitleTests(unittest.TestCase):
             default_author='A', default_og_image='/og.png',
             default_title_prefix='', default_title_suffix=' | X',
             copyright_holder='A', copyright_year_start=2020,
-            reserved_slugs=[],
-            warn_on_underscore_ref=False, warn_on_missing_asset=False,
+            # v1.4.0: reserved_slugs / warn_on_* / error_404_title / search_title
+            # 다섯 필드 폐기 (코드 상수로 승격) — 테스트 kwargs 에서도 제거.
             description_truncate=160,
             robots_txt_main='',
         )

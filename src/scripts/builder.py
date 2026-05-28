@@ -423,6 +423,7 @@ import re
 import shutil
 import sys
 import time
+import unicodedata
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -655,6 +656,17 @@ class Builder:
     SLUG_RE = re.compile(r'^[a-z0-9][a-z0-9-]*[a-z0-9]$')
     DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
+    # v1.4.0: 시스템 내재 상수 (옛 site.yaml 키에서 승격).
+    # - RESERVED_SLUGS: glob 폴더 (/assets/) + 검색 엔드포인트 (/search.php)
+    #   두 시스템 경로와 충돌하는 글 slug 금지. 운영자가 바꿀 사유가 없는
+    #   *시스템 내재 제약* 이라 site.yaml 노출이 footgun 였다 (운영자가
+    #   'search' 를 지우면 slug=search 글이 만들어져 검색이 깨진다).
+    # - DEFAULT_*_TITLE: meta.yaml 을 두지 않는 시스템 페이지의 <title> 본문.
+    #   다국어가 필요해지면 i18n 묶음을 도입하지 코드 상수 둘로 흩지 않는다.
+    RESERVED_SLUGS = frozenset({'assets', 'search'})
+    DEFAULT_ERROR_404_TITLE = 'Not Found'
+    DEFAULT_SEARCH_TITLE = 'Search'
+
     def __init__(self, base_dir: Path, *, enable_cache: bool = True):
         self.base = base_dir
         # v0.8.1: 빌더 일체(scripts/·templates/·assets/·tests/)가 src/ 아래로
@@ -835,6 +847,15 @@ class Builder:
         def get(key, default=None):
             return raw.get(key, default)
 
+        # v1.4.0: prev_next 토글 파싱 — site.yaml 의 `prev_next:` 블록의
+        # `enabled:` 키 (기본 True). 블록 부재 / dict 가 아니면 기본 활성.
+        pn_raw = get('prev_next')
+        if isinstance(pn_raw, dict):
+            pn_enabled_raw = pn_raw.get('enabled')
+            pn_enabled = True if pn_enabled_raw is None else bool(pn_enabled_raw)
+        else:
+            pn_enabled = True
+
         self.site = SiteConfig(
             domain=get('domain', 'siheonlee.com'),
             base_url=get('base_url', 'https://siheonlee.com'),
@@ -846,9 +867,13 @@ class Builder:
             default_title_suffix=get('default_title_suffix') or '',
             copyright_holder=get('copyright_holder', ''),
             copyright_year_start=get('copyright_year_start', 2025),
-            reserved_slugs=get('reserved_slugs') or [],
-            warn_on_underscore_ref=bool(get('warn_on_underscore_ref', True)),
-            warn_on_missing_asset=bool(get('warn_on_missing_asset', True)),
+            # v1.4.0: reserved_slugs / warn_on_underscore_ref /
+            # warn_on_missing_asset / error_404_title / search_title 다섯 키는
+            # SiteConfig 에서 제거됨 — 시스템 내재 상수 (RESERVED_SLUGS /
+            # DEFAULT_ERROR_404_TITLE / DEFAULT_SEARCH_TITLE) 와 항상-경고
+            # 행동 고정으로 옮겨졌다. 옛 site.yaml 에 키가 남아 있어도 여기서
+            # 더 이상 읽지 않는다 (compat shim 없이 안전 — v1.2.1 의
+            # warn_on_stale_updated 제거 선례).
             description_truncate=int(get('description_truncate') or 150),
             robots_txt_main=get('robots_txt_main') or 'User-agent: *\nAllow: /\n',
             # v0.4.5: i18n + 카테고리 페이지네이션 디폴트.
@@ -858,10 +883,6 @@ class Builder:
             lang=str(get('lang') or 'ko'),
             category_per_page=int(get('category_per_page') or 20),
             category_preview_per_page=int(get('category_preview_per_page') or 5),
-            # v0.5.4: 시스템 페이지(404 / search)의 `<title>` 본문 텍스트.
-            # 양옆은 default_title_prefix / default_title_suffix 로 감싸진다.
-            error_404_title=str(get('error_404_title') or 'Not Found'),
-            search_title=str(get('search_title') or 'Search'),
             # v0.5.1: 이미지 자동 최적화 설정.
             images=self._parse_image_config(get('images') or {}),
             # v0.8.3: schema.org JSON-LD 사이트 전역 토글.
@@ -871,6 +892,8 @@ class Builder:
             # v1.1.3: Google AdSense (ads.txt + head_script). 블록 부재 시
             # 기본값(두 필드 모두 빈 문자열 = 자동 비활성) → v1.1.2 와 동일 동작.
             google_adsense=self._parse_adsense_config(get('google_adsense') or {}),
+            # v1.4.0: 글 푸터 이전/다음 글 내비게이션 토글.
+            prev_next_enabled=pn_enabled,
         )
 
         # v0.4.6: 사용자가 옛 home_* 키를 site.yaml 에 그대로 두면 알아채지
@@ -1526,10 +1549,13 @@ class Builder:
                 )
                 keep_this = False
 
-            if m.slug in self.site.reserved_slugs:
+            # v1.4.0: site.yaml reserved_slugs → Builder.RESERVED_SLUGS 상수.
+            if m.slug in self.RESERVED_SLUGS:
                 self._issue(
                     'article', m.slug,
-                    f'slug 예약어: {m.slug!r} — 글이 빌드에서 제외됨.',
+                    f'slug 예약어: {m.slug!r} — 시스템 경로 '
+                    f'({"/" + m.slug + "/" if m.slug == "assets" else "/search.php"}) '
+                    f'와 충돌. 글이 빌드에서 제외됨.',
                     meta_path,
                 )
                 keep_this = False
@@ -2127,9 +2153,127 @@ class Builder:
         crumb_parts.append(leaf)
         return crumb_parts
 
+    # ── v1.4.0: prev/next sibling navigation ──────────────────
+    #
+    # 사이트 전역 토글 (site.yaml prev_next.enabled, 기본 True). sibling 풀
+    # = 같은 부모 폴더의 다른 글 (Articles/Blog/A 의 sibling 은 같은 Blog/
+    # 의 형제 글). noindex 글은 풀에서 제외 (UI 내비게이션은 색인 정책과
+    # 별개라 자기 자신은 표시 가능하지만 *남의* prev/next 에는 안 잡힘).
+    # 정렬은 date asc + slug tiebreak — 의미: prev = 시간상 *과거* 글,
+    # next = 시간상 *미래* 글 (관습적 블로그 패턴).
+    #
+    # 글의 본문 끝 (body_html 의 </section> 뒤) 에 nav 한 줄로 append.
+    # 템플릿에 새 placeholder 를 두지 않고 본문 안에 넣는 이유 = 캐시 일관성:
+    # _render_articles 가 만드는 page_html 이 그대로 .build_cache/articles/
+    # <slug>.<ext> 에 저장되므로, 캐시 hit 시에도 이 nav 가 함께 복원되어
+    # 결정성·byte-동일성이 자연 유지된다.
+
+    def _build_sibling_index(self) -> dict:
+        """parent_path_tuple -> 같은 부모의 (자신 포함) non-noindex 글 list,
+        date 오름차순 정렬 (동률 시 slug). _render_articles 진입 시 한 번
+        만들고 글마다 _prev_next_for 가 참조한다.
+        """
+        by_parent = {}
+        for a in self.articles:
+            if a.meta.noindex:
+                continue
+            parent = tuple(a.category_path[:-1])
+            by_parent.setdefault(parent, []).append(a)
+        for k in by_parent:
+            by_parent[k].sort(key=lambda x: (x.meta.date, x.meta.slug))
+        return by_parent
+
+    def _prev_next_for(self, article: 'Article', sibs_by_parent: dict):
+        """(prev_article|None, next_article|None) — 둘 다 None 이면 nav 미출력.
+
+        자기 자신이 noindex 면 sibs_by_parent 풀에 없어 자연스럽게 (None, None).
+        sibling 이 한 명도 없는 단일 글 카테고리도 (None, None).
+        """
+        parent = tuple(article.category_path[:-1])
+        sibs = sibs_by_parent.get(parent, [])
+        for i, a in enumerate(sibs):
+            if a is article:
+                prev_a = sibs[i - 1] if i > 0 else None
+                next_a = sibs[i + 1] if i + 1 < len(sibs) else None
+                return prev_a, next_a
+        return None, None
+
+    def _render_prev_next_nav(self, article: 'Article',
+                               sibs_by_parent: dict) -> str:
+        """글 본문 끝에 붙일 prev/next nav HTML. 빈 문자열이면 미출력.
+
+        대칭 레이아웃을 위해 한 쪽만 있을 때 빈 자리에 placeholder span 을
+        둔다 (display:flex + space-between 패턴이 한쪽만 있을 때 정렬을
+        깨지 않게).
+        """
+        if not self.site.prev_next_enabled:
+            return ''
+        prev_a, next_a = self._prev_next_for(article, sibs_by_parent)
+        if prev_a is None and next_a is None:
+            return ''
+        parts = ['<nav class="prev-next-nav" aria-label="다른 글">']
+        if prev_a is not None:
+            parts.append(
+                f'<a class="prev-next-link prev" href="/{prev_a.meta.slug}/" rel="prev">'
+                f'<span class="prev-next-dir">‹ 이전 글</span>'
+                f'<span class="prev-next-title">{escape_html(prev_a.meta.title)}</span>'
+                f'</a>'
+            )
+        else:
+            parts.append(
+                '<span class="prev-next-link prev prev-next-placeholder" aria-hidden="true"></span>'
+            )
+        if next_a is not None:
+            parts.append(
+                f'<a class="prev-next-link next" href="/{next_a.meta.slug}/" rel="next">'
+                f'<span class="prev-next-dir">다음 글 ›</span>'
+                f'<span class="prev-next-title">{escape_html(next_a.meta.title)}</span>'
+                f'</a>'
+            )
+        else:
+            parts.append(
+                '<span class="prev-next-link next prev-next-placeholder" aria-hidden="true"></span>'
+            )
+        parts.append('</nav>')
+        return '\n' + ''.join(parts) + '\n'
+
+    # ── v1.4.0: 글 끝 발행/수정 메타 줄 ───────────────────────
+    #
+    # 사용자 요청 — "글의 마지막 section 아래에 작고 모던한 디자인으로
+    # 심플하게". 헤더가 아니라 본문 끝. 정본 글들이 그동안 마지막 section
+    # 안에 수동으로 적던 발행/수정 줄을 한 곳에서 자동 생성한다 (사용자가
+    # 수동 줄을 점차 제거할 예정 — 자동 줄은 그 자리를 대체).
+    # updated 가 date 와 같거나 부재면 "발행" 한 줄만 (불필요한 ' · 수정'
+    # 잔재 방지). 토글 없음 — 시스템 전역 기본.
+
+    def _render_article_end_meta(self, m: 'ArticleMeta') -> str:
+        date = m.date or ''
+        if not date:
+            return ''
+        # 본문 끝 한 줄. 절제된 디자인은 CSS (.article-end-meta) 에서.
+        out = [
+            '\n<div class="article-end-meta">',
+            f'<time class="published" datetime="{escape_html(date)}">'
+            f'{escape_html(date)} 발행</time>',
+        ]
+        upd = m.updated
+        if upd and upd != date:
+            out.append(
+                f'<span class="article-end-meta-sep"> · </span>'
+                f'<time class="updated" datetime="{escape_html(upd)}">'
+                f'{escape_html(upd)} 수정</time>'
+            )
+        out.append('</div>\n')
+        return ''.join(out)
+
     def _render_articles(self):
         # v0.6.4: 글마다 template 키가 다를 수 있어 per-article load. 기본 article.html.
         nav_links = self._nav_links_html()
+        # v1.4.0: prev/next 인덱스를 글 루프 진입 전에 한 번만 만든다.
+        # 글마다 같은 정렬을 다시 돌면 O(N²) 라 한 번 만들어 dict lookup
+        # 으로 재사용. cache hit 경로에선 호출되지 않으므로 (이미 캐시된
+        # HTML 이 nav 를 포함) miss 한 글만 비용 부담.
+        sibs_by_parent = self._build_sibling_index()
 
         # v0.7.0: 빌드 증분 캐시 — global_hash 가 모든 글에 영향을 주는 입력의
         # 종합 sha256. _render_articles 진입 시점이 안전한 호출 위치다 (site /
@@ -2188,6 +2332,9 @@ class Builder:
                         out_dir.mkdir(parents=True, exist_ok=True)
                         out_file = out_dir / f'index.{hit.output_ext}'
                         out_file.write_text(hit.output, encoding='utf-8')
+                        # v1.4.0: PHP 빌드 글 목록 — 캐시 hit 경로에서도 등록.
+                        if hit.output_ext == 'php':
+                            self.report.note_php_built(m.slug)
                         self.cache.record_hit(m.slug, hit, article_hash)
                         self._cache_hits += 1
                         continue
@@ -2210,7 +2357,17 @@ class Builder:
                                   self.site.php_globals)
                 body_html = rr.html
 
+            # v1.4.0: 검색용 plain text 는 nav/메타가 *없는* 본문에서 추출
+            # (검색 결과 스니펫이 "이전 글" / "2026-05-14 발행" 같은 메타
+            # 텍스트를 인용하지 않게).
             self.rendered_bodies[m.slug] = html_to_plain(rr.html)
+
+            # v1.4.0: 본문 끝 메타 줄 + prev/next nav 를 body_html 에 append.
+            # 두 자동 요소가 본문 일부로 포함돼 page_html 의 어디든 들어가도록
+            # _render_template 의 BODY 치환에 자연 흡수된다. 캐시된 HTML 에도
+            # 함께 박혀 있어 cache hit 시 결정성 유지.
+            body_html += self._render_article_end_meta(m)
+            body_html += self._render_prev_next_nav(article, sibs_by_parent)
 
             # v0.5.5: description 필수 정책 + 본문 ↔ 메타데이터 분리.
             #   - seo.description 이 None (키 부재/값 부재) → 작성자가 의도적
@@ -2289,16 +2446,18 @@ class Builder:
             )
             page_styles = render_inline_styles(m.styles)
 
-            if self.site.warn_on_underscore_ref:
-                for pattern in [r'src="([^"]+)"', r'href="([^"]+)"']:
-                    for url_match in re.finditer(pattern, rr.html):
-                        ref = url_match.group(1)
-                        if '/_' in ref or ref.startswith('_'):
-                            self._warning(
-                                'article', m.slug,
-                                f'본문이 빌드에서 제외된 자산을 참조: {ref}',
-                                article.source_dir,
-                            )
+            # v1.4.0: 옛 site.yaml warn_on_underscore_ref 토글 폐기 — 항상 경고.
+            # 빌드에서 제외된 `_` 접두 자산 참조는 dist 에 404 자국을 남기므로
+            # 끄고 싶을 사유가 없다 (디버깅을 어렵게 만들 뿐).
+            for pattern in [r'src="([^"]+)"', r'href="([^"]+)"']:
+                for url_match in re.finditer(pattern, rr.html):
+                    ref = url_match.group(1)
+                    if '/_' in ref or ref.startswith('_'):
+                        self._warning(
+                            'article', m.slug,
+                            f'본문이 빌드에서 제외된 자산을 참조: {ref}',
+                            article.source_dir,
+                        )
 
             # v0.6.2: build_meta_tags 시그니처 일반화 — 글/홈/카테고리 공용.
             meta_tags, full_title = build_meta_tags(
@@ -2433,6 +2592,10 @@ class Builder:
             out_dir.mkdir(parents=True, exist_ok=True)
             out_file = out_dir / f'index.{ext}'
             out_file.write_text(page_html, encoding='utf-8')
+
+            # v1.4.0: PHP 빌드 글 목록 등록 (cache miss 경로).
+            if ext == 'php':
+                self.report.note_php_built(m.slug)
 
             # v0.7.0: 캐시 store — 이번 글 렌더 중 self.report 에 추가된 항목
             # 중 scope='article' AND target=slug 인 것만 캐시 기록 (다음
@@ -3247,10 +3410,11 @@ class Builder:
         # v1.1.3: ADSENSE_HEAD line-eating.
         # v1.1.5: page_url='/404.html' — exclude_urls 매칭 시 placeholder 제거.
         tpl = self._apply_adsense_head_placeholder(tpl, '/404.html')
-        # v0.5.4: 404 <title> 폴백 체인.
-        # 본문 = site.error_404_title. 양옆 = site.default_title_prefix/suffix
-        # (404 는 meta.yaml 이 없으므로 override 불가능 — site.yaml 한 군데에서만).
-        page_title = self._wrap_page_title(self.site.error_404_title)
+        # v0.5.4: 404 <title> 폴백 체인. 본문 = DEFAULT_ERROR_404_TITLE 상수.
+        # 양옆 = site.default_title_prefix/suffix (404 는 meta.yaml 이 없으므로
+        # override 불가). v1.4.0: site.yaml error_404_title 키 폐기 — 'Not
+        # Found' 외의 표현이 필요할 일이 없어 코드 상수로 흡수.
+        page_title = self._wrap_page_title(self.DEFAULT_ERROR_404_TITLE)
         vars_ = {
             'LANG': escape_html(self.site.lang),
             'ADSENSE_HEAD': self.site.google_adsense.head_script,
@@ -3417,10 +3581,10 @@ class Builder:
             index_literal,
         )
 
-        # v0.5.4: search <title> 폴백 체인. 404 와 동일 — site.search_title
-        # + site.default_title_prefix/suffix. search 도 meta.yaml 이 없는 시스템
-        # 페이지라 site.yaml 에서만 설정한다.
-        search_title = self._wrap_page_title(self.site.search_title)
+        # v0.5.4: search <title> 폴백 체인. 404 와 동일 — DEFAULT_SEARCH_TITLE
+        # 상수 + site.default_title_prefix/suffix. v1.4.0: site.yaml search_title
+        # 키 폐기 (404 와 같은 사유 — 'Search' 외의 표현이 필요할 일이 없음).
+        search_title = self._wrap_page_title(self.DEFAULT_SEARCH_TITLE)
         # v1.1.3: ADSENSE_HEAD line-eating (search.php 도 사용자가 방문하는
         # dist 페이지이므로 자동광고 스크립트 주입 대상).
         # v1.1.5: page_url='/search.php' — exclude_urls 매칭 시 placeholder 제거.
@@ -3488,6 +3652,123 @@ class Builder:
             s = cls._CLI_BLOCK_RE.sub('', s)
         s = cls._PHP_CLOSE_RE.sub('', s)
         return s.strip() + '\n'
+
+    # ── v1.4.0: 내부 링크 검증 (post-build) ───────────────────
+    #
+    # 빌드 후 dist 에 떨어진 글 페이지(글의 index.html / index.php) 의 본문
+    # <a href="..."> 를 훑어 site-relative 내부 링크 (`/...` 로 시작) 가
+    # 실제로 dist 에 대응 파일/디렉터리 인덱스를 가지는지 확인. 외부 URL
+    # (http://·https://·//·mailto:·tel:) 과 순수 앵커(#)·쿼리(?) 시작은 면제.
+    # 깨진 링크는 글 단위 issue 로 보고 — 산출물 자체는 빌드 통과지만
+    # 클릭 결과가 404 라서 작성자 보완이 필요한 항목 (`<a>` 후속 단계의
+    # warn_on_underscore_ref 와 같은 결).
+    #
+    # 캐시 hit 글에도 동일하게 검사 (cache.lookup 이후의 dist 파일을 읽기
+    # 때문) — 따라서 매 빌드마다 결과가 결정적이다.
+    #
+    # 스코프 v1.4.0 = 글 페이지만. 홈/카테고리/404/search 는 빌더가 직접
+    # 만든 링크라 깨질 가능성이 사실상 0 (글 slug 가 _validate 에서 이미
+    # 검증). 후속 릴리스에서 필요 시 확장.
+
+    _LINK_HREF_RE = re.compile(
+        r'<a\b[^>]*\bhref=[\'"]([^\'"]+)[\'"]',
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _normalize_link_path(path: str) -> str:
+        """링크 path 를 비교 정규형으로. URL-decode + NFC normalize.
+
+        href 는 브라우저가 fetch 할 때 URL-decode 한 뒤 운영체제 파일시스템
+        에 묻는다. valid_urls set 은 디스크에서 직접 모은 literal path (NFC
+        통일 — 운영체제별 정규화 차이 흡수) 라 비교 정합성을 위해 양쪽 모두
+        같은 변환을 거친다.
+        """
+        from urllib.parse import unquote
+        return unicodedata.normalize('NFC', unquote(path))
+
+    def _collect_dist_urls(self) -> set:
+        """dist 산출물의 모든 파일을 site-relative URL set 으로. 디렉터리
+        인덱스 파일(`index.html` / `index.php`) 은 그 디렉터리의 trailing
+        slash URL 도 set 에 추가 — 글/카테고리 링크가 `/blog/` 형태로
+        들어오므로. 결과는 NFC 정규화된 literal 경로 (URL-decoded 와 같은
+        형태) — _validate_internal_links 가 href 도 같은 변환을 거쳐 비교.
+        """
+        urls = set()
+        if not self.dist.is_dir():
+            return urls
+        for f in self.dist.rglob('*'):
+            if not f.is_file():
+                continue
+            rel = unicodedata.normalize(
+                'NFC', f.relative_to(self.dist).as_posix(),
+            )
+            urls.add('/' + rel)
+            if f.name in ('index.html', 'index.php'):
+                parent = unicodedata.normalize(
+                    'NFC', f.parent.relative_to(self.dist).as_posix(),
+                )
+                if parent == '.':
+                    urls.add('/')
+                else:
+                    urls.add('/' + parent + '/')
+        return urls
+
+    @staticmethod
+    def _is_internal_link(href: str) -> bool:
+        if not href:
+            return False
+        if href.startswith((
+            'http://', 'https://', '//',
+            'mailto:', 'tel:', 'javascript:', 'data:',
+        )):
+            return False
+        if href.startswith(('#', '?')):
+            return False
+        return href.startswith('/')
+
+    def _validate_internal_links(self):
+        """글 페이지의 <a href> 내부 링크 깨짐을 BuildReport issue 로 보고."""
+        if not self.dist.is_dir():
+            return
+        valid_urls = self._collect_dist_urls()
+        broken_total = 0
+        for art in self.articles:
+            out_dir = self.dist / art.meta.slug
+            seen_broken = set()
+            for ext in ('html', 'php'):
+                p = out_dir / f'index.{ext}'
+                if not p.is_file():
+                    continue
+                try:
+                    html = p.read_text(encoding='utf-8')
+                except OSError:
+                    continue
+                for mtch in self._LINK_HREF_RE.finditer(html):
+                    href = mtch.group(1)
+                    if not self._is_internal_link(href):
+                        continue
+                    # fragment / query 분리
+                    path = href.split('#', 1)[0].split('?', 1)[0]
+                    if not path:
+                        # 순수 fragment-only 였던 경우 (이미 위에서 컷되지만 안전)
+                        continue
+                    # URL-decode + NFC 정규화 — 디스크 literal 경로와 비교 정합.
+                    norm = self._normalize_link_path(path)
+                    if norm in valid_urls:
+                        continue
+                    if norm in seen_broken:
+                        continue
+                    seen_broken.add(norm)
+                    broken_total += 1
+                    self._issue(
+                        'article', art.meta.slug,
+                        f'본문 내부 링크 깨짐: {href!r} '
+                        f'(dist 에 대상 페이지/파일이 없음).',
+                        p,
+                    )
+        if broken_total:
+            self._emit(f'        내부 링크 검증: {broken_total} 건 깨짐.')
 
     # ── [15] Global orphan pruning ────────────────────────────
 
@@ -3642,6 +3923,11 @@ class Builder:
         self._check_exclude_urls()
         self._step(16, '고아 산출물 정리')
         self._prune_orphans()                  # [14]
+        # v1.4.0: 내부 링크 검증 — 글 페이지의 <a href="..."> 가 dist 에 실제
+        # 대응 파일/디렉터리를 가지는지 확인. 깨진 링크는 글 단위 issue 로
+        # 보고. 단계 번호를 더하지 않는 quiet check (dist 산출물 무영향 — 캐시
+        # 히트 글도 동일하게 검사하므로 결정적).
+        self._validate_internal_links()
         # v1.3.0: 16 단계 모두 종료 — 마지막 단계 timing 닫기.
         self._step_close()
 
@@ -3652,12 +3938,17 @@ class Builder:
         cat_count = len(self.categories)
         issue_count = self.report.issue_count()
         warn_count = self.report.warning_count()
+        php_built_count = self.report.php_built_count()
         elapsed = (datetime.datetime.now() - self._build_started).total_seconds()
         self._emit()
+        # v1.4.0: PHP 빌드 글 수도 끝줄에 표시 (작성자가 한눈에).
+        php_segment = (
+            f', PHP 빌드 {php_built_count}건' if php_built_count else ''
+        )
         self._emit(
             f'빌드 완료: {art_count} 글, {cat_count} 카테고리, '
-            f'{issue_count} 보완 필요, {warn_count} 살펴볼 사항. '
-            f'({elapsed:.1f}s)'
+            f'{issue_count} 보완 필요, {warn_count} 살펴볼 사항'
+            f'{php_segment}. ({elapsed:.1f}s)'
         )
         if self.cache.enabled:
             total_attempts = self._cache_hits + self._cache_misses
@@ -3711,8 +4002,14 @@ class Builder:
         lines.append(f'- **빌드 시각**: {finished}')
         lines.append(f'- **소요**: {elapsed:.1f}s')
         lines.append(f'- **결과**: {art_count} 글 · {cat_count} 카테고리')
-        lines.append(f'- **보완 필요**: {self.report.issue_count()}건 · '
-                     f'**살펴볼 사항**: {self.report.warning_count()}건')
+        meta_line = (
+            f'- **보완 필요**: {self.report.issue_count()}건 · '
+            f'**살펴볼 사항**: {self.report.warning_count()}건'
+        )
+        # v1.4.0: PHP 빌드 글 수 노출 (있을 때만).
+        if self.report.php_built_count():
+            meta_line += f' · **PHP 빌드**: {self.report.php_built_count()}건'
+        lines.append(meta_line)
         lines.append(f'- **증분 캐시**: {cache_line}')
         lines.append('')
         lines.append('## 빌드 진행')

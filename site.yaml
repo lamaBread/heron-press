@@ -28,25 +28,10 @@ default_title_prefix: ""
 # 모든 페이지 <title> 기본 suffix / 임의 문자열
 default_title_suffix: ""
 
-# 404 페이지 <title> 본문 / 임의 문자열
-error_404_title: Not Found
-# 검색 결과 페이지 <title> 본문 / 임의 문자열
-search_title: Search
-
 # 저작권자 표시 / 임의 문자열 (푸터에 사용)
 copyright_holder: 이시헌
 # 저작권 시작 연도 / 정수 (예: 2025)
 copyright_year_start: 2025
-
-# 글 slug 로 사용 금지 / 문자열 리스트
-reserved_slugs:
-  - assets    # /assets/    — 사이트 공용 자원 디렉터리
-  - search    # /search.php — 검색 엔드포인트
-
-# 언더스코어 폴더 (`_inactive` 등) 참조 시 워닝 / true / false
-warn_on_underscore_ref: true
-# meta.yaml 에 지정된 자산이 누락되었을 때 워닝 / true / false
-warn_on_missing_asset: true
 
 # 카테고리 자기 페이지의 페이지당 글 수 / 양수 (카테고리 meta.yaml 의 per_page 로 오버라이드)
 category_per_page: 20
@@ -55,6 +40,22 @@ category_preview_per_page: 5
 
 # 피드 summary (Atom <summary> / RSS <description>) 의 최대 글자 수 / 양수
 description_truncate: 150
+
+# v1.4.0: 글 푸터의 이전/다음 글 내비게이션 사이트 전역 토글.
+# 같은 부모 폴더(직계 형제) 글들을 date 오름차순으로 정렬해 prev=과거·next=
+# 미래로 글 본문 끝(글 마지막 section 다음)에 두 카드로 표시. noindex 글은
+# sibling 풀에서 제외 (UI 내비게이션은 색인 정책과 별개라 자기 자신은
+# 표시 가능하지만 남의 prev/next 에는 안 잡힌다). 글 단위 끄기는 두지
+# 않는다 — 페이지 단위 토글은 의미 없음. 블록 부재/false 시 비활성.
+prev_next:
+  enabled: true
+
+# v1.4.0 폐기 — 다섯 키 (reserved_slugs / warn_on_underscore_ref /
+# warn_on_missing_asset / error_404_title / search_title) 는 시스템
+# 내재 상수로 승격됐다 (src/scripts/builder.py 의 RESERVED_SLUGS /
+# DEFAULT_ERROR_404_TITLE / DEFAULT_SEARCH_TITLE + warn_on_underscore_ref
+# 의 "항상 경고" 행동 고정 + dead config 였던 warn_on_missing_asset).
+# 옛 site.yaml 에 키가 남아 있어도 파서가 silently 무시한다.
 
 # /robots.txt 본문 / 여러 줄 문자열
 robots_txt_main: |

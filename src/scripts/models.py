@@ -2,6 +2,20 @@
 
 dataclasses 만 모아둔다. 모든 동작 로직은 다른 모듈에 있다.
 
+v1.4.0 변경 — SiteConfig 슬림화 + prev/next 토글 추가:
+  - **삭제** — `reserved_slugs`, `warn_on_underscore_ref`, `warn_on_missing_asset`,
+    `error_404_title`, `search_title` 다섯 필드. 운영자가 바꿀 일이 없거나
+    (시스템 내재 제약·표시 라벨), 끄고 싶을 사유가 없는 (디버깅 어렵게 만들
+    뿐) 값들이라 builder.py 의 코드 상수 (`RESERVED_SLUGS` /
+    `DEFAULT_ERROR_404_TITLE` / `DEFAULT_SEARCH_TITLE`) 로 옮겼고,
+    `warn_on_underscore_ref` 는 항상 경고로 행동 고정, `warn_on_missing_asset`
+    은 어디서도 읽지 않던 dead config 였다. site.yaml 에서도 제거 — 옛
+    site.yaml 에 이 다섯 키가 남아 있어도 _load_config 파서가 silently 무시
+    (compat shim 없이 안전 — v1.2.1 의 `warn_on_stale_updated` 제거 선례).
+  - **추가** — `prev_next_enabled: bool = True` (글 푸터의 이전/다음 글
+    내비게이션 사이트 전역 토글). 글 단위 끄기는 두지 않는다 (사용자 결정 —
+    페이지 단위 토글은 의미 없음).
+
 v1.1.5 변경 — AdSense URL 기반 광고 차단 (v1.1.4 의 page-type 방식 대체):
   - AdSenseConfig 의 `exclude_pages: frozenset[str]` → `exclude_urls:
     frozenset[str]` 로 교체. site.yaml 의 `google_adsense.exclude_urls`
@@ -219,6 +233,18 @@ class AdSenseConfig:
 
 @dataclass
 class SiteConfig:
+    # v1.4.0: 시스템 내재 상수로 승격된 옛 필드들은 SiteConfig 에서 제거 —
+    # site.yaml 에서도 함께 제거된다. 운영자가 바꿀 일이 없거나 (reserved_slugs:
+    # /assets/ 디렉터리·/search.php 엔드포인트라는 시스템 내재 제약), 끄고
+    # 싶을 사유가 없는 (warn_on_underscore_ref / warn_on_missing_asset 은
+    # 디버깅을 어렵게 만들 뿐 = 항상 경고가 옳음), 또는 표시 라벨이 다른
+    # 표현으로 바뀔 일이 없는 (error_404_title='Not Found' / search_title=
+    # 'Search') 값들이라 코드 상수 (builder.RESERVED_SLUGS / DEFAULT_ERROR_404
+    # _TITLE / DEFAULT_SEARCH_TITLE) 로 옮겼다. warn_on_missing_asset 은 그나마
+    # 어디서도 읽지 않던 dead config 였다. description_truncate (피드
+    # summary 길이 캡, 코드 디폴트 150) 는 단일 숫자 한 군데 (feed summary)
+    # 만 통제하므로 README "추가 업데이트 제안" 에 사용처를 명문화한 뒤
+    # 사용자 결정으로 코드 상수 승격 여부를 후속 릴리스에 결정한다.
     domain: str
     base_url: str
     name: str
@@ -229,9 +255,6 @@ class SiteConfig:
     default_title_suffix: str
     copyright_holder: str
     copyright_year_start: int
-    reserved_slugs: list
-    warn_on_underscore_ref: bool
-    warn_on_missing_asset: bool
     description_truncate: int
     robots_txt_main: str
     # v0.4.5: i18n + 카테고리 페이지네이션 디폴트.
@@ -240,11 +263,6 @@ class SiteConfig:
     lang: str = 'ko'
     category_per_page: int = 20
     category_preview_per_page: int = 5
-    # v0.5.4: meta.yaml 을 두지 않는 시스템 페이지(404 / search)의 `<title>`
-    # 본문 텍스트. default_title_prefix / default_title_suffix 폴백 체인은
-    # 글·홈·카테고리와 동일하게 적용된다. site.yaml 의 키는 같은 이름.
-    error_404_title: str = 'Not Found'
-    search_title: str = 'Search'
     # v0.5.1: 이미지 자동 최적화 정책 (WebP + 다중 해상도 + lazy loading).
     images: ImageConfig = field(default_factory=ImageConfig)
     # v0.8.3: schema.org JSON-LD 구조화 데이터 사이트 전역 토글.
@@ -258,6 +276,12 @@ class SiteConfig:
     # 빈 문자열/키 부재 시 자동 비활성 — site.yaml 에 `google_adsense:`
     # 블록 자체가 없으면 v1.1.2 와 동일한 동작 (광고 미통합).
     google_adsense: AdSenseConfig = field(default_factory=AdSenseConfig)
+    # v1.4.0: 글 푸터의 이전/다음 글 내비게이션 사이트 전역 토글. 기본 True.
+    # 글 단위 끄기는 두지 않는다 (사용자 결정 — 페이지 단위 토글은 의미 없음).
+    # 후보 sibling 풀: 같은 부모 폴더의 글(`Articles/Blog/A` 의 sibling 은
+    # 같은 `Blog/` 의 형제 글). noindex 글은 sibling 풀에서 제외 (자기 자신은
+    # 표시 가능 — UI 내비게이션은 색인 정책과 별개).
+    prev_next_enabled: bool = True
 
 
 @dataclass

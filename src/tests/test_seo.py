@@ -34,9 +34,6 @@ def _site(**overrides):
         default_title_suffix=' | Example',
         copyright_holder='Author',
         copyright_year_start=2020,
-        reserved_slugs=[],
-        warn_on_underscore_ref=True,
-        warn_on_missing_asset=True,
         description_truncate=160,
         robots_txt_main='',
     )

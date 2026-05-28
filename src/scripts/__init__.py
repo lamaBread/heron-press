@@ -1,4 +1,101 @@
-"""siheonlee.com v1.3.1 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.4.0 — 빌더 내부 모듈 묶음.
+
+v1.4.0 변경 — **여섯 묶음 기능·정리 릴리스** (코드 릴리스, dist 의도적 변경):
+  여섯 항목 (A · B · D · E · F+G+I · J) 의 묶음. C(목차) · H(description_truncate
+  사용처 해설) · K(OPcache 명문화) 는 문서 전용으로 README 에 반영. 사용자가
+  명시적으로 보류한 [[feedback_deferred_extensions]] (홈/카테고리 JSON-LD · 태그
+  색인 · 글 렌더 병렬화 등) 은 유지.
+
+  - **A. 이전/다음 글 nav (사이트 전역 토글)** — `site.yaml` 의 `prev_next:
+    enabled:` (기본 True). 같은 부모 폴더의 다른 글(자기 자신 제외) 을
+    `(date asc, slug)` 정렬해 prev=과거·next=미래로 두 카드 nav 를 글 본문 끝에
+    append. noindex 글은 sibling 풀에서 제외 (UI 내비게이션 ↔ 색인 정책 분리).
+    글 단위 끄기는 두지 않음 (페이지 단위 토글은 의미 없음). 한 쪽 (prev or
+    next) 만 있을 때는 빈 자리에 placeholder span 두어 대칭 유지.
+    구현: `Builder._build_sibling_index()` 가 _render_articles 진입 직후 1회
+    O(N log N) 인덱스 구축, `_render_prev_next_nav(article, idx)` 가 글마다
+    O(1) lookup + HTML 렌더. `body_html += nav_html` 로 페이지 본문에 흡수돼
+    캐시된 page_html 의 일부로 결정성 유지.
+
+  - **B. 글 끝 발행/수정 메타 한 줄** — 글 본문 마지막 section 아래 작고 모던한
+    `<div class="article-end-meta">` 1줄. 최초 발행일은 항상, `updated` 가
+    `date` 와 다를 때만 ' · YYYY-MM-DD 수정' 후반부 노출. semantic HTML
+    (`<time datetime>`) + 다크 모드 톤 매핑. 기존 글들이 마지막 section 안에
+    수동으로 적던 발행/수정 줄을 자동화 (사용자가 수동 줄을 점차 제거할 예정).
+    토글 없음 — 시스템 전역 기본.
+
+  - **D. 다크 모드** — CSS only, `@media (prefers-color-scheme: dark)` 한 블록.
+    토글 UI 없음 (OS/브라우저 설정을 그대로 신뢰 — 운영 의존성 최소 원칙).
+    body / section / footer / 링크 / pagination / nav-search / gallery / prev-
+    next / article-end-meta 의 color/background 만 다크 톤으로 매핑, 레이아웃·
+    그림자·투명은 그대로. 기존 라이트 규칙 무변경 (덮어쓰기 패턴).
+
+  - **E. 내부 링크 검증 (post-build)** — 빌드 마지막 (16단계 후) 단계 번호
+    없는 quiet check 로 `dist/<slug>/index.{html,php}` 의 `<a href="...">`
+    site-relative 링크 (`/...` 로 시작) 를 훑어 dist 에 대응 파일/디렉터리
+    인덱스가 없으면 글 단위 issue 로 보고. 외부 URL (http://·https://·//·
+    mailto:·tel:·javascript:·data:) 과 순수 앵커/쿼리 시작은 면제. fragment/
+    query 는 path 만 분리해 비교. 캐시 hit 글도 동일하게 검사 (dist 파일을
+    읽기 때문 — 결정적). 스코프 v1.4.0 = 글 페이지만 (홈/카테고리/404/search
+    는 빌더 자체 링크라 깨질 가능성 사실상 0). 헬퍼: `Builder._collect_dist
+    _urls()`, `_is_internal_link(href)`, `_validate_internal_links()`.
+
+  - **F+G+I. site.yaml 슬림화 — 다섯 키 → 코드 상수 / 항상-경고 / dead 폐기**:
+    - `reserved_slugs` → `Builder.RESERVED_SLUGS = frozenset({'assets',
+      'search'})` 코드 상수. 시스템 내재 제약 (`/assets/` 디렉터리·`/search.php`
+      엔드포인트) 이라 운영자가 바꿀 사유가 없고, site.yaml 에 둔 게 footgun
+      이었다 (운영자가 'search' 를 지우면 slug=search 글이 만들어져 검색이 깨짐).
+      충돌 시 _validate 가 더 명확한 issue 메시지 (충돌 경로 명시) 로 표시.
+    - `warn_on_underscore_ref` → 폐기, 항상 경고. `_` 접두 자산 참조는 dist 에
+      404 를 남기므로 끄고 싶을 사유 없음 (디버깅을 어렵게 만들 뿐).
+    - `warn_on_missing_asset` → 폐기 (dead config — 어디서도 읽지 않던 값).
+    - `error_404_title` → `Builder.DEFAULT_ERROR_404_TITLE = 'Not Found'`.
+      'Not Found' 외의 표현이 필요할 일이 없음 (다국어가 필요해지면 i18n
+      묶음을 도입하지 코드 상수 둘로 흩지 않는다).
+    - `search_title` → `Builder.DEFAULT_SEARCH_TITLE = 'Search'`. 같은 사유.
+    SiteConfig 의 다섯 필드 제거. 옛 site.yaml 에 키가 남아 있어도 _load_config
+    파서가 silently 무시 (compat shim 없이 안전 — v1.2.1 의 warn_on_stale
+    _updated 제거 선례). description_truncate 는 검토 결과 운영자가 향후 조정
+    할 가치가 남아 유지 — H 항목으로 README 에 사용처 명문화.
+
+  - **J. BuildReport "PHP 로 빌드된 글" 별도 카테고리** — issue/warning 이
+    아닌 *의도된 출력 보고*. 예상 사용자가 웹 개발자이므로 `imgBox/imgSlideBox`
+    외 살아 있는 PHP 가 본문에 남아 `index.php` 로 떨어지는 것은 작성자 의도
+    (배포 서버에 PHP 7.4+ 가 전제). 그래도 *어느 글이 .php 인지* 한눈에
+    가시화. `BuildReport.note_php_built(slug)` + `php_built` list + 별도
+    render 절 ("── PHP 로 빌드된 글 ──"). 빌드 콘솔 요약과 build-report.md
+    헤더에도 "PHP 빌드 N건" 카운트 노출. cache hit/miss 양 경로에서 등록 —
+    cache 가 output_ext 를 보존하므로 결정적.
+
+  - **C/H/K. README 전용 변경** (코드 무영향):
+    - C(자동 TOC) — README §18 "추가 업데이트 제안" 신설 절에 무엇·왜 보류·
+      구현 시 손댈 곳을 보관. 차후 결정의 출발점.
+    - H(`description_truncate` 사용처 해설) — §18 의 두 번째 항목으로 표 형식
+      문서화. *피드 요약 캡 한 가지 목적* 임을 명확화, 검색엔진 SERP·OG·
+      JSON-LD 등은 무관임을 표로 명시. 향후 코드 상수 승격 후보.
+    - K(OPcache 전제 명문화) — §12 검색 절에 "본 시스템의 검색은 OPcache 가
+      켜진 단일 PHP 파일을 전제" 임을 명시. 클라이언트 JS 로 옮기지 않는
+      사유 (첫 로드 인덱스 다운로드·JS 파싱·실행이 누적되어 첫 검색이
+      느려짐 — 모든 방문자에게 즉답을 보장하지 못함) 를 명문화.
+
+  무결성 = **코드 릴리스 형·dist 의도적 변경형** (정본 Articles 고정, 직전
+  코드 복사본 `siheonlee.com_v1.3.1` 대비 *열거된* diff + 결정성 2회 동일):
+    - 글 47 페이지 모두 본문 끝에 article-end-meta(`<div class="article-end-
+      meta">`) + (sibling 이 있는 글에 한해) prev-next-nav(`<nav class="prev-
+      next-nav">`) 두 요소가 새로 들어감. 글이 카테고리 단독이면 prev/next
+      는 빈 nav (= 미출력). top-level About 도 단독 글이라 prev/next 없음.
+    - `assets/common_template.css` 가 v1.3.1 대비 article-end-meta + prev-
+      next + dark mode 3 블록 새로 추가.
+    - sitemap.xml / robots.txt / ads.txt / feed.atom / feed.rss / search.php /
+      dist/assets/* 는 byte-불변 (글 본문 외 모든 산출물 무변경).
+    - 다크 모드는 CSS only 라 HTML/PHP 변경 없음 (브라우저가 런타임 결정).
+    - F+G+I 의 site.yaml 키 제거는 운영자 입력 변화라 본 무결성 항목 아님
+      ([[feedback_siteconfig_not_code_integrity]]).
+  단위 390 → **424** (test_v140.py 신설 — SlimSiteConfigTests + Builder
+  ConstantsTests + PrevNextSiblingIndexTests + PrevNextLookupTests +
+  PrevNextRenderTests + ArticleEndMetaTests + DarkModeCssTests +
+  InternalLinkValidationTests + BuildReportPhpBuiltTests 9 클래스 34 tests).
+  진단 6/6 승계. `__version__` 1.3.1→1.4.0 의 dist 누수 0 (B1 유지).
 
 v1.3.1 변경 — v1.3.0 의 **안정화 릴리스** (문서 전용 — 빌드 로직·
 테스트·dist 산출물 무변경):
@@ -470,4 +567,4 @@ __version__:
   v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.3.1'
+__version__ = '1.4.0'

@@ -28,8 +28,6 @@ def _site():
         default_author='Author', default_og_image='/og.png',
         default_title_prefix='', default_title_suffix='',
         copyright_holder='Author', copyright_year_start=2020,
-        reserved_slugs=[],
-        warn_on_underscore_ref=False, warn_on_missing_asset=False,
         description_truncate=160,
         robots_txt_main='',
     )

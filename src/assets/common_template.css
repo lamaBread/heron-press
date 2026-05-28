@@ -703,3 +703,259 @@ section.listup-gallery > p {
     .imgSlideBox { width: 100%; }
 }
 
+
+/* ════════════════════════════════════════════════════════════════
+   Article end meta  (v1.4.0)
+   글 본문 끝의 발행/수정 한 줄. 작고 모던, 콘텐츠와 시각적으로 분리되되
+   페이지의 다른 메타 (nav-tracker / pagination) 와 같은 회색 톤.
+   ════════════════════════════════════════════════════════════════ */
+.article-end-meta {
+    text-align: right;
+    color: #AFAFAF;
+    font-size: 0.75em;
+    letter-spacing: 0.02em;
+    padding: 0.5em 1.25em 0;
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+.article-end-meta time {
+    color: inherit;
+}
+.article-end-meta-sep {
+    color: inherit;
+    opacity: 0.6;
+}
+
+
+/* ════════════════════════════════════════════════════════════════
+   Prev / Next article navigation  (v1.4.0)
+   글 본문 끝, 발행/수정 줄 아래. 같은 부모 폴더의 이전/다음 글 카드 두 장.
+   톤은 .gallery-tile / .pagination-nav 와 일관 (절제된 회색 액센트,
+   subtle hover, 흰 카드). 한 쪽만 있을 때도 대칭이 깨지지 않도록
+   placeholder span 이 빈 자리를 차지.
+   ════════════════════════════════════════════════════════════════ */
+.prev-next-nav {
+    display: flex;
+    gap: 10px;
+    padding: 0.5em 0 0.5em 0;
+    margin: 0.4em 10px 10px 10px;
+    /* section 카드와 같은 수평 margin (10px) — 정렬 일치 */
+    font-family: Arial, sans-serif;
+}
+.prev-next-link {
+    flex: 1 1 0;
+    min-width: 0;            /* flex 안에서 ellipsis 가 작동하려면 필요 */
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    padding: 0.7em 0.95em;
+    background-color: #fff;
+    border-radius: 6px;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.prev-next-link:hover,
+.prev-next-link:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    outline: none;
+}
+/* a:link 전역 컬러가 카드 전체 글씨를 푸르게 칠하지 않도록 */
+* a:link.prev-next-link {
+    color: inherit;
+}
+.prev-next-link.next {
+    text-align: right;
+}
+.prev-next-dir {
+    font-size: 0.72em;
+    color: #AFAFAF;
+    letter-spacing: 0.04em;
+}
+.prev-next-title {
+    font-size: 0.88em;
+    line-height: 1.35em;
+    color: #0172d5;
+    /* 두 줄까지만 (.gallery-tile-title 와 동일 정책) */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+}
+/* placeholder — 한 쪽이 빈 자리. 시각적 부피만 차지, 상호작용 없음. */
+.prev-next-placeholder {
+    background: transparent;
+    box-shadow: none;
+    pointer-events: none;
+}
+.prev-next-placeholder:hover,
+.prev-next-placeholder:focus-visible {
+    transform: none;
+    box-shadow: none;
+}
+
+@media screen and (max-width: 600px) {
+    .prev-next-nav {
+        gap: 8px;
+        margin: 0.4em 6px 8px 6px;
+    }
+    .prev-next-link {
+        padding: 0.6em 0.75em;
+    }
+    .prev-next-title {
+        font-size: 0.82em;
+        line-height: 1.3em;
+    }
+}
+
+
+/* ════════════════════════════════════════════════════════════════
+   Dark mode  (v1.4.0)
+   사용자 운영체제·브라우저 환경설정의 prefers-color-scheme: dark 를
+   따른다. 토글 UI 없음 — 시스템 기본을 그대로 신뢰 (운영 의존성 최소
+   원칙). 라이트 모드 톤(회색 액센트·흰 카드·푸른 링크)을 어두운 평면에
+   같은 의미 매핑으로 옮긴다.
+
+   접근 — 기존 라이트 규칙은 그대로 두고 어두운 화면일 때만 색만 덮어쓴다.
+   투명/그림자/레이아웃은 그대로. 이미지·imgBox 경계선만 시각 안정성을
+   위해 옅게 처리.
+   ════════════════════════════════════════════════════════════════ */
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: #1a1a1a;
+        color: #e6e6e6;
+    }
+    nav {
+        background-color: #1a1a1a;
+        color: #8a8a8a;
+    }
+    #TITLE {
+        color: #e6e6e6;
+    }
+    #nav-tracker a {
+        color: #e6e6e6;
+    }
+    nav > a {
+        color: #5ab8ff;
+    }
+    section {
+        background-color: #242424;
+        color: #e6e6e6;
+    }
+    section blockquote {
+        border-left-color: #555;
+        color: #c5c5c5;
+    }
+    section th, section td {
+        border-color: #555;
+    }
+    section pre,
+    section code {
+        background-color: #2f2f2f;
+        color: #e6e6e6;
+    }
+    section pre > code {
+        background-color: transparent;
+    }
+    .imgBox {
+        border-color: #555;
+    }
+    .imgSlideBox {
+        border-color: #555;
+    }
+    /* 색 매핑 — 라이트의 #0172d5 → 다크의 #5ab8ff (대비 확보) */
+    * a:link {
+        color: #5ab8ff;
+    }
+    .listup_module_title > a {
+        color: #5ab8ff;
+    }
+    .gallery-tile {
+        background-color: #242424;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+    .gallery-tile:hover,
+    .gallery-tile:focus-visible {
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+    }
+    .gallery-tile-thumb {
+        background: linear-gradient(135deg, #2a2a2a 0%, #1f1f1f 100%);
+    }
+    .gallery-tile-thumb-empty::after {
+        background:
+            radial-gradient(circle at 35% 35%, rgba(255,255,255,0.08), transparent 60%),
+            linear-gradient(135deg, #3a3a3a 0%, #2a2a2a 100%);
+    }
+    .gallery-tile-title {
+        color: #5ab8ff;
+    }
+    .gallery-tile-date {
+        color: #7d7d7d;
+    }
+    footer {
+        background-color: #1a1a1a;
+        color: #c5c5c5;
+    }
+    .nav-search input[type='search'] {
+        color: #8a8a8a;
+    }
+    .nav-search input[type='search']::placeholder {
+        color: #8a8a8a;
+    }
+    .nav-search input[type='search']:focus {
+        color: #e6e6e6;
+        border-bottom-color: #555;
+    }
+    .pagination-nav .pagi-btn {
+        color: #8a8a8a;
+    }
+    .pagination-nav .pagi-btn:hover:not(:disabled),
+    .pagination-nav .pagi-btn:focus {
+        color: #e6e6e6;
+    }
+    .pagination-nav .pagi-btn:disabled {
+        color: #444;
+    }
+    .pagination-nav .pagi-info {
+        color: #8a8a8a;
+    }
+    .search-snippet {
+        color: #b8b8b8;
+    }
+    .search-scope {
+        color: #8a8a8a;
+    }
+    .search-hint {
+        color: #8a8a8a;
+    }
+    mark {
+        background-color: #6c5a00;
+        color: #fff8c8;
+    }
+    .gap .subcat-link {
+        color: inherit;
+    }
+    /* v1.4.0: 글 끝 발행/수정 메타 줄 — 다크 톤 */
+    .article-end-meta {
+        color: #7d7d7d;
+    }
+    /* v1.4.0: prev/next 카드 — 다크 톤 */
+    .prev-next-link {
+        background-color: #242424;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+    .prev-next-link:hover,
+    .prev-next-link:focus-visible {
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+    }
+    .prev-next-dir {
+        color: #7d7d7d;
+    }
+    .prev-next-title {
+        color: #5ab8ff;
+    }
+}
+

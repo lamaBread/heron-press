@@ -68,8 +68,16 @@ class BuildReport:
     빌드 마지막 단계에서 `render()` 호출 시 stderr 에 정렬된 형태로 표시한다.
     아무 항목도 없으면 "보완 필요 없음" 메시지 한 줄. 항목이 있으면 글마다
     묶인 목록 + 끝에 요약 카운트.
+
+    v1.4.0: php_built — `index.php` 로 떨어진 글의 slug 목록 (등록 순). issue/
+    warning 이 아니라 *의도된 출력 보고* — 예상 사용자가 웹 개발자이므로
+    PHP fallback 은 시스템 결함이 아니라 작성 의도. 그래도 어느 글이 .php
+    로 떨어졌는지 한눈에 보기 위해 별도 카테고리로 표시한다 (render() 의
+    "── PHP 로 빌드된 글 ──" 절, render_markdown() 의 "## PHP 로 빌드된 글"
+    절 — issue/warning 절과 같은 톤이되 다른 의미라는 점을 위치·라벨로 구분).
     """
     entries: list = field(default_factory=list)
+    php_built: list = field(default_factory=list)
 
     # ── 등록 메소드 ────────────────────────────────────────
 
@@ -99,6 +107,17 @@ class BuildReport:
             location=location, severity='warning',
         ))
 
+    # v1.4.0: PHP 로 빌드된 글 등록.
+    def note_php_built(self, slug: str):
+        """글이 `index.php` 로 떨어졌음을 기록 (중복 자동 제거, 등록 순 보존).
+
+        호출은 글 1건당 1회 (cache hit/miss 양쪽 모두). 슬러그가 이미 있으면
+        no-op. 정렬은 빌드 종료 시 render() / render_markdown() 가 표시 단계
+        에서 (사람 가독성 위해) slug 알파벳순으로 일괄 정렬한다.
+        """
+        if slug and slug not in self.php_built:
+            self.php_built.append(slug)
+
     # ── 조회/카운트 ────────────────────────────────────────
 
     def issue_count(self) -> int:
@@ -106,6 +125,9 @@ class BuildReport:
 
     def warning_count(self) -> int:
         return sum(1 for e in self.entries if e.severity == 'warning')
+
+    def php_built_count(self) -> int:
+        return len(self.php_built)
 
     # ── 렌더 ───────────────────────────────────────────────
 
@@ -128,9 +150,11 @@ class BuildReport:
         """
         issues = [e for e in self.entries if e.severity == 'issue']
         warnings = [e for e in self.entries if e.severity == 'warning']
+        php_built = sorted(set(self.php_built))
 
-        if not issues and not warnings:
-            print('빌드 리포트: 보완 필요 / 살펴볼 사항 없음.', file=out)
+        if not issues and not warnings and not php_built:
+            print('빌드 리포트: 보완 필요 / 살펴볼 사항 / PHP 빌드 글 없음.',
+                  file=out)
             return
 
         if issues:
@@ -153,12 +177,24 @@ class BuildReport:
                     if e.location:
                         print(f'        ({e.location})', file=out)
 
+        # v1.4.0: PHP 로 빌드된 글 목록 — issue/warning 이 아닌 의도된 출력
+        # 보고. 예상 사용자가 웹 개발자라 PHP fallback 은 결함이 아니지만
+        # "어느 글이 .php 인지" 가시화가 운영 가치.
+        if php_built:
+            print('', file=out)
+            print(f'── PHP 로 빌드된 글 ({len(php_built)}건) ──', file=out)
+            for slug in php_built:
+                print(f'  /{slug}/  (dist/{slug}/index.php)', file=out)
+
         print('', file=out)
-        print(
+        summary = (
             f'빌드 리포트 요약: 보완 필요 {self.issue_count()}건, '
-            f'살펴볼 사항 {self.warning_count()}건.',
-            file=out,
+            f'살펴볼 사항 {self.warning_count()}건'
         )
+        if php_built:
+            summary += f', PHP 빌드 {len(php_built)}건'
+        summary += '.'
+        print(summary, file=out)
 
     # ── 마크다운 직렬화 (v0.7.2) ───────────────────────────
 
@@ -176,9 +212,10 @@ class BuildReport:
         """
         issues = [e for e in self.entries if e.severity == 'issue']
         warnings = [e for e in self.entries if e.severity == 'warning']
+        php_built = sorted(set(self.php_built))
 
-        if not issues and not warnings:
-            return '_빌드 리포트: 보완 필요 / 살펴볼 사항 없음._'
+        if not issues and not warnings and not php_built:
+            return '_빌드 리포트: 보완 필요 / 살펴볼 사항 / PHP 빌드 글 없음._'
 
         out = []
 
@@ -202,10 +239,26 @@ class BuildReport:
             out.append('')
             _emit_group(warnings)
 
-        out.append(
+        # v1.4.0: PHP 로 빌드된 글 목록.
+        if php_built:
+            out.append(f'## PHP 로 빌드된 글 ({len(php_built)}건)')
+            out.append('')
+            out.append('_의도된 출력 — `imgBox`/`imgSlideBox` 외 살아 있는 PHP '
+                       '구문이 있는 글은 `index.php` 로 떨어진다. 시스템 결함이 '
+                       '아니라 작성자(웹 개발자)의 명시적 선택._')
+            out.append('')
+            for slug in php_built:
+                out.append(f'- `/{slug}/` → `dist/{slug}/index.php`')
+            out.append('')
+
+        summary = (
             f'> **빌드 리포트 요약**: 보완 필요 {self.issue_count()}건, '
-            f'살펴볼 사항 {self.warning_count()}건.'
+            f'살펴볼 사항 {self.warning_count()}건'
         )
+        if php_built:
+            summary += f', PHP 빌드 {len(php_built)}건'
+        summary += '.'
+        out.append(summary)
         return '\n'.join(out)
 
 

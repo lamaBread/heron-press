@@ -443,6 +443,9 @@ SITE_YAML_MIN = (
     "images:\n"
     "  enabled: false\n"
     "  lazy_loading: false\n"
+    # v1.4.0: reserved_slugs 는 site.yaml 키에서 폐기됐다 (코드 상수 RESERVED_SLUGS).
+    # 옛 key 가 site.yaml 에 남아 있어도 _load_config 가 silently 무시 — 호환성
+    # 회귀 가드로 한 줄 둔다 (파서가 깨지지 않아야 함).
     "reserved_slugs: [assets, search]\n"
 )
 
