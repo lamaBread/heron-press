@@ -1,5 +1,23 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.3.1 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.4.1 — PHP 기반 경량 웹 사이트 생성기.
+
+v1.4.1 변경 — v1.4.0 의 **안정화 패치** (코드 릴리스이되 dist byte-불변):
+  v1.4.0 신설 `Builder._LINK_HREF_RE` 의 `\\bhref=` 가 `data-href=` 까지
+  오매칭하던 결함을 `\\s+href=` 로 교정. 정규식은 reporting validator 만
+  사용해 dist 누수 0 — v1.4.0 dist 와 `diff -r` 빈 출력 (787=787, sha256
+  88d9587c…). 단위 425→**429** (test_v140.py InternalLinkValidationTests
+  에 회귀 가드 4 추가), 진단 6/6 승계. `__version__` 1.4.0→1.4.1 dist
+  누수 0 (B1).
+
+v1.4.0 변경 — **여섯 묶음 기능·정리 릴리스** (코드 릴리스, dist 의도적 변경):
+  A 이전/다음 글 nav (사이트 전역 prev_next.enabled) · B 글 끝 발행/수정
+  메타 한 줄 (.article-end-meta) · D 다크 모드 (prefers-color-scheme,
+  토글 UI 없음) · E 내부 링크 검증 (post-build) · F+G+I site.yaml 5 키
+  코드 상수 승격 (RESERVED_SLUGS / DEFAULT_*_TITLE / 항상-경고) · J
+  BuildReport "PHP 로 빌드된 글" 별도 카테고리 (의도된 출력 보고).
+  C/H/K 는 README 전용 (§18 신설 = TOC 후보 · description_truncate
+  해설 · OPcache 명문화). 단위 390→**425** (test_v140.py 신설 9 클래스
+  35 tests), 진단 6/6 승계.
 
 v1.3.1 변경 — v1.3.0 의 **안정화 릴리스** (문서 전용 — 빌드 로직·
 테스트·dist 산출물 무변경):

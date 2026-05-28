@@ -462,6 +462,78 @@ class InternalLinkValidationTests(unittest.TestCase):
                 any('/realtarget/' in m for m in msgs),
                 msg=f'정상 링크가 잘못 보고됨: {msgs}')
 
+    # ── v1.4.1: 정규식 회귀 가드 (data-href / 진짜 href 만 추출) ──
+
+    def test_href_regex_ignores_data_href_only(self):
+        """`<a data-href="...">` 만 있을 때 진짜 href 가 없으므로 추출 0건.
+
+        v1.4.0 `\\bhref=` 가 `-` ~ `h` 사이도 워드 경계로 인식해 data-href 를
+        href 로 오매칭하던 회귀. v1.4.1 `\\s+href=` 로 속성 경계 정확화.
+        """
+        rx = Builder._LINK_HREF_RE
+        self.assertEqual(rx.findall('<a data-href="/foo">x</a>'), [])
+
+    def test_href_regex_picks_real_href_when_both_present(self):
+        """`href` 와 `data-href` 가 같이 있어도 진짜 href 만 추출."""
+        rx = Builder._LINK_HREF_RE
+        # 진짜 href 가 먼저
+        self.assertEqual(
+            rx.findall('<a href="/real" data-href="/fake">x</a>'),
+            ['/real'],
+        )
+        # data-href 가 먼저 (v1.4.0 greedy 가 마지막 hit 를 가져가던 케이스)
+        self.assertEqual(
+            rx.findall('<a data-href="/fake" href="/real">x</a>'),
+            ['/real'],
+        )
+
+    def test_href_regex_handles_newline_and_uppercase(self):
+        """줄바꿈 공백 + 대문자 태그/속성도 매칭 (HTML 관용)."""
+        rx = Builder._LINK_HREF_RE
+        self.assertEqual(rx.findall('<a\nhref="/x">y</a>'), ['/x'])
+        self.assertEqual(rx.findall('<A HREF="/upper">y</A>'), ['/upper'])
+
+    def test_validate_internal_links_does_not_flag_data_href(self):
+        """`<a data-href="/no-such-page">` 만 있는 경우 false-positive 금지.
+
+        v1.4.0 의 `\\bhref=` 가 data-href 의 값을 잘못 추출해 깨진 링크로
+        보고하던 회귀. 진짜 href 가 아예 없으므로 issue 0건이어야 한다.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            dist = base / 'dist'
+            (dist / 'srcart').mkdir(parents=True)
+            (dist / 'srcart' / 'index.html').write_text(
+                '<html><body>'
+                '<a data-href="/no-such-page/">data only</a>'
+                '<a href="/real/" data-href="/whatever/">real href</a>'
+                '</body></html>',
+                encoding='utf-8',
+            )
+            (dist / 'real').mkdir()
+            (dist / 'real' / 'index.html').write_text('x', encoding='utf-8')
+
+            b = Builder.__new__(Builder)
+            b.dist = dist
+            b.report = BuildReport()
+            b.articles = [
+                _article('srcart', '2026-01-01',
+                         category_path=['Blog', 'srcart']),
+            ]
+            b._console = []
+            b._live_pending = False
+            b._live_lastlen = 0
+            b._live_cols = 78
+            b._stdout_isatty = False
+            b._validate_internal_links()
+
+            msgs = [e.message for e in b.report.entries
+                    if 'srcart' in (e.target or '')]
+            # data-href 의 값(/no-such-page/) 은 절대 깨진 링크로 잡혀선 안 됨.
+            self.assertFalse(
+                any('/no-such-page/' in m or '/whatever/' in m for m in msgs),
+                msg=f'data-href 값이 잘못 보고됨: {msgs}')
+
 
 # ════════════════════════════════════════════════════════════════
 # J — BuildReport PHP-built articles category

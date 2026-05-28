@@ -1,4 +1,23 @@
-"""siheonlee.com v1.4.0 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.4.1 — 빌더 내부 모듈 묶음.
+
+v1.4.1 변경 — v1.4.0 의 **안정화 패치** (코드 릴리스이되 dist byte-불변):
+  v1.4.0 신설 내부 링크 검증 헬퍼 `Builder._LINK_HREF_RE` 의 *진짜* href 만
+  잡도록 정규식 수정. v1.4.0 의 `\\bhref=` 는 `\\b` 가 `-` ↔ `h` 사이도
+  워드 경계로 인식해 `data-href=` 같은 데이터 속성을 href 로 오매칭했고,
+  greedy `[^>]*` 가 마지막 매치를 가져가 `<a href="/real" data-href="/fake">`
+  에서 진짜 href 가 아닌 `/fake` 를 추출하던 결함. v1.4.1 에서 `\\s+href=`
+  로 바꿔 속성 경계를 정확히 인식 — `data-*` 류는 자동 제외, 진짜 href
+  만 잡힌다. 산출물(dist) 에는 영향 없음 (정규식은 reporting validator 만
+  사용 — dist 생성 경로에는 미참조). 회귀 가드 4 신설 (regex 단위 3 + 통합
+  1: data-href 만 있을 때 false-positive 금지, 두 속성 공존 시 진짜 href
+  추출, 줄바꿈/대문자 매칭, 통합 검증에서 data-href 미보고).
+  무결성 = **코드 릴리스 형이되 dist byte-불변 형** (v1.2.1 / v1.0.2 선례) —
+  직전 코드 복사본 `siheonlee.com_v1.4.0/dist` 와 v1.4.1 클린 재빌드 dist
+  가 **787 = 787 · 0 added / 0 removed / 0 changed** (`diff -r` 빈 출력 +
+  combined sha256 일치). 결정성 2회 동일 (sha256 동일), 단위
+  **425 → 429** (test_v140.py 의 `InternalLinkValidationTests` 에 4 회귀
+  가드 추가), 진단 6/6 승계. `__version__` 1.4.0→1.4.1 의 dist 누수 0
+  (B1 유지).
 
 v1.4.0 변경 — **여섯 묶음 기능·정리 릴리스** (코드 릴리스, dist 의도적 변경):
   여섯 항목 (A · B · D · E · F+G+I · J) 의 묶음. C(목차) · H(description_truncate
@@ -91,10 +110,10 @@ v1.4.0 변경 — **여섯 묶음 기능·정리 릴리스** (코드 릴리스, 
     - 다크 모드는 CSS only 라 HTML/PHP 변경 없음 (브라우저가 런타임 결정).
     - F+G+I 의 site.yaml 키 제거는 운영자 입력 변화라 본 무결성 항목 아님
       ([[feedback_siteconfig_not_code_integrity]]).
-  단위 390 → **424** (test_v140.py 신설 — SlimSiteConfigTests + Builder
+  단위 390 → **425** (test_v140.py 신설 — SlimSiteConfigTests + Builder
   ConstantsTests + PrevNextSiblingIndexTests + PrevNextLookupTests +
   PrevNextRenderTests + ArticleEndMetaTests + DarkModeCssTests +
-  InternalLinkValidationTests + BuildReportPhpBuiltTests 9 클래스 34 tests).
+  InternalLinkValidationTests + BuildReportPhpBuiltTests 9 클래스 35 tests).
   진단 6/6 승계. `__version__` 1.3.1→1.4.0 의 dist 누수 0 (B1 유지).
 
 v1.3.1 변경 — v1.3.0 의 **안정화 릴리스** (문서 전용 — 빌드 로직·
@@ -567,4 +586,4 @@ __version__:
   v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.4.0'
+__version__ = '1.4.1'

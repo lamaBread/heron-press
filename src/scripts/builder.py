@@ -3670,8 +3670,13 @@ class Builder:
     # 만든 링크라 깨질 가능성이 사실상 0 (글 slug 가 _validate 에서 이미
     # 검증). 후속 릴리스에서 필요 시 확장.
 
+    # v1.4.1: 진짜 href 만 잡도록 `\s+href=` (앞에 공백 필수). v1.4.0 의
+    # `\bhref=` 는 `-` / `h` 사이도 워드 경계라 `data-href` 같은 데이터 속성을
+    # 오매칭했고 (greedy `[^>]*` 가 마지막 hit 를 가져가) `<a href="/A"
+    # data-href="/B">` 에서 진짜 href 가 아닌 `/B` 를 추출했다. `\s+` 로 바꾸면
+    # 속성 경계를 정확히 인식해 data-* 류는 자동 제외, 진짜 href 만 잡힌다.
     _LINK_HREF_RE = re.compile(
-        r'<a\b[^>]*\bhref=[\'"]([^\'"]+)[\'"]',
+        r'<a\b[^>]*?\s+href=[\'"]([^\'"]+)[\'"]',
         re.IGNORECASE,
     )
 
