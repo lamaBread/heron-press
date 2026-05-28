@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
-"""siheonlee.com v1.3.0 — PHP 기반 경량 웹 사이트 생성기.
+"""siheonlee.com v1.3.1 — PHP 기반 경량 웹 사이트 생성기.
+
+v1.3.1 변경 — v1.3.0 의 **안정화 릴리스** (문서 전용 — 빌드 로직·
+테스트·dist 산출물 무변경):
+  README §16 v1.3.0 행의 `단위 374→3xx` 플레이스홀더를 실측 `374→390`
+  으로 확정 (test_v130_speed.py 16 신설 = StepTimingTests + ImageWorkerTests
+  + PrunePassUnificationTests + ParityCacheKeyTests + ParityCacheRoundTripTests
+  5 클래스). 같은 placeholder 가 src/scripts/__init__.py docstring 의
+  v1.3.0 블록 및 v1.1.1 블록 (`313→3xx`, 실측 337) 에도 남아 있던 것을
+  일괄 정합. README 의 stale 표기 정합: §3 트리 폴더명·§15 한계 헤더·
+  바닥글 버전·날짜. 무결성 = **문서 전용 형** (v0.8.4↔v0.8.3 ·
+  v1.2.0↔v1.1.5 선례) — v1.3.1 클린 재빌드 dist 가 직전 코드 복사본
+  `siheonlee.com_v1.3.0/dist` 와 byte-완전 동일 (787=787, combined sha256
+  7535b692…). `__version__` 1.3.0→1.3.1 dist 누수 0 (B1). 단위 390
+  · 진단 6/6 승계.
 
 v1.3.0 변경 — **빌드 속도 향상** (코드 릴리스이되 dist byte-불변):
   네 항목 묶음 (A·B·D·E). 코드는 바뀌나 산출물은 v1.2.2 와 byte-완전

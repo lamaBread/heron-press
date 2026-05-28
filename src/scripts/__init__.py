@@ -1,4 +1,22 @@
-"""siheonlee.com v1.3.0 — 빌더 내부 모듈 묶음.
+"""siheonlee.com v1.3.1 — 빌더 내부 모듈 묶음.
+
+v1.3.1 변경 — v1.3.0 의 **안정화 릴리스** (문서 전용 — 빌드 로직·
+테스트·dist 산출물 무변경):
+  README §16 v1.3.0 행의 `단위 374→3xx` 플레이스홀더를 실측 `374→390`
+  으로 확정 (test_v130_speed.py 16 신설 = StepTimingTests + ImageWorkerTests
+  + PrunePassUnificationTests + ParityCacheKeyTests + ParityCacheRoundTripTests
+  5 클래스; 라이브 실행·[1] 모두 390 일치). 같은 placeholder 가 이
+  __init__.py docstring 의 v1.3.0 블록과 v1.1.1 블록(`313→3xx`, 실측 337)
+  에도 남아 있던 것을 일괄 정합. README 의 stale 표기도 정합: §3 트리
+  폴더명 `siheonlee.com_v1.2.2/` → `siheonlee.com_v1.3.1/`, §15 한계
+  헤더 `(v1.2.2)` → `(v1.3.1)`, 바닥글 버전·날짜 (v1.2.2 / 2026-05-21
+  → v1.3.1 / 2026-05-28). 한 줄 요약 박스도 v1.3.1 한 줄로 갱신.
+  무결성 = **문서 전용 형** (v0.8.4↔v0.8.3 · v1.2.0↔v1.1.5 선례) —
+  정본 Articles + 같은 site.yaml 의 v1.3.1 클린 재빌드 dist sha256 이
+  직전 코드 복사본 `siheonlee.com_v1.3.0/dist` 와 byte-완전 동일
+  (787=787, combined sha256 7535b6923182a54b358ff6ec0b6d285cc0dd7104579ff74fd4d7361e06b4832d).
+  `__version__` 1.3.0→1.3.1 의 dist 누수 0 (B1 유지 — v0.8.2 디커플링
+  이후 generator 가 버전-free). 단위 390 · 진단 6/6 승계.
 
 v1.3.0 변경 — **빌드 속도 향상** (코드 릴리스이되 dist byte-불변):
   네 항목 (A·B·D·E) 의 묶음. C 는 ROI 미흡으로 보류 ([[feedback_deferred_extensions]] ③ 유지).
@@ -34,9 +52,10 @@ v1.3.0 변경 — **빌드 속도 향상** (코드 릴리스이되 dist byte-불
   무결성 = **코드 릴리스 형이되 dist byte-불변** 형 — v1.2.2 shipped dist
   와 v1.3.0 클린 재빌드 dist 가 787=787 file, 0 changed byte-완전 동일
   (정본 Articles + 같은 site.yaml). 결정성 2회 동일 (진단 [2] PASS),
-  단위 374 → 3xx (NEW: ImageWorkerTests + ParityCacheTests + StepTimingTests),
-  진단 6/6 승계 ([6] ld+json 47/46 그대로). `__version__` 1.2.2→1.3.0 의
-  dist 누수 0 (B1 유지).
+  단위 374 → 390 (NEW: test_v130_speed.py — StepTimingTests + ImageWorkerTests
+  + PrunePassUnificationTests + ParityCacheKeyTests + ParityCacheRoundTripTests
+  5 클래스 16 테스트), 진단 6/6 승계 ([6] ld+json 47/46 그대로).
+  `__version__` 1.2.2→1.3.0 의 dist 누수 0 (B1 유지).
 
 
 이 패키지는 v0.8.1 부터 `src/scripts/` 에 있다 (최상위 정리 — 빌더
@@ -219,9 +238,9 @@ __version__:
   살아있는 PHP 가 사라진 페이지는 `index.php`→`index.html` 로
   바뀐다. admin 미리보기(render_one.py)도 같은 site.yaml php_globals
   를 읽어 본문 충실도 유지(test_render_one 패리티 게이트 갱신).
-  단위 313→3xx (test_markdown 에 ParsePhpGlobals/SimulatePhp 신설,
-  실측치는 §16/diagnostics 참조), 진단 6/6 승계. `__version__`
-  1.1.0→1.1.1 의 dist 누수 0 (B1 유지).
+  단위 313→337 (test_markdown 에 ParsePhpGlobalsTests + SimulatePhpTests
+  21 신설), 진단 6/6 승계. `__version__` 1.1.0→1.1.1 의 dist 누수 0
+  (B1 유지).
 
   v1.1.2 는 **배포 사고 수정 + imgSlideBox 페이지네이션형 재디자인**
   릴리스 — CSS·JS 두 자산이 바뀌므로 dist 가 바뀐다 (B1 유지라
@@ -451,4 +470,4 @@ __version__:
   v1.1.2 의 head 와 동일 라인 구성으로 떨어진다.
 """
 
-__version__ = '1.3.0'
+__version__ = '1.3.1'
