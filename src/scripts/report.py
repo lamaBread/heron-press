@@ -1,41 +1,26 @@
-"""빌드 리포트 — 모든 경고/검증 실패를 모아 빌드 종료 시 한 번에 표시 (v0.5.5 신설).
+"""Build report — collects every warning/validation failure and shows them all
+at the end of the build.
 
-설계 사상 — 본문 ↔ 메타데이터 분리 원칙 + fail-soft:
-  v0.5.5 이전까지 빌더는 meta.yaml 속성 부족/형식 오류를 `die()` 로 처리해
-  *첫 위반에서 빌드를 abort* 했다. 사용자가 여러 글의 meta.yaml 을 한꺼번에
-  손보고 싶어도 한 글 고치고 빌드, 다시 한 글 고치고 빌드... 의 패턴을 반복
-  해야 했다. v0.5.5 부터 정책 전환:
+Design — content/metadata separation + fail-soft:
+  Missing fields, empty strings, or format errors in meta.yaml do NOT abort the
+  build; the affected article is excluded (or partially emitted) and recorded in
+  the report. Only system faults (templates/ missing, no Articles/, Pillow not
+  installed, ...) call abort(). The build always runs to completion and lists
+  every follow-up point at once.
 
-    - meta.yaml 의 필드 부족 / 빈 문자열 / 형식 오류는 **빌드를 중단시키지
-      않는다**. 해당 글만 빌드 산출물에서 제외 (또는 부분 출력) 하고 리포트에
-      기록한다.
-    - 시스템 결함 (templates/ 못 찾음, Articles/ 없음, Pillow 미설치 등) 만
-      `abort()` 로 빌드 중단. 콘텐츠 측 작성자의 실수와 시스템 측 결함을
-      구분한다.
-    - 빌드는 어떤 경우에도 끝까지 완성된다. 종료 시 터미널에 미완성 글
-      목록을 몰아서 표시 — 사용자가 한 번에 모든 보완 지점을 파악.
+Categories:
+  - issue   — author must fix; build continues but the article's output may be
+              partially missing (e.g. empty seo.description, bad date, duplicate
+              slug).
+  - warning — output is fine, but worth a look (e.g. non-ASCII folder slug
+              conversion, empty category).
+  - abort   — system fault that prevents building at all; the only case that
+              exits immediately.
 
-분류:
-  - issue (보완 필요): 작성자가 손봐야 할 글 단위 문제. 빌드는 계속 진행
-    되지만 해당 글의 산출물이 부분적으로 누락될 수 있음.
-    예: `seo.description` 필드가 빈 문자열, `tags` 가 list 가 아님,
-       slug 중복, date 형식 오류 등.
-  - warning (조언): 빌드 산출물은 정상이지만 사용자가 한 번 살펴볼 가치가
-    있는 사항. 예: 비ASCII 폴더명 슬러그 변환, 빈 카테고리 등.
-  - abort (시스템 결함): 빌드 자체를 진행할 수 없는 상황. 이 경우만 즉시
-    `sys.exit(1)`. 콘텐츠 작성자의 통제 밖이라 리포트로 모을 의미가 없음.
-
-사용 패턴:
-  - Builder 가 `self.report = BuildReport()` 를 보유.
-  - 콘텐츠 결함은 빌더 메소드 `self._issue(...)` / `self._warning(...)` 로
-    라우팅. 시스템 결함만 `abort()` 호출 (즉시 종료).
-  - 빌드 마지막 단계에서 `self.report.render()` 가 정렬된 리포트 출력.
-
-이력 주의 (v0.8.2): 위 per-Builder 라우팅은 v0.5.5 에 *설계·문서화* 됐으나
-구현은 v0.6.5~v0.8.1 동안 모듈 전역 `_report` (builder.py) + build() 진입
-자동 reset 이었다. v0.8.2 에서 비로소 이 docstring 대로 `self.report` +
-`self._issue`/`self._warning` 로 실구현 (모듈 전역·전역 함수 폐지) — 두
-Builder 가 리포트를 공유하지 않아 동시 빌드가 가능하다.
+Usage:
+  Builder holds `self.report = BuildReport()`. Content faults route through the
+  builder methods `self._issue(...)` / `self._warning(...)`; only system faults
+  call abort(). The final build step calls `self.report.render()`.
 """
 import sys
 from dataclasses import dataclass, field
@@ -45,14 +30,13 @@ from typing import Optional
 
 @dataclass
 class ReportEntry:
-    """리포트 한 항목.
+    """One report item.
 
     scope    — 'article' / 'category' / 'home' / 'site'.
-               글 단위 / 카테고리 단위 / 전역 메타 단위로 묶어 표시.
-    target   — 무엇에 대한 항목인가. 보통 글의 slug 또는 카테고리 경로 (str).
-    message  — 사람이 읽을 한 줄 설명.
-    location — 관련 파일 경로 (있으면 표시).
-    severity — 'issue' (보완 필요, 산출물 누락) / 'warning' (조언, 산출물 정상).
+    target   — what the item is about (usually an article slug or category path).
+    message  — one-line human-readable description.
+    location — related file path, if any.
+    severity — 'issue' (needs fixing, output may be missing) / 'warning' (output fine).
     """
     scope: str
     target: str
@@ -63,23 +47,22 @@ class ReportEntry:
 
 @dataclass
 class BuildReport:
-    """빌드 한 회의 모든 경고/문제를 모아두는 컬렉터.
+    """Collector for all warnings/problems of a single build.
 
-    빌드 마지막 단계에서 `render()` 호출 시 stderr 에 정렬된 형태로 표시한다.
-    아무 항목도 없으면 "보완 필요 없음" 메시지 한 줄. 항목이 있으면 글마다
-    묶인 목록 + 끝에 요약 카운트.
+    `render()` (called in the final build step) prints a grouped, sorted list to
+    stderr; `render_markdown()` serializes the same for build-report.md. With no
+    entries it emits a single "nothing to do" line.
 
-    v1.4.0: php_built — `index.php` 로 떨어진 글의 slug 목록 (등록 순). issue/
-    warning 이 아니라 *의도된 출력 보고* — 예상 사용자가 웹 개발자이므로
-    PHP fallback 은 시스템 결함이 아니라 작성 의도. 그래도 어느 글이 .php
-    로 떨어졌는지 한눈에 보기 위해 별도 카테고리로 표시한다 (render() 의
-    "── PHP 로 빌드된 글 ──" 절, render_markdown() 의 "## PHP 로 빌드된 글"
-    절 — issue/warning 절과 같은 톤이되 다른 의미라는 점을 위치·라벨로 구분).
+    php_built lists the slugs that fell back to `index.php`. This is not an
+    issue/warning but an *intended-output* report: the expected user is a web
+    developer, so a PHP fallback is a deliberate choice, not a fault — it is
+    shown separately (own section, distinct label) just to make ".php articles"
+    visible at a glance.
     """
     entries: list = field(default_factory=list)
     php_built: list = field(default_factory=list)
 
-    # ── 등록 메소드 ────────────────────────────────────────
+    # ── registration ──────────────────────────────────────
 
     def issue(
         self,
@@ -88,7 +71,7 @@ class BuildReport:
         message: str,
         location: Optional[Path] = None,
     ):
-        """글/카테고리 단위 보완 필요 항목. 빌드는 계속, 산출물 일부 누락 가능."""
+        """Article/category-level item to fix. Build continues; output may be partial."""
         self.entries.append(ReportEntry(
             scope=scope, target=target, message=message,
             location=location, severity='issue',
@@ -101,24 +84,22 @@ class BuildReport:
         message: str,
         location: Optional[Path] = None,
     ):
-        """산출물은 정상이지만 사용자가 한 번 살펴볼 사항."""
+        """Output is fine, but worth a look."""
         self.entries.append(ReportEntry(
             scope=scope, target=target, message=message,
             location=location, severity='warning',
         ))
 
-    # v1.4.0: PHP 로 빌드된 글 등록.
     def note_php_built(self, slug: str):
-        """글이 `index.php` 로 떨어졌음을 기록 (중복 자동 제거, 등록 순 보존).
+        """Record that an article fell back to `index.php` (dedup, insertion order).
 
-        호출은 글 1건당 1회 (cache hit/miss 양쪽 모두). 슬러그가 이미 있으면
-        no-op. 정렬은 빌드 종료 시 render() / render_markdown() 가 표시 단계
-        에서 (사람 가독성 위해) slug 알파벳순으로 일괄 정렬한다.
+        Called once per article (cache hit and miss alike); no-op if the slug is
+        already present. render()/render_markdown() sort by slug for display.
         """
         if slug and slug not in self.php_built:
             self.php_built.append(slug)
 
-    # ── 조회/카운트 ────────────────────────────────────────
+    # ── queries ───────────────────────────────────────────
 
     def issue_count(self) -> int:
         return sum(1 for e in self.entries if e.severity == 'issue')
@@ -129,25 +110,11 @@ class BuildReport:
     def php_built_count(self) -> int:
         return len(self.php_built)
 
-    # ── 렌더 ───────────────────────────────────────────────
+    # ── rendering ──────────────────────────────────────────
 
     def render(self, out=sys.stderr):
-        """빌드 종료 시 리포트를 stderr 에 표시.
-
-        구조:
-          ── 보완이 필요한 글 / 카테고리 ──────────
-          [issue]    {scope}:{target}
-            - {message}
-              ({location})
-            ...
-
-          ── 살펴볼 사항 ──────────────────────────
-          [warning]  {scope}:{target}
-            - {message}
-            ...
-
-          요약: 보완 필요 N건, 살펴볼 사항 M건.
-        """
+        """Print the report to stderr at the end of the build (issues, then
+        warnings, then PHP-built articles, then a summary count)."""
         issues = [e for e in self.entries if e.severity == 'issue']
         warnings = [e for e in self.entries if e.severity == 'warning']
         php_built = sorted(set(self.php_built))
@@ -177,9 +144,9 @@ class BuildReport:
                     if e.location:
                         print(f'        ({e.location})', file=out)
 
-        # v1.4.0: PHP 로 빌드된 글 목록 — issue/warning 이 아닌 의도된 출력
-        # 보고. 예상 사용자가 웹 개발자라 PHP fallback 은 결함이 아니지만
-        # "어느 글이 .php 인지" 가시화가 운영 가치.
+        # Intended-output report, not issue/warning: the expected user is a web
+        # developer, so a PHP fallback is not a fault — but show which articles
+        # became .php for operational visibility.
         if php_built:
             print('', file=out)
             print(f'── PHP 로 빌드된 글 ({len(php_built)}건) ──', file=out)
@@ -196,19 +163,16 @@ class BuildReport:
         summary += '.'
         print(summary, file=out)
 
-    # ── 마크다운 직렬화 (v0.7.2) ───────────────────────────
+    # ── markdown serialization ─────────────────────────────
 
     def render_markdown(self) -> str:
-        """render() 와 같은 그룹화/정렬을 마크다운 문자열로 (v0.7.2).
+        """Markdown form of render() for build-report.md (same grouping/order:
+        issues -> warnings -> summary).
 
-        터미널에만 뜨던 리포트를 build-report.md 로도 남기기 위한 직렬화.
-        구조는 render() 와 1:1 — issue 절 → warning 절 → 요약. 항목이 하나도
-        없으면 한 줄 안내. 반환값은 호출자 (Builder._write_build_report) 가
-        문서의 한 블록으로 끼워 넣는다 (앞뒤 빈 줄은 호출자가 관리).
-
-        message 는 사람이 쓴 한국어 산문이라 별도 escape 하지 않고 (render()
-        와 parity), location 만 인라인 코드 (`...`) 로 감싸 경로가 깨지지
-        않게 한다.
+        Messages are human-written Korean prose, left unescaped (parity with
+        render()); only location is wrapped in inline code so paths don't break.
+        The caller (Builder._write_build_report) embeds the return value as one
+        block (surrounding blank lines are the caller's job).
         """
         issues = [e for e in self.entries if e.severity == 'issue']
         warnings = [e for e in self.entries if e.severity == 'warning']
@@ -239,7 +203,6 @@ class BuildReport:
             out.append('')
             _emit_group(warnings)
 
-        # v1.4.0: PHP 로 빌드된 글 목록.
         if php_built:
             out.append(f'## PHP 로 빌드된 글 ({len(php_built)}건)')
             out.append('')
@@ -263,11 +226,11 @@ class BuildReport:
 
 
 def _group_by_target(entries: list) -> list:
-    """리포트 항목을 (scope, target) 기준으로 그룹화 — 같은 글의 여러 issue 가
-    한 헤더 아래 모이도록.
+    """Group report items by (scope, target) so multiple issues for one article
+    sit under one header.
 
-    헤더는 사람이 읽기 좋게 `[scope] target` 또는 `[scope]` (target 비어있는
-    경우) 형태로 포맷. 입력 순서를 보존한다 (Python 3.7+ dict insertion order).
+    Header is formatted as `[scope] target` (or `[scope]` when target is empty).
+    Insertion order is preserved (dict insertion order, Python 3.7+).
     """
     groups = {}
     for e in entries:
@@ -277,15 +240,15 @@ def _group_by_target(entries: list) -> list:
 
 
 # ════════════════════════════════════════════════════════════════
-# 시스템 결함 abort — 빌드를 즉시 중단할 때만 사용
+# System-fault abort — use only to stop the build immediately
 # ════════════════════════════════════════════════════════════════
 
 def abort(msg: str):
-    """시스템 결함 시 즉시 종료. 콘텐츠 작성자가 통제할 수 없는 상황
-    (템플릿 누락, Articles/ 디렉터리 없음, 외부 의존성 미설치 등) 만 해당.
+    """Exit immediately on a system fault outside the author's control
+    (missing template, no Articles/ directory, uninstalled dependency, ...).
 
-    meta.yaml 의 속성 부족이나 형식 오류 같은 콘텐츠 측 문제는 abort 대신
-    `BuildReport.issue(...)` 로 기록하고 빌드를 계속 진행한다.
+    Content-side problems (missing meta.yaml fields, format errors) should be
+    recorded via BuildReport.issue(...) instead, letting the build continue.
     """
     print(f'[ABORT] {msg}', file=sys.stderr)
     print('빌드 중단 (시스템 결함).', file=sys.stderr)

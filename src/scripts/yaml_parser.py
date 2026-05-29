@@ -1,19 +1,20 @@
-"""stdlib-only YAML 부분 구현.
+"""Minimal stdlib-only YAML parser.
 
-지원 문법은 이 프로젝트에서 실제 사용되는 부분집합:
+Supports the subset actually used in this project:
   - key: value  (string, int, bool, null)
   - "quoted key": value
-  - key:        → null
+  - key:        -> null
   - key: "str" / 'str'
   - key: [a, b]  (inline list)
-  - key: [\n  a,\n  b\n]  (multi-line inline list; v1.2.2 추가)
+  - key: [\n  a,\n  b\n]  (multi-line inline list)
   - key:\n  - item  (block list)
   - key:\n  subkey: val  (block map; nested mapping)
   - key: |  (literal block scalar)
   - # comments
 
-v1.2.2: `[` 로 시작하고 같은 줄에 `]` 가 없으면 후속 줄을 누적해 `]` 까지
-        모은 뒤 inline list 로 파싱. 줄 단위 trailing comma 와 주석 줄 허용.
+A '[' with no matching ']' on the same line accumulates following lines up to
+the ']' and parses them as one inline list (per-line trailing commas and
+comment-only lines allowed).
 """
 import re
 
@@ -67,9 +68,9 @@ def yaml_load(text: str) -> dict:
         return items
 
     def parse_inline_list_multiline(first_val: str) -> list:
-        # first_val 은 '[' 로 시작하지만 같은 줄에 ']' 가 없는 경우.
-        # 후속 줄을 ']' 가 나올 때까지 모아 inline list 로 파싱한다.
-        # 종료 시 i[0] 은 ']' 가 포함된 줄을 가리킨다 (호출자가 +1).
+        # first_val starts with '[' but has no ']' on the same line. Gather
+        # following lines until ']' and parse them as one inline list. On
+        # return i[0] points at the line containing ']' (caller does +1).
         parts = []
         remainder = first_val[1:].strip().rstrip(',').strip()
         if remainder:
