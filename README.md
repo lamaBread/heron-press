@@ -1,4 +1,4 @@
-# Heron v1.5.0 — User Guide
+# Heron v1.5.1 — User Guide
 
 **Heron** is a lightweight, **PHP-targeted static site generator**: keep **one folder per article** for its body and attachments, and `python Heron.py` builds the whole site once. *A site that stands still.*
 
@@ -15,8 +15,6 @@
 | **In-site search** | Zero client JS. BM25 + tokenizer + index inlined into a single `search.php` (OPcache assumed). |
 | **Dark mode** | `prefers-color-scheme`, automatic. No toggle UI — the OS setting is trusted. |
 | **Prev / next article** | Same-parent siblings in date order. Site-wide toggle. |
-
-> **v1.5.0 in one line** — The project root is split into **`user/` (what you edit: `articles`, `site.yaml`, `templates`, `styles`, `branding`) and `system/` (the program: `scripts`, `runtime`, `admin`, `tests`)**, and the entry points are named `Heron.py` (build) and `Pond.php` (local authoring). The presentation surface (page templates, CSS, identity assets) moves out of the builder so that *"what is mine vs. what is the system"* is obvious at a glance. This is a pure *source-layout* change, so **`dist/` is byte-for-byte identical to v1.4.2** (787 = 787, empty `diff -r`). 429 unit tests + 6/6 diagnostics carried over. See [§ 16](#16-changelog).
 
 ## Table of contents
 
@@ -110,7 +108,7 @@ visitor    ├─ normal page       → Apache serves static HTML (fast)
 Since v1.5.0 the root is split into **`user/` (what you edit) and `system/` (the program):**
 
 ```
-siheonlee.com_v1.5.0/
+siheonlee.com_v1.5.1/
 │
 ├── user/                    ← ★ everything you own and edit
 │   ├── articles/                ← all articles
@@ -545,17 +543,61 @@ rsync -avz --delete dist/ user@siheonlee.com:/var/www/siheonlee.com/
 
 ## 16. Changelog
 
-> The full per-release changelog (with integrity notes) is maintained in [README.ko.md § 16](README.ko.md). Recent highlights:
+> Paths like `scripts/…`, `templates/…`, `assets/…`, `tests/…` in the entries below are historical (the names at the time): v0.8.1–v1.4.x lived under `src/`, and since v1.5.0 the real locations split into `system/scripts`, `system/runtime`, `user/templates`, `user/styles`, `user/branding`, `system/tests` (§ 3). `build.py` → `Heron.py` and `admin.php` → `Pond.php` are also v1.5.0.
+> Code integrity: a **docs-only release** = clean rebuild from canonical sources with dist sha256 == the previous code copy. A **code release** = determinism (two builds identical) + an enumerated diff against the previous code release.
 
 | Version | Date | Summary |
 |---|---|---|
-| **v1.5.0** | 2026-05-29 | **Root split into `user/` + `system/` + Heron/Pond naming** (structure release, dist byte-invariant). The presentation surface (page templates, global CSS, identity assets) moves out of the builder; entry points become `Heron.py` / `Pond.php`. The two former mixed folders `src/templates` (.html + .php) and `src/assets` (css + png + js) are dissolved — .html → `user/templates`, css → `user/styles`, og → `user/branding`, `search*.php`/`*.js` → `system/runtime`. `dist/assets/` is aggregated from `user/styles` + `user/branding` + `system/runtime` (.js). All filenames preserved → **dist is byte-identical to v1.4.2** (787 = 787, empty `diff -r`). 429 unit tests + 6/6 diagnostics carried over. |
-| v1.4.1 | 2026-05-28 | v1.4.0 stabilization patch — internal-link validation regex fix (`\bhref=` → `\s+href=`). dist byte-invariant. 429 tests. |
+| **v1.5.1** | 2026-05-30 | **v1.5.0 stabilization refactor** (code release, dist **byte-identical**) — a pure internal refactor of code consistency/readability with no behavior or output change. ① **Import hygiene**: in `builder.py` the seo/search/sitemap/feed/report/cache imports that sat between the `_pagination_*` helper defs are hoisted into the top import block (PEP 8); the unused `ALL_IMAGE_EXTS` import is dropped. ② **Cross-module encapsulation**: `images._split_url`/`_build_srcset` promoted to public `split_url`/`build_srcset` (builder imported them across the module boundary — underscore = module-internal convention clash); `_HAS_PIL` kept (tests import it directly, a de-facto public flag). ③ **De-duplication (DRY)**: the `SeoMeta(...)` construction duplicated 1:1 across article/category/home folded into `_seo_from_dict`; the priority/nav_priority integer parse-with-fallback at three sites folded into `_int_meta_field` (3-state + issue messages preserved byte-for-byte). ④ **Dead code removed**: `markdown._SECTION_SCOPED_TAGS` + the always-same-result branch in `_resolve_selector` (every bare tag becomes `section TAG` regardless of the whitelist), `BuildCache.stats()` (never called). ⑤ **Stale naming fixed**: `search.run_parity_test`/`_parity_cache_key` arg `templates_dir` → `runtime_dir` (reflects the v1.5.0 folder move; positional call so behavior unchanged), `images.split_url` docstring return-tuple corrected, `Pond.php`'s `site.yaml reserved_slugs` comment updated to `Builder.RESERVED_SLUGS`. Code integrity: **clean rebuild from canonical Articles, dist 787 files sha256 == v1.5.0** (not an enumerated diff — fully byte-identical). Determinism: two builds identical. 429 tests · 6/6 diagnostics unchanged. |
+| v1.5.0 | 2026-05-29 | Structure release — root split into `user/` (what you edit) and `system/` (the program); entry points renamed `Heron.py` / `Pond.php`. Pure source-layout change, so dist is byte-identical to v1.4.2. |
+| v1.4.1 | 2026-05-28 | Fixed the v1.4.0 internal-link validation regex (`\bhref=` → `\s+href=`) — no more `data-href` mismatch. dist byte-invariant. |
 | v1.4.0 | 2026-05-28 | Six-feature bundle — prev/next nav, article-end meta line, dark mode, internal-link validation, five site.yaml keys → code constants, BuildReport "PHP-built articles" category. |
 | v1.3.0 | 2026-05-28 | Build-speed bundle — per-step timing, image multiprocessing, asset-pass unification, tokenizer parity cache. dist byte-invariant. |
-| v1.1.0 | 2026-05-19 | Local authoring tool added (now Pond.php) — write/edit/move/hide/delete, live preview, one-click build. |
-| v1.0.0 | 2026-05-19 | First stable release. |
-| v0.8.1 | 2026-05-17 | Folder cleanup — builder moved under `src/`; behavior/output unchanged (v1.5.0's `user/`+`system/` split is the sequel). |
+| v1.2.2 | 2026-05-21 | `yaml_parser` multi-line inline list support (accumulate lines from `[` to `]`). dist unchanged. |
+| v1.2.1 | 2026-05-21 | Ops-noise cleanup — `noindex: true` articles exempt from the `seo.description` check; `warn_on_stale_updated` warning dropped. dist byte-invariant. |
+| v1.2.0 | 2026-05-21 | v1.1.5 documentation stabilization. dist unchanged. |
+| v1.1.5 | 2026-05-20 | AdSense URL-based ad blocking — `exclude_urls` (exact match, per-article possible); empty list = inject everywhere. Replaces v1.1.4's `exclude_pages`. |
+| v1.1.4 | 2026-05-20 | AdSense page-type exclusion (`exclude_pages: [article/home/category/404/search]`). Unified into URL-based in v1.1.5. |
+| v1.1.3 | 2026-05-20 | Google AdSense integration (`google_adsense.ads_txt` / `head_script`) + default `default-og.png` replaced with a standard 1200×630 OG image. |
+| v1.1.2 | 2026-05-20 | imgSlideBox deploy-incident fix + paginated redesign — restored missing CSS `.slide{display:none}` + bottom-center dot indicator (built by runtime JS, static HTML unchanged). |
+| v1.1.1 | 2026-05-20 | imgBox deploy-incident fix — multi-statement PHP blocks failed to simulate and leaked raw PHP. Rewrote the `simulate_php_in_html` block scanner + added `site.yaml php_globals` + caption raw preserved. |
+| v1.1.0 | 2026-05-19 | Local authoring tool `admin.php` added (now Pond) — mirrors the `build.py` pattern: write/edit, move, hide, delete, preview, one-click build. dist byte-invariant (admin is upstream of the build). |
+| v1.0.2 | 2026-05-19 | Home default post count 5 → 10 (canonical `articles/meta.yaml` sets `per_page: 10`, so dist impact 0). |
+| v1.0.1 | 2026-05-19 | Subcategory header links — arrow dropped; the subcategory name itself links to its own page (`color: inherit; text-decoration: none`). |
+| v1.0.0 | 2026-05-19 | First stable release — default og:image asset pass-through (raster preserved), `articles/About` noindex. |
+| v0.8.4 | 2026-05-19 | v0.8.3 documentation stabilization. dist byte-identical to v0.8.3. |
+| v0.8.3 | 2026-05-18 | schema.org JSON-LD + correct breadcrumbs — `Article` + (≥ 2 crumbs) `BreadcrumbList` in the article `<head>`; off switches (`jsonld.enabled` / `seo.jsonld`). Build-excluded prefixes `_`/`.` unified. |
+| v0.8.2 | 2026-05-18 | Code soundness — `__version__` decoupled (feed `<generator>` version-free), stricter argparse, per-Builder build report. |
+| v0.8.1 | 2026-05-17 | Folder cleanup — builder moved under `src/`. Behavior/output unchanged (v1.5.0's `user/`+`system/` split is the sequel). |
+| v0.8.0 | 2026-05-17 | README code-consistency fixes. No code/dist change. |
+| v0.7.2 | 2026-05-17 | 16-step progress headers + live counter + persistent `build-report.md`. No output-logic change. |
+| v0.7.1 | 2026-05-16 | Stabilization. No behavior change. |
+| v0.7.0 | 2026-05-16 | Incremental build cache (per-article). Added `--no-cache` / `--clean-cache`. |
+| v0.6.5 | 2026-05-15 | Stabilization — auto `reset_report`, 3-pass `_render_template`, removed the forced `og_type` default. |
+| v0.6.4 | 2026-05-15 | Home/category CSS unification + `template:` key. |
+| v0.6.3 | 2026-05-15 | Per-article external CSS files (integer keys) + `use_common_css` toggle. |
+| v0.6.2 | 2026-05-15 | Home/category SEO meta tags output. |
+| v0.6.1 | 2026-05-15 | Docs/comment/output readability stabilization. No behavior change. |
+| v0.6.0 | 2026-05-15 | Search 3-field metadata index (v4) + single-file inline search.php. Diagnostics script added. |
+| v0.5.5 | 2026-05-15 | Body ↔ metadata separation principle + unified build report (`report.py`). |
+| v0.5.4 | 2026-05-14 | `<title>` fallback chain generalized + word-boundary truncate + `nav_priority`. |
+| v0.5.3 | 2026-05-14 | `tags` + `layout: gallery` + RSS/Atom feeds. |
+| v0.5.2 | 2026-05-14 | Asset path unification (`dist/src/{slug}/` → `dist/{slug}/`). |
+| v0.5.1 | 2026-05-14 | Automatic image optimization (multi-resolution WebP) + lazy loading. |
+| v0.5.0 | 2026-05-14 | Okapi BM25 search (TF-sum → BM25 + phrase boost). Index v3. |
+| v0.4.7 | 2026-05-14 | Docs/code consistency restored. dist byte-identical to v0.4.6. |
+| v0.4.6 | 2026-05-14 | Pagination FOUC removal + `articles/meta.yaml` + `priority` + config unification. |
+| v0.4.5 | 2026-05-14 | Pagination + i18n + subcategory indexes + category meta.yaml. |
+| v0.4.4 | 2026-05-14 | Auto `sitemap.xml` + robots.txt Sitemap directive. |
+| v0.4.3 | 2026-05-14 | `<title>` normalization + markdown section markers + `seo:` grouping. |
+| v0.4.2 | 2026-05-14 | Consistency-gap cleanup (slug ↔ category collision pre-blocked, search.php noindex,follow). |
+| v0.4.1 | 2026-05-14 | Build PHP dependency removed — Parsedown 1.7.4 Python port. dist byte-identical to v0.4.0. |
+| v0.4.0 | 2026-05-13 | Honest catchphrase + indexing-policy fix (global noindex removed) + module split. |
+| v0.3.2 | 2026-05-10 | Search UI cleanup + category-scoped search. Index v2. |
+| v0.3.1 | 2026-05-09 | In-site search (`search-index.json` + search.php). |
+| v0.3 | 2026-05-09 | Parsedown adoption + per-article styles override. |
+| v0.2 | 2026-05-09 | Previous-site UI/UX preserved. About merged as a normal article. |
+| v0.1 | — | Python-stdlib-only SSG, first working build. Core design principles established. |
 
 ---
 
@@ -595,4 +637,4 @@ No separate markdown engine. `system/admin/render_one.py` reuses the very `scrip
 
 ---
 
-*Heron v1.5.0 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [README.ko.md § 16](README.ko.md).*
+*Heron v1.5.1 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [README.ko.md § 16](README.ko.md).*

@@ -289,24 +289,27 @@ def _php_tokenize_one(text: str, tokenizer_php: Path, php_bin: str = 'php') -> l
     return json.loads(proc.stdout.decode('utf-8'))
 
 
-def _parity_cache_key(scripts_dir: Path, templates_dir: Path,
+def _parity_cache_key(scripts_dir: Path, runtime_dir: Path,
                       php_version: str) -> str:
     """parity cache key — search.py + search_tokenize.php + PHP -v 합성 sha256.
 
     v1.3.0 (E 항목): 토크나이저 코드(Py/PHP 양쪽) 와 PHP 바이너리 버전이 모두
     같으면 parity 결과가 같다는 사실을 활용. 두 파일 + php_version 첫 줄을
     바이트열로 합쳐 sha256 — 어느 하나 바뀌면 캐시 자동 무효화.
+
+    v1.5.1: search_tokenize.php 는 v1.5.0 부터 system/runtime/ 에 있으므로
+    인자명을 templates_dir → runtime_dir 로 정정 (호출은 위치 인자라 동작 불변).
     """
     h = hashlib.sha256()
     for p in (scripts_dir / 'search.py',
-              templates_dir / 'search_tokenize.php'):
+              runtime_dir / 'search_tokenize.php'):
         if p.exists():
             h.update(p.read_bytes())
     h.update(php_version.encode('utf-8'))
     return h.hexdigest()
 
 
-def run_parity_test(templates_dir: Path, php_bin: str, warn_fn, die_fn,
+def run_parity_test(runtime_dir: Path, php_bin: str, warn_fn, die_fn,
                     *, cache_dir: Path = None,
                     scripts_dir: Path = None) -> bool:
     """fixture 입력에 대해 Py↔PHP 토크나이저 출력 동등성 검증.
@@ -315,8 +318,12 @@ def run_parity_test(templates_dir: Path, php_bin: str, warn_fn, die_fn,
     `<cache_dir>/parity.json` 에 캐시. 같은 코드 + 같은 PHP 버전이면 다음
     빌드에서 18 fixture subprocess 호출 (~3s) 건너뛴다. 캐시 파일 누락/손상
     또는 cache_dir 미전달 시 (--no-cache) 매 빌드 풀 검증.
+
+    v1.5.1: 첫 인자명을 templates_dir → runtime_dir 로 정정. search_tokenize.php
+    는 v1.5.0 부터 system/runtime/ 에 있고 builder 가 self.runtime_dir 을
+    위치 인자로 넘긴다 (동작 불변, 이름만 실제 출처와 일치).
     """
-    tokenizer_php = templates_dir / 'search_tokenize.php'
+    tokenizer_php = runtime_dir / 'search_tokenize.php'
     if not tokenizer_php.exists():
         die_fn(f'search_tokenize.php not found at {tokenizer_php}')
 
@@ -343,7 +350,7 @@ def run_parity_test(templates_dir: Path, php_bin: str, warn_fn, die_fn,
     key = None
     if cache_dir is not None and scripts_dir is not None:
         try:
-            key = _parity_cache_key(scripts_dir, templates_dir, php_version)
+            key = _parity_cache_key(scripts_dir, runtime_dir, php_version)
             cache_file = cache_dir / 'parity.json'
             if cache_file.exists():
                 data = json.loads(cache_file.read_text(encoding='utf-8'))

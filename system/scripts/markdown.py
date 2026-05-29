@@ -9,6 +9,12 @@
                                             마커, 본문을 자동 첫 갭+섹션으로
                                             감싸기. (builder 가 호출)
 
+v1.5.1 변경 — 안정화 (동작·산출물 불변):
+  - `_resolve_selector` 의 죽은 분기 + 미사용 `_SECTION_SCOPED_TAGS` 집합
+    제거. 단일 태그명은 화이트리스트 여부와 무관하게 모두 `section TAG` 로
+    감싸지므로 (README §4-6) 그 집합과 `if raw in _SECTION_SCOPED_TAGS`
+    분기는 항상 같은 결과를 내는 사문(死文)이었다. 출력 byte 불변.
+
 v0.5.5 변경:
   - 본문 첫 단락 / 첫 이미지 추출 폐지 (`_FIRST_P_RE`, `_FIRST_IMG_RE` 제거).
     이전 버전까지는 SEO description / og_image / 갤러리 썸네일 / 피드 summary
@@ -607,17 +613,6 @@ def process_html(text: str, slug: str, article_dir: Path,
 # Per-article tag style overrides  (meta.yaml `styles:`)
 # ════════════════════════════════════════════════════════════════
 
-_SECTION_SCOPED_TAGS = {
-    'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'ul', 'ol', 'li',
-    'blockquote',
-    'a',
-    'pre', 'code',
-    'table', 'th', 'td',
-    'img', 'strong', 'em', 'small', 'hr',
-    'div', 'section',
-}
-
 
 def normalize_styles(raw):
     """meta.yaml 의 `styles:` 키를 두 채널로 분리해서 파싱.
@@ -692,13 +687,18 @@ def _coerce_int_key(key):
 
 
 def _resolve_selector(tag_or_selector: str) -> str:
+    """meta.yaml styles 의 문자열 키를 CSS 선택자로 해석.
+
+    복합 선택자 문자 ( · , · > · + · ~ · . · # · : 공백) 가 하나라도 있으면
+    작성자가 적은 그대로 쓰고, 그 외 (= 단일 태그명) 는 본문 안에서만
+    적용되도록 `section TAG` 로 감싼다. README §4-6 의 "tag 키는 section
+    TAG 로 자동 래핑" 규칙.
+    """
     raw = tag_or_selector.strip()
     if not raw:
         return ''
     if any(ch in raw for ch in (' ', ',', '>', '+', '~', '.', '#', ':')):
         return raw
-    if raw in _SECTION_SCOPED_TAGS:
-        return f'section {raw}'
     return f'section {raw}'
 
 

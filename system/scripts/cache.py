@@ -1,5 +1,8 @@
 """빌드 증분 캐싱 (v0.7.0 신설).
 
+v1.5.1: 미사용 `BuildCache.stats()` 메서드 제거 (어디서도 호출되지 않던
+사문). 캐시 동작·매니페스트 형식·결정성 모두 불변.
+
 설계 의도:
   v0.6.5 까지의 빌더는 매 빌드마다 모든 글의 마크다운 본문을 재파싱하고 템플릿을
   다시 채워 dist 의 글 페이지를 새로 만들었다. 글 ≤ 수십 건 규모에서는 무시
@@ -448,15 +451,6 @@ class BuildCache:
             'issues': cached.issues,
             'warnings': cached.warnings,
         }
-
-    # ── 통계 ────────────────────────────────────────────────
-
-    def stats(self) -> dict:
-        """현재 commit() 대상 항목 수 — print 용."""
-        return {
-            'cached_articles': len(self._new_articles),
-        }
-
 
 def issue_payload(scope: str, target: str, message: str,
                   location) -> dict:

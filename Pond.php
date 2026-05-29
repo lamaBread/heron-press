@@ -185,7 +185,7 @@ if ($action === 'create') {
     if (!preg_match('/^[a-z0-9][a-z0-9\-]*$/', $slug))
         $errs[] = 'slug 는 소문자/숫자/하이픈만 (slug_one 제안값 권장).';
     if (in_array($slug, ['assets', 'search'], true))
-        $errs[] = "예약 slug 입니다: {$slug} (site.yaml reserved_slugs).";
+        $errs[] = "예약 slug 입니다: {$slug} (Builder.RESERVED_SLUGS: assets/search).";
     if ($title === '') $errs[] = '제목이 비었습니다.';
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date))
         $errs[] = 'date 는 YYYY-MM-DD 형식.';

@@ -1,5 +1,28 @@
 """빌드 파이프라인 (Builder 클래스).
 
+v1.5.1 변경 — 안정화 리팩터링 (동작·dist 산출물 byte-불변):
+  v1.5.0(루트 user/·system/ 분리) 위의 코드 정합성·가독성 정리. 산출물
+  (dist/) 은 v1.5.0 과 byte-동일 (787=787) — 순수 내부 리팩터다. 429 단위
+  테스트 + 6/6 진단 그대로 통과.
+  - **import 정리** — `_pagination_*` 헬퍼 정의 사이에 끼어 있던 seo/search/
+    sitemap/feed/report/cache import 를 파일 상단 import 블록으로 끌어올림
+    (PEP 8). builder 가 쓰지 않던 `ALL_IMAGE_EXTS` 미사용 import 제거.
+  - **모듈 경계 비공개 import 해소** — images 의 `_split_url` / `_build_srcset`
+    를 `split_url` / `build_srcset` 공개명으로 import (밑줄=모듈 내부 관례와
+    충돌하던 cross-module import 정리). `_HAS_PIL` 은 테스트가 직접 import
+    하는 사실상 공개 플래그라 유지.
+  - **중복 제거 (DRY)** — `_parse_frontmatter` 와 `_parse_category_meta_file`
+    에 1:1 로 중복돼 있던 SeoMeta(...) 생성을 모듈 함수 `_seo_from_dict` 로,
+    글·카테고리·홈의 priority / nav_priority 정수 파싱+폴백 3 곳을 메서드
+    `_int_meta_field` 로 통합. 보존 규칙(3-상태·og_type·issue 메시지)은 모두
+    종전과 byte-동일.
+  - **타입 힌트 정합성** — `self.site: SiteConfig = None` → `Optional[...]`.
+  - 동반 모듈 정리: markdown `_resolve_selector` 의 사문(死文) 분기 +
+    미사용 `_SECTION_SCOPED_TAGS` 제거, cache 의 미사용 `BuildCache.stats()`
+    제거, search `run_parity_test`/`_parity_cache_key` 의 인자명
+    templates_dir → runtime_dir 정정 (v1.5.0 폴더 이동 반영, 위치 인자라
+    동작 불변), images `split_url` docstring 반환 튜플 표기 정정.
+
 v0.8.3 변경 — schema.org JSON-LD 구조화 데이터 (additive):
   - **글 페이지 `<head>` 에 `<script type="application/ld+json">` 한 줄**
     추가. `@graph` 로 Article + (2개 이상이면) BreadcrumbList. 기존
@@ -426,6 +449,7 @@ import time
 import unicodedata
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import Optional
 
 from .yaml_parser import yaml_load
 from .models import (
@@ -452,11 +476,29 @@ from .images import (
     optimize_image,
     transform_img_tags,
     RASTER_EXTS,
-    ALL_IMAGE_EXTS,
     _HAS_PIL,
-    _split_url,
-    _build_srcset,
+    split_url,
+    build_srcset,
 )
+from .seo import (
+    build_meta_tags, build_jsonld, jsonld_enabled, truncate_description,
+)
+from .search import (
+    html_to_plain,
+    build_search_index,
+    php_array_literal,
+    run_parity_test,
+)
+from .sitemap import build_sitemap
+from .feed import build_feed_document, render_atom, render_rss
+from .report import BuildReport, abort
+from .cache import (
+    BuildCache,
+    issue_payload,
+    replay_issue,
+    replay_warning,
+)
+from . import __version__ as _SITE_VERSION
 
 
 # ════════════════════════════════════════════════════════════════
@@ -501,25 +543,6 @@ def _pagination_nav_html(group_key: str, total_items: int, per_page: int) -> str
         f'aria-label="Next page">›</button>'
         f'</nav>'
     )
-from .seo import (
-    build_meta_tags, build_jsonld, jsonld_enabled, truncate_description,
-)
-from .search import (
-    html_to_plain,
-    build_search_index,
-    php_array_literal,
-    run_parity_test,
-)
-from .sitemap import build_sitemap
-from .feed import build_feed_document, render_atom, render_rss
-from .report import BuildReport, abort
-from .cache import (
-    BuildCache,
-    issue_payload,
-    replay_issue,
-    replay_warning,
-)
-from . import __version__ as _SITE_VERSION
 
 
 # ════════════════════════════════════════════════════════════════
@@ -648,6 +671,34 @@ def _render_template(template: str, vars: dict, *,
     return template
 
 
+def _seo_from_dict(seo_raw: dict) -> SeoMeta:
+    """검증된 `seo:` 매핑(dict) 을 SeoMeta 로 변환 — 글·홈·카테고리 공용.
+
+    v1.5.1: _parse_frontmatter 와 _parse_category_meta_file 에 1:1 로 중복돼
+    있던 SeoMeta(...) 생성을 한 곳으로 모은 순수 추출 (산출물 불변).
+
+    v0.5.5 의 3-상태(None/''/'text') 보존이 핵심 — yaml_load 가 돌려준 빈
+    문자열을 None 으로 강제하지 않는다. og_type 도 디폴트를 강제하지 않고
+    (v0.6.5) None 을 그대로 둬 build_meta_tags 가 page_kind 로 결정한다.
+    jsonld 는 bool/None 그대로 (jsonld_enabled 가 `is False` 만 특수 처리).
+    """
+    return SeoMeta(
+        title_prefix=seo_raw.get('title_prefix'),
+        title_suffix=seo_raw.get('title_suffix'),
+        description=seo_raw.get('description'),
+        author=seo_raw.get('author'),
+        canonical=seo_raw.get('canonical'),
+        og_title=seo_raw.get('og_title'),
+        og_description=seo_raw.get('og_description'),
+        og_image=seo_raw.get('og_image'),
+        og_image_alt=seo_raw.get('og_image_alt'),
+        og_type=seo_raw.get('og_type'),
+        twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
+        twitter_image=seo_raw.get('twitter_image'),
+        jsonld=seo_raw.get('jsonld'),
+    )
+
+
 # ════════════════════════════════════════════════════════════════
 # Builder
 # ════════════════════════════════════════════════════════════════
@@ -696,7 +747,7 @@ class Builder:
         # 상태를 공유하지 않아 동시 빌드(멀티스레드/프로세스)가 가능하다.
         self.report: BuildReport = BuildReport()
 
-        self.site: SiteConfig = None
+        self.site: Optional[SiteConfig] = None
         self.articles: list = []
         self.slug_to_article: dict = {}
         self.categories: dict = {}      # path_tuple → Category
@@ -1257,6 +1308,27 @@ class Builder:
             return _load_template(self.templates_dir, default_name)
         return tpl_path.read_text(encoding='utf-8')
 
+    def _int_meta_field(self, raw_value, *, field: str, scope: str,
+                        target: str, meta_file, default: int = 0) -> int:
+        """meta.yaml 의 정수 필드 (priority / nav_priority) 공용 파서.
+
+        v1.5.1: 글·카테고리·홈의 priority / nav_priority 에 1:1 로 반복되던
+        "None→default / int() 시도 / 실패 시 issue + default 폴백" 패턴을
+        한 곳으로 모은 순수 추출. issue 메시지·동작 모두 종전과 byte 동일.
+        """
+        if raw_value is None:
+            return default
+        try:
+            return int(raw_value)
+        except (TypeError, ValueError):
+            self._issue(
+                scope, target,
+                f"meta.yaml: '{field}' 는 정수여야 합니다 "
+                f"(받은 값: {raw_value!r}) — {default} 으로 폴백.",
+                meta_file,
+            )
+            return default
+
     _COMMON_CSS_LINK = (
         "<link href='/assets/common_template.css' "
         "rel='stylesheet' type='text/css'>"
@@ -1421,32 +1493,9 @@ class Builder:
                 )
                 seo_raw = {}
 
-            # v0.5.5: 빈 문자열을 None 으로 강제 변환하지 않는다.
-            # SeoMeta 가 None/''/'text' 세 상태를 보존해 build_meta_tags 가
-            # 적절히 처리한다 (None/'' → 메타 태그 누락, '' → 추가로 리포트).
-            # v0.6.5: og_type 의 디폴트 강제 ('article') 제거. v0.6.2 설계대로
-            # SeoMeta.og_type=None (= author 명시 안 함) 일 때 build_meta_tags
-            # 가 page_kind 로 결정 ('article'/'website'). 여기서 또 디폴트를
-            # 강제하면 v0.6.2 의 page_kind 분기가 죽은 코드가 된다.
-            seo = SeoMeta(
-                title_prefix=seo_raw.get('title_prefix'),
-                title_suffix=seo_raw.get('title_suffix'),
-                description=seo_raw.get('description'),
-                author=seo_raw.get('author'),
-                canonical=seo_raw.get('canonical'),
-                og_title=seo_raw.get('og_title'),
-                og_description=seo_raw.get('og_description'),
-                og_image=seo_raw.get('og_image'),
-                og_image_alt=seo_raw.get('og_image_alt'),
-                og_type=seo_raw.get('og_type'),
-                twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
-                twitter_image=seo_raw.get('twitter_image'),
-                # v0.8.3: 글 단위 JSON-LD opt-out/opt-in. yaml_load 가
-                # true/false 를 Python bool 로, 부재는 None 으로 보존하므로
-                # 그대로 전달 (None=site 디폴트 / False=이 글만 끔 / True=명시
-                # opt-in). jsonld_enabled 가 `is False` 만 특수 처리한다.
-                jsonld=seo_raw.get('jsonld'),
-            )
+            # v0.5.5/v0.6.5/v0.8.3 의 3-상태·og_type·jsonld 보존 규칙은
+            # _seo_from_dict 에 모았다 (v1.5.1: 카테고리/홈과 공용 추출).
+            seo = _seo_from_dict(seo_raw)
 
             # v0.5.3: tags — 작성자가 직접 적는 주제어 목록.
             # YAML 파서는 inline list (`[a, b]`) 와 block list (`- a` ...) 둘 다 list 로 반환.
@@ -1476,20 +1525,10 @@ class Builder:
                 tags = []
 
             # v0.5.4: nav_priority — 글이 톱레벨일 때만 의미 (예: About).
-            nav_priority_raw = raw.get('nav_priority')
-            if nav_priority_raw is None:
-                nav_priority = 0
-            else:
-                try:
-                    nav_priority = int(nav_priority_raw)
-                except (TypeError, ValueError):
-                    self._issue(
-                        'article', slug,
-                        f"meta.yaml: 'nav_priority' 는 정수여야 합니다 "
-                        f"(받은 값: {nav_priority_raw!r}) — 0 으로 폴백.",
-                        meta_file,
-                    )
-                    nav_priority = 0
+            nav_priority = self._int_meta_field(
+                raw.get('nav_priority'), field='nav_priority',
+                scope='article', target=slug, meta_file=meta_file,
+            )
 
             # v0.6.3: styles 키가 두 채널로 분리 — 정수 키 = 외부 CSS 파일
             # 상대 경로, 문자열 키 = 인라인 룰. v0.6.4 부터 공용 헬퍼
@@ -1794,20 +1833,10 @@ class Builder:
         lang_val = raw.get('lang')
         styles_raw = raw.get('styles')
         # v0.4.6: priority. 빈값/누락이면 0. 정수만 허용.
-        priority_raw = raw.get('priority')
-        if priority_raw is None:
-            priority = 0
-        else:
-            try:
-                priority = int(priority_raw)
-            except (TypeError, ValueError):
-                self._issue(
-                    scope, target,
-                    f"meta.yaml: 'priority' 는 정수여야 합니다 "
-                    f"(받은 값: {priority_raw!r}) — 0 으로 폴백.",
-                    meta_file,
-                )
-                priority = 0
+        priority = self._int_meta_field(
+            raw.get('priority'), field='priority',
+            scope=scope, target=target, meta_file=meta_file,
+        )
 
         # v0.4.6: excludes_categories. 홈 (Articles/meta.yaml) 에서만 의미를
         # 가진다 — 카테고리 meta.yaml 에 들어있어도 파싱만 되고 사용되지 않음.
@@ -1840,46 +1869,16 @@ class Builder:
             )
             seo_raw = {}
 
-        # v0.5.5: 빈 문자열 보존 (글 SeoMeta 와 동일 정책).
-        # v0.6.5: og_type 의 디폴트 강제 ('website') 제거. build_meta_tags 가
-        # page_kind 로 결정하도록 None 을 그대로 보존 (글 _parse_frontmatter 와
-        # 같은 정책).
-        seo = SeoMeta(
-            title_prefix=seo_raw.get('title_prefix'),
-            title_suffix=seo_raw.get('title_suffix'),
-            description=seo_raw.get('description'),
-            author=seo_raw.get('author'),
-            canonical=seo_raw.get('canonical'),
-            og_title=seo_raw.get('og_title'),
-            og_description=seo_raw.get('og_description'),
-            og_image=seo_raw.get('og_image'),
-            og_image_alt=seo_raw.get('og_image_alt'),
-            og_type=seo_raw.get('og_type'),
-            twitter_card=seo_raw.get('twitter_card') or 'summary_large_image',
-            twitter_image=seo_raw.get('twitter_image'),
-            # v0.8.3: 카테고리/홈 SeoMeta 도 글과 같은 스키마 유지를 위해
-            # jsonld 를 파싱 (대칭성). 단 JSON-LD 출력은 글 페이지에서만
-            # 하므로 (article.html 만 {{JSONLD}} 보유) 카테고리/홈에서는
-            # 파싱만 되고 사용되지 않는다 — seo.title_prefix 외 다른 seo
-            # 필드들과 같은 forward-compat 취급.
-            jsonld=seo_raw.get('jsonld'),
-        )
+        # v0.5.5/v0.6.5 의 3-상태·og_type 보존 규칙은 글과 동일 — 공용
+        # _seo_from_dict (v1.5.1). 카테고리/홈의 jsonld 는 글과 스키마 대칭을
+        # 위해 파싱만 되고 출력엔 쓰이지 않는다 (article.html 만 {{JSONLD}} 보유).
+        seo = _seo_from_dict(seo_raw)
 
         # v0.5.4: nav_priority — 톱레벨 nav 정렬 키 (priority 와 별개 축).
-        nav_priority_raw = raw.get('nav_priority')
-        if nav_priority_raw is None:
-            nav_priority = 0
-        else:
-            try:
-                nav_priority = int(nav_priority_raw)
-            except (TypeError, ValueError):
-                self._issue(
-                    scope, target,
-                    f"meta.yaml: 'nav_priority' 는 정수여야 합니다 "
-                    f"(받은 값: {nav_priority_raw!r}) — 0 으로 폴백.",
-                    meta_file,
-                )
-                nav_priority = 0
+        nav_priority = self._int_meta_field(
+            raw.get('nav_priority'), field='nav_priority',
+            scope=scope, target=target, meta_file=meta_file,
+        )
 
         # v0.6.4: styles 의 정수 키 (외부 CSS 파일 경로) + 문자열 키 (인라인
         # 룰) 두 채널 — 글과 동일. 검증은 _validate_stylesheets 공용 헬퍼.
@@ -2896,10 +2895,10 @@ class Builder:
             sizes_attr = ''
             variants = self.image_variants.get(thumb)
             if variants is not None:
-                dir_part, stem, _ext, tail = _split_url(thumb)
+                dir_part, stem, _ext, tail = split_url(thumb)
                 prefix = '' if dir_part in ('.', '') else dir_part + '/'
                 primary_src = f'{prefix}{stem}-{variants.primary_width}.webp{tail}'
-                srcset = _build_srcset(dir_part, stem, variants.widths)
+                srcset = build_srcset(dir_part, stem, variants.widths)
                 srcset_attr = f" srcset='{escape_html(srcset)}'"
                 if self.site.images.default_sizes:
                     sizes_attr = (

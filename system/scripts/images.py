@@ -12,6 +12,13 @@ v0.5.2 부터 글 자산의 출력 위치가 `dist/src/{slug}/` → `dist/{slug}
 (builder._sync_assets / _copy_site_assets) 가 새 dst_dir / url_prefix 를
 넘기는 것만 다르다. 사이트 공용 이미지의 경로는 그대로 (`dist/assets/`).
 
+v1.5.1 변경 — 안정화 (동작·산출물 불변):
+  - `_split_url` / `_build_srcset` → `split_url` / `build_srcset` 로 공개화.
+    builder 가 갤러리 썸네일 조립에서 이 둘을 모듈 경계 너머로 import 하므로
+    (밑줄 접두 = 모듈 내부 전용 관례와 충돌), 모듈 공용 API 임을 이름으로
+    드러낸다. `split_url` docstring 의 반환 튜플 표기도 실제 (4-튜플) 와
+    일치하도록 정정.
+
 외부 의존성:
   Pillow (PIL fork). v0.4.1 의 "빌드 PHP 의존 제거" 와 같은 보수적 의존성
   정책에도 불구하고, WebP 인코딩과 정확한 리샘플링은 stdlib 만으로는
@@ -272,8 +279,13 @@ def _is_external_url(url: str) -> bool:
     return url.startswith(('http://', 'https://', '//', 'data:'))
 
 
-def _split_url(url: str) -> tuple:
-    """URL → (dir_part, stem, ext)."""
+def split_url(url: str) -> tuple:
+    """URL → (dir_part, stem, ext, tail).
+
+    tail 은 쿼리/프래그먼트 (`?...#...`) 를 합친 꼬리 — 변종 webp 파일명을
+    조립한 뒤 원래 쿼리/프래그먼트를 그대로 붙이기 위해 분리해 둔다.
+    builder 의 갤러리 썸네일 조립이 같은 분해를 재사용한다 (모듈 공용 API).
+    """
     # 쿼리/프래그먼트는 분리.
     base, sep, rest = url.partition('?')
     query = sep + rest if sep else ''
@@ -289,7 +301,7 @@ def _split_url(url: str) -> tuple:
     )
 
 
-def _build_srcset(dir_part: str, stem: str, widths: list) -> str:
+def build_srcset(dir_part: str, stem: str, widths: list) -> str:
     """srcset 속성값. `{dir}/{stem}-{w}.webp {w}w, ...`"""
     items = []
     prefix = '' if dir_part in ('.', '') else dir_part + '/'
@@ -338,11 +350,11 @@ def transform_img_tags(
             variants = variant_lookup(src_val)
 
         if variants is not None:
-            dir_part, stem, _ext, tail = _split_url(src_val)
+            dir_part, stem, _ext, tail = split_url(src_val)
             primary = variants.primary_width
             prefix = '' if dir_part in ('.', '') else dir_part + '/'
             new_src = f'{prefix}{stem}-{primary}.webp{tail}'
-            srcset = _build_srcset(dir_part, stem, variants.widths)
+            srcset = build_srcset(dir_part, stem, variants.widths)
 
             attrs[src_idx] = ('src', new_src, '"')
 
