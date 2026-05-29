@@ -36,7 +36,7 @@ def _site_php_globals() -> dict:
     v1.1.1: 미리보기 본문 충실도 = 빌더와 같은 서명 변수 치환. 양쪽이
     동일 site.yaml 에서 읽으므로 패리티가 구성적으로 보장된다.
     """
-    sy = _ROOT / 'site.yaml'
+    sy = _ROOT / 'user' / 'site.yaml'
     if not sy.is_file():
         return {}
     try:

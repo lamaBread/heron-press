@@ -8,7 +8,7 @@ admin_head($title);
 <div class="flash <?= $code === 0 ? 'ok' : 'err' ?>">
   <strong><?= h($title) ?></strong>
   <?= $clean ? ' · <code class="k">--clean</code>' : '' ?>
-  — <code class="k">python build.py</code> (cwd = 버전 폴더).
+  — <code class="k">python Heron.py</code> (cwd = 버전 폴더).
   <?php if ($code === 0): ?> dist/ 가 갱신되었습니다.<?php endif; ?>
 </div>
 <div class="row" style="margin-bottom:12px">

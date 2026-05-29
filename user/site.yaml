@@ -52,7 +52,7 @@ prev_next:
 
 # v1.4.0 폐기 — 다섯 키 (reserved_slugs / warn_on_underscore_ref /
 # warn_on_missing_asset / error_404_title / search_title) 는 시스템
-# 내재 상수로 승격됐다 (src/scripts/builder.py 의 RESERVED_SLUGS /
+# 내재 상수로 승격됐다 (system/scripts/builder.py 의 RESERVED_SLUGS /
 # DEFAULT_ERROR_404_TITLE / DEFAULT_SEARCH_TITLE + warn_on_underscore_ref
 # 의 "항상 경고" 행동 고정 + dead config 였던 warn_on_missing_asset).
 # 옛 site.yaml 에 키가 남아 있어도 파서가 silently 무시한다.
@@ -109,7 +109,7 @@ google_adsense:
   # 모든 페이지 <head> 에 raw 그대로 삽입할 자동광고 스크립트 (escape
   # 없음 — author 가 명시한 문자열을 신뢰). 빈 문자열이면 5 페이지 모두
   # 미주입 (placeholder 라인 자체가 제거되어 빈 줄도 남지 않음). 적용
-  # 대상 = 글·홈·카테고리·404·search.php. admin.php·src/admin/ 은 dist
+  # 대상 = 글·홈·카테고리·404·search.php. Pond.php·system/admin/ 은 dist
   # 에 누수되지 않으므로 자연 제외.
   head_script: |
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1074439863900363"

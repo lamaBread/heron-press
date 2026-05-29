@@ -1,7 +1,7 @@
 """Heron — internal builder modules.
 
-The root ``build.py`` puts its own ``src/`` on ``sys.path`` and imports this
-package. Modules:
+The root ``Heron.py`` puts its own ``system/`` on ``sys.path`` and imports
+this package (located at ``system/scripts/``). Modules:
 
   yaml_parser  — minimal stdlib-only YAML subset
   models       — dataclasses (SiteConfig, ArticleMeta, SeoMeta, ...)
@@ -22,4 +22,4 @@ never reaches dist output; its only consumers (cache global_hash, the build
 console, and build-report.md) all live outside dist.
 """
 
-__version__ = '1.4.2'
+__version__ = '1.5.0'

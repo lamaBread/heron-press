@@ -257,6 +257,14 @@ class BuildCache:
         포함하지 않는 것: assets/ 의 common_template.css 외 다른 파일 (이미지
         등) — 글 페이지 산출에 직접 영향이 없다 (assets/ 의 raster 이미지는
         dist/assets/ 로 변환되지만 글 페이지 HTML 텍스트엔 들어가지 않음).
+
+        v1.5.0: 인자 dir 는 이제 user/ 와 system/scripts 에서 온다
+        (templates_dir=user/templates 의 .html, assets_dir=user/styles 의
+        common_template.css, scripts_dir=system/scripts). 호출부(builder)가
+        경로를 결정하며 여기 해싱 로직은 불변. system/runtime 의 search*.php·
+        *.js 는 글 HTML 산출에 영향이 없어 글 캐시 입력에서 의도적으로 제외한다
+        (search.php·feeds·dist/assets 복사는 매 빌드 무조건 재생성이라 글 단위
+        증분 캐시와 무관).
         """
         h = hashlib.sha256()
 

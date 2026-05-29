@@ -97,8 +97,8 @@ class HashComputationTests(unittest.TestCase):
         (self.base / 'assets' / 'common_template.css').write_text(
             "body{margin:0}", encoding='utf-8'
         )
-        (self.base / 'Articles').mkdir()
-        (self.base / 'Articles' / 'meta.yaml').write_text(
+        (self.base / 'articles').mkdir()
+        (self.base / 'articles' / 'meta.yaml').write_text(
             "title: Home\n", encoding='utf-8'
         )
 
@@ -114,7 +114,7 @@ class HashComputationTests(unittest.TestCase):
             scripts_dir=self.base / 'scripts',
             templates_dir=self.base / 'templates',
             assets_dir=self.base / 'assets',
-            articles_dir=self.base / 'Articles',
+            articles_dir=self.base / 'articles',
             version='0.7.0',
         )
 
@@ -166,7 +166,7 @@ class HashComputationTests(unittest.TestCase):
     def test_top_meta_change_alters_global_hash(self):
         c1 = self._cache()
         h1 = c1.compute_global_hash(**self._hash_kwargs())
-        (self.base / 'Articles' / 'meta.yaml').write_text(
+        (self.base / 'articles' / 'meta.yaml').write_text(
             "title: Home2\n", encoding='utf-8'
         )
         c2 = self._cache()
@@ -175,7 +175,7 @@ class HashComputationTests(unittest.TestCase):
 
     def test_article_hash_requires_global_hash_first(self):
         c = self._cache()
-        art_dir = self.base / 'Articles' / 'Demo'
+        art_dir = self.base / 'articles' / 'Demo'
         art_dir.mkdir(parents=True)
         (art_dir / 'content.md').write_text("# x\n", encoding='utf-8')
         with self.assertRaises(RuntimeError):
@@ -185,7 +185,7 @@ class HashComputationTests(unittest.TestCase):
             )
 
     def test_article_hash_changes_with_content(self):
-        art_dir = self.base / 'Articles' / 'Demo'
+        art_dir = self.base / 'articles' / 'Demo'
         art_dir.mkdir(parents=True)
         (art_dir / 'meta.yaml').write_text(
             "slug: demo\ntitle: D\ndate: 2026-01-01\n", encoding='utf-8'
@@ -207,7 +207,7 @@ class HashComputationTests(unittest.TestCase):
         self.assertNotEqual(h1, h2)
 
     def test_article_hash_changes_with_added_asset(self):
-        art_dir = self.base / 'Articles' / 'Demo'
+        art_dir = self.base / 'articles' / 'Demo'
         art_dir.mkdir(parents=True)
         (art_dir / 'meta.yaml').write_text(
             "slug: demo\ntitle: D\ndate: 2026-01-01\n", encoding='utf-8'
@@ -232,8 +232,8 @@ class HashComputationTests(unittest.TestCase):
     def test_article_hash_independent_of_other_articles(self):
         """한 글의 content 변경이 *다른 글* 의 article_hash 를 흔들지 않는다
         (global_hash 가 같다는 전제 — top-level meta 가 안 바뀌어야 함)."""
-        a_dir = self.base / 'Articles' / 'A'
-        b_dir = self.base / 'Articles' / 'B'
+        a_dir = self.base / 'articles' / 'A'
+        b_dir = self.base / 'articles' / 'B'
         a_dir.mkdir(parents=True)
         b_dir.mkdir(parents=True)
         (a_dir / 'meta.yaml').write_text(
@@ -458,15 +458,21 @@ META_BASE = (
 )
 
 
-def _scaffold_site():
-    """최소 단일-글 사이트를 임시 디렉터리에 만든다."""
-    tmp = Path(tempfile.mkdtemp(prefix='ssg-v070-int-'))
-    (tmp / 'site.yaml').write_text(SITE_YAML_MIN, encoding='utf-8')
-    # v0.8.1: Builder 가 base/src/templates · base/src/assets 를 읽는다.
-    shutil.copytree(ROOT / 'templates', tmp / 'src' / 'templates')
-    shutil.copytree(ROOT / 'assets', tmp / 'src' / 'assets')
+VERDIR = ROOT.parent   # <verdir> — 실 소스(user/·system/) 의 위치
 
-    art = tmp / 'Articles' / 'Demo'
+
+def _scaffold_site():
+    """최소 단일-글 사이트를 임시 디렉터리에 만든다 (v1.5.0 분할 레이아웃)."""
+    tmp = Path(tempfile.mkdtemp(prefix='ssg-v070-int-'))
+    (tmp / 'user').mkdir(parents=True, exist_ok=True)
+    (tmp / 'user' / 'site.yaml').write_text(SITE_YAML_MIN, encoding='utf-8')
+    # v1.5.0: 표현(user/templates·styles·branding) + 런타임(system/runtime) 분할.
+    shutil.copytree(VERDIR / 'user' / 'templates', tmp / 'user' / 'templates')
+    shutil.copytree(VERDIR / 'user' / 'styles', tmp / 'user' / 'styles')
+    shutil.copytree(VERDIR / 'user' / 'branding', tmp / 'user' / 'branding')
+    shutil.copytree(VERDIR / 'system' / 'runtime', tmp / 'system' / 'runtime')
+
+    art = tmp / 'user' / 'articles' / 'Demo'
     art.mkdir(parents=True)
     (art / 'meta.yaml').write_text(META_BASE, encoding='utf-8')
     (art / 'content.md').write_text('# Demo body\n\nHello.\n', encoding='utf-8')
@@ -515,7 +521,7 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
     def test_content_edit_invalidates_only_that_article(self):
         """글이 두 개일 때 한 글의 content 만 바꾸면 그 글만 미스."""
         # 두 번째 글 추가.
-        art2 = self.tmp / 'Articles' / 'Other'
+        art2 = self.tmp / 'user' / 'articles' / 'Other'
         art2.mkdir(parents=True)
         (art2 / 'meta.yaml').write_text(
             "slug: other\ntitle: Other\ndate: 2026-01-02\n"
@@ -527,7 +533,7 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
         Builder(base_dir=self.tmp, enable_cache=True).build()  # warm
 
         # 첫 글만 수정.
-        (self.tmp / 'Articles' / 'Demo' / 'content.md').write_text(
+        (self.tmp / 'user' / 'articles' / 'Demo' / 'content.md').write_text(
             '# Demo body\n\nUPDATED.\n', encoding='utf-8'
         )
 
@@ -541,7 +547,7 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
 
         # site.yaml 의 name 변경 — global_hash 변동.
         new_site = SITE_YAML_MIN.replace('name: Example', 'name: Example2')
-        (self.tmp / 'site.yaml').write_text(new_site, encoding='utf-8')
+        (self.tmp / 'user' / 'site.yaml').write_text(new_site, encoding='utf-8')
 
         b = Builder(base_dir=self.tmp, enable_cache=True)
         b.build()
@@ -552,8 +558,8 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
     def test_template_change_invalidates_everything(self):
         Builder(base_dir=self.tmp, enable_cache=True).build()  # warm
 
-        # 글 템플릿 약간 수정 — global_hash 변동. (v0.8.1: src/ 아래)
-        tpl_path = self.tmp / 'src' / 'templates' / 'article.html'
+        # 글 템플릿 약간 수정 — global_hash 변동. (v1.5.0: user/templates)
+        tpl_path = self.tmp / 'user' / 'templates' / 'article.html'
         tpl_path.write_text(
             tpl_path.read_text(encoding='utf-8') + '\n<!-- bump -->\n',
             encoding='utf-8',
@@ -579,7 +585,7 @@ class IncrementalCacheIntegrationTests(unittest.TestCase):
         """첫 빌드의 issue (seo.description 누락) 가 두 번째 빌드에서도 그대로
         리포트에 나타난다."""
         # description 누락 글로 교체.
-        (self.tmp / 'Articles' / 'Demo' / 'meta.yaml').write_text(
+        (self.tmp / 'user' / 'articles' / 'Demo' / 'meta.yaml').write_text(
             "slug: demo\ntitle: Demo\ndate: 2026-01-01\n",
             encoding='utf-8',
         )

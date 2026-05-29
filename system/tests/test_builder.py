@@ -122,10 +122,19 @@ class WrapPageTitleTests(unittest.TestCase):
 # v0.6.3 — frontmatter 의 styles 분리 + use_common_css 토글
 # ════════════════════════════════════════════════════════════════
 
-# v0.8.1: 테스트는 src/tests/ 로 이동 → REPO_ROOT = src/ (templates/ ·
-# assets/ 의 실제 위치). Builder(base_dir=tmp) 는 tmp/src/templates ·
-# tmp/src/assets 를 읽으므로 아래 하네스들이 거기로 복사한다.
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# v1.5.0: 테스트는 system/tests/ 에 있고, Builder 가 읽는 표현/런타임 소스는
+# user/templates·user/styles·user/branding (사용자) + system/runtime (시스템)
+# 으로 갈렸다. REPO_ROOT = <verdir>. 각 하네스는 _install_system_into 로 그
+# 분할 레이아웃을 tmp 에 그대로 재현한다 (Builder(base=tmp) 가 읽게).
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _install_system_into(tmp: Path) -> None:
+    """실 소스 트리를 tmp 의 v1.5.0 레이아웃으로 복사 (Builder(base=tmp) 용)."""
+    shutil.copytree(REPO_ROOT / 'user' / 'templates', tmp / 'user' / 'templates')
+    shutil.copytree(REPO_ROOT / 'user' / 'styles', tmp / 'user' / 'styles')
+    shutil.copytree(REPO_ROOT / 'user' / 'branding', tmp / 'user' / 'branding')
+    shutil.copytree(REPO_ROOT / 'system' / 'runtime', tmp / 'system' / 'runtime')
 
 
 class StylesFrontmatterTests(unittest.TestCase):
@@ -166,14 +175,14 @@ class StylesFrontmatterTests(unittest.TestCase):
     def _scaffold(self, meta_extra: str, *, files: dict = None):
         """임시 사이트 트리를 만들고 Builder 를 돌려 dist Path 반환."""
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v063-'))
-        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        (tmp / 'user').mkdir(parents=True, exist_ok=True)
+        (tmp / 'user' / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
         # templates/ + assets/ 의 실 파일을 임시 디렉터리로 복사
         # (v0.8.1: Builder 가 base/src/templates · base/src/assets 를 읽음).
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
+        _install_system_into(tmp)
 
         # Articles/<slug>/ 글 한 개.
-        article_dir = tmp / 'Articles' / 'Demo'
+        article_dir = tmp / 'user' / 'articles' / 'Demo'
         article_dir.mkdir(parents=True)
         (article_dir / 'meta.yaml').write_text(
             self.META_BASE + (meta_extra or ''),
@@ -314,12 +323,12 @@ class PageCssUnificationTests(unittest.TestCase):
         meta.yaml 본문을 호출자가 주입할 수 있도록 한다.
         """
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v064-'))
-        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
+        (tmp / 'user').mkdir(parents=True, exist_ok=True)
+        (tmp / 'user' / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        _install_system_into(tmp)
 
         # Articles/meta.yaml (홈)
-        articles_dir = tmp / 'Articles'
+        articles_dir = tmp / 'user' / 'articles'
         articles_dir.mkdir(parents=True)
         (articles_dir / 'meta.yaml').write_text(
             "seo:\n  description: Site root description.\n" + (home_meta or ''),
@@ -442,17 +451,17 @@ class TemplateRefTests(unittest.TestCase):
     def _scaffold(self, *, article_meta='', article_files=None,
                   templates_extra=None):
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v064-tpl-'))
-        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
+        (tmp / 'user').mkdir(parents=True, exist_ok=True)
+        (tmp / 'user' / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        _install_system_into(tmp)
 
         if templates_extra:
             for rel, content in templates_extra.items():
-                p = tmp / 'src' / 'templates' / rel
+                p = tmp / 'user' / 'templates' / rel
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(content, encoding='utf-8')
 
-        articles_dir = tmp / 'Articles'
+        articles_dir = tmp / 'user' / 'articles'
         articles_dir.mkdir(parents=True)
         (articles_dir / 'meta.yaml').write_text(
             "seo:\n  description: site.\n", encoding='utf-8',
@@ -578,11 +587,11 @@ class BodyPlaceholderPreservationTests(unittest.TestCase):
 
     def _scaffold(self, *, content_md: str):
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v065-body-'))
-        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
+        (tmp / 'user').mkdir(parents=True, exist_ok=True)
+        (tmp / 'user' / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        _install_system_into(tmp)
 
-        articles_dir = tmp / 'Articles'
+        articles_dir = tmp / 'user' / 'articles'
         articles_dir.mkdir(parents=True)
         (articles_dir / 'meta.yaml').write_text(
             "seo:\n  description: site.\n", encoding='utf-8',
@@ -648,10 +657,10 @@ class BuildReportResetTests(unittest.TestCase):
 
     def _make_site(self):
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v065-reset-'))
-        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
-        articles_dir = tmp / 'Articles'
+        (tmp / 'user').mkdir(parents=True, exist_ok=True)
+        (tmp / 'user' / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        _install_system_into(tmp)
+        articles_dir = tmp / 'user' / 'articles'
         articles_dir.mkdir(parents=True)
         # 홈에 description 없음 → 1 issue.
         (articles_dir / 'meta.yaml').write_text('', encoding='utf-8')
@@ -716,10 +725,10 @@ class NoindexDescriptionExemptionTests(unittest.TestCase):
         문자열 case 도 같은 면제가 되는지 검증할 수 있다.
         """
         tmp = Path(tempfile.mkdtemp(prefix='ssg-v121-noindex-'))
-        (tmp / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
-        shutil.copytree(REPO_ROOT / 'templates', tmp / 'src' / 'templates')
-        shutil.copytree(REPO_ROOT / 'assets', tmp / 'src' / 'assets')
-        articles_dir = tmp / 'Articles'
+        (tmp / 'user').mkdir(parents=True, exist_ok=True)
+        (tmp / 'user' / 'site.yaml').write_text(self.SITE_YAML, encoding='utf-8')
+        _install_system_into(tmp)
+        articles_dir = tmp / 'user' / 'articles'
         articles_dir.mkdir(parents=True)
         (articles_dir / 'meta.yaml').write_text(
             "seo:\n  description: Site root.\n", encoding='utf-8',

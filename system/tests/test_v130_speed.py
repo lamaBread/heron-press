@@ -46,7 +46,7 @@ class StepTimingTests(unittest.TestCase):
 
     def setUp(self):
         self.base = Path(tempfile.mkdtemp(prefix='ssg-v130-timing-'))
-        (self.base / 'src').mkdir()
+        (self.base / 'system').mkdir()
         (self.base / 'dist').mkdir()
         self.b = Builder(self.base, enable_cache=False)
         # _emit 가 print 를 호출하므로 stdout 캡쳐만 — 동작에 영향 없음.
@@ -133,12 +133,12 @@ class PrunePassUnificationTests(unittest.TestCase):
 
     def setUp(self):
         self.base = Path(tempfile.mkdtemp(prefix='ssg-v130-prune-'))
-        (self.base / 'src').mkdir()
+        (self.base / 'system').mkdir()
         self.b = Builder(self.base, enable_cache=False)
         # 가짜 Article 만들기 — meta.slug 와 source_dir 만 필요.
         self.dst_root = self.base / 'dist' / 'fake-slug'
         self.dst_root.mkdir(parents=True)
-        self.src_root = self.base / 'Articles' / 'fake-slug'
+        self.src_root = self.base / 'articles' / 'fake-slug'
         self.src_root.mkdir(parents=True)
 
         class FakeMeta:

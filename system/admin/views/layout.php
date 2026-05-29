@@ -1,5 +1,5 @@
 <?php
-// 공용 레이아웃 헬퍼 (admin v1.1.0 뷰). h()/CSRF 는 admin.php 에 정의됨.
+// 공용 레이아웃 헬퍼 (admin v1.1.0 뷰). h()/CSRF 는 Pond.php 에 정의됨.
 declare(strict_types=1);
 
 function admin_head(string $title): void {
@@ -62,7 +62,7 @@ function admin_head(string $title): void {
     <a href="<?= h($self) ?>?a=new">+ 새 글</a>
   </nav>
   <form class="bld" method="post" action="<?= h($self) ?>?a=build"
-        onsubmit="return confirm('python build.py 를 실행해 dist/ 를 다시 만듭니다. 계속할까요?')">
+        onsubmit="return confirm('python Heron.py 를 실행해 dist/ 를 다시 만듭니다. 계속할까요?')">
     <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
     <label class="muted" style="font-size:12px">
       <input type="checkbox" name="clean" value="1"> --clean</label>

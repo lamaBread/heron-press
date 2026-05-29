@@ -6,7 +6,7 @@
   failures      : 0
   errors        : 0
   skipped       : 0
-  elapsed       : 142.014s
+  elapsed       : 153.765s
   → PASS
 
 ════════════════════════════════════════════════════════════
@@ -21,7 +21,7 @@
 [3] dist/search.php php -l (PHP syntax)
 ────────────────────────────────────────────────────────────
   exit code   : 0
-  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.4.1\dist\search.php
+  stdout      : No syntax errors detected in F:\lama.pe.kr to siheonlee.com\siheonlee.com_v1.5.0\dist\search.php
   → PASS
 
 ════════════════════════════════════════════════════════════

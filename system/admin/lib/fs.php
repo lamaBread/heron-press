@@ -1,18 +1,19 @@
 <?php
 // 파일시스템 안전 헬퍼 (admin v1.1.0).
-// 모든 글 연산은 <verdir>/Articles/ 안에서만 — id 는 Articles 기준
+// 모든 글 연산은 <verdir>/user/articles/ 안에서만 — id 는 articles 기준
 // 상대경로(슬래시 구분). path traversal 차단이 이 파일의 핵심 책임.
 
 declare(strict_types=1);
 
-/** <verdir> (admin.php 가 있는 폴더). */
+/** <verdir> (Pond.php 가 있는 폴더). */
 function admin_base_dir(): string {
-    return dirname(__DIR__, 3); // src/admin/lib → src/admin → src → <verdir>
+    return dirname(__DIR__, 3); // system/admin/lib → system/admin → system → <verdir>
 }
 
-/** <verdir>/Articles 절대경로. */
+/** <verdir>/user/articles 절대경로 (v1.5.0: articles 가 user/ 아래로). */
 function admin_articles_dir(): string {
-    return admin_base_dir() . DIRECTORY_SEPARATOR . 'Articles';
+    return admin_base_dir() . DIRECTORY_SEPARATOR . 'user'
+        . DIRECTORY_SEPARATOR . 'articles';
 }
 
 /**

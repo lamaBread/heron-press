@@ -669,15 +669,25 @@ class Builder:
 
     def __init__(self, base_dir: Path, *, enable_cache: bool = True):
         self.base = base_dir
-        # v0.8.1: 빌더 일체(scripts/·templates/·assets/·tests/)가 src/ 아래로
-        # 재배치됐다. 글 소스(Articles/)·산출물(dist/)·전역 설정(site.yaml)·
-        # 캐시(.build_cache/)·리포트(build-report.md)는 그대로 프로젝트 루트
-        # (= base_dir) 기준. templates/assets 만 src/ 아래에서 해석한다 —
-        # 산출물 경로·내용은 v0.8.0 과 불변.
-        self.src_dir = base_dir / 'src'
-        self.articles_dir = base_dir / 'Articles'
-        self.assets_dir = self.src_dir / 'assets'
-        self.templates_dir = self.src_dir / 'templates'
+        # v1.5.0: 루트가 user/ (네가 편집) 와 system/ (프로그램) 로 갈렸다.
+        #   user/articles   글 소스               (articles_dir)
+        #   user/site.yaml  전역 설정
+        #   user/templates  페이지 레이아웃 .html  (templates_dir)
+        #   user/styles     전역 CSS              (styles_dir; common_template.css)
+        #   user/branding   사이트 정체성 자산     (branding_dir; default-og)
+        #   system/scripts  빌더 Python           (scripts_dir)
+        #   system/runtime  서브타임 코드 search*.php + *.js (runtime_dir)
+        # dist/·.build_cache/·build-report.md 는 프로젝트 루트(= base_dir) 기준.
+        # dist/assets/ 는 styles + branding + runtime 의 .js 를 _copy_site_assets
+        # 가 한데 모은다 — /assets/ URL 계약·산출물은 v1.4.x 와 byte-불변.
+        self.user_dir = base_dir / 'user'
+        self.system_dir = base_dir / 'system'
+        self.articles_dir = self.user_dir / 'articles'
+        self.templates_dir = self.user_dir / 'templates'
+        self.styles_dir = self.user_dir / 'styles'
+        self.branding_dir = self.user_dir / 'branding'
+        self.scripts_dir = self.system_dir / 'scripts'
+        self.runtime_dir = self.system_dir / 'runtime'
         self.dist = base_dir / 'dist'
 
         # v0.8.2: per-Builder 빌드 리포트 (모듈 전역 폐지). build() 진입 시
@@ -839,7 +849,7 @@ class Builder:
     # ── [1] Config load ──────────────────────────────────────
 
     def _load_config(self):
-        site_yaml = self.base / 'site.yaml'
+        site_yaml = self.user_dir / 'site.yaml'
         if not site_yaml.exists():
             abort(f'site.yaml not found at {site_yaml}')
         raw = yaml_load(site_yaml.read_text(encoding='utf-8'))
@@ -916,11 +926,11 @@ class Builder:
         parity_cache_dir = (
             self.base / '.build_cache' if self.cache.enabled else None
         )
-        run_parity_test(self.templates_dir, php_bin='php',
+        run_parity_test(self.runtime_dir, php_bin='php',
                         warn_fn=lambda m: self._warning('site', '', m),
                         die_fn=abort,
                         cache_dir=parity_cache_dir,
-                        scripts_dir=self.src_dir / 'scripts')
+                        scripts_dir=self.scripts_dir)
 
         # v0.5.1: 이미지 최적화가 켜져 있는데 Pillow 가 없으면 워닝 (die 가 아닌
         # 워닝 — 이미지가 한 장도 없는 사이트는 빌드가 통과해야 하므로 _sync_assets
@@ -1070,7 +1080,7 @@ class Builder:
 
     def _scan_articles(self):
         if not self.articles_dir.is_dir():
-            abort(f'Articles/ directory not found at {self.articles_dir}')
+            abort(f'user/articles/ directory not found at {self.articles_dir}')
 
         for root, dirs, files in os.walk(self.articles_dir):
             root_path = Path(root)
@@ -2280,10 +2290,10 @@ class Builder:
         # meta / template / assets 모두 디스크에 확정된 상태).
         if self.cache.enabled and self.cache.global_hash is None:
             self.cache.compute_global_hash(
-                site_yaml=self.base / 'site.yaml',
-                scripts_dir=self.src_dir / 'scripts',  # v0.8.1: src/ 아래로
-                templates_dir=self.templates_dir,
-                assets_dir=self.assets_dir,
+                site_yaml=self.user_dir / 'site.yaml',
+                scripts_dir=self.scripts_dir,           # system/scripts
+                templates_dir=self.templates_dir,       # user/templates (.html)
+                assets_dir=self.styles_dir,             # user/styles (common_template.css)
                 articles_dir=self.articles_dir,
                 version=_SITE_VERSION,
             )
@@ -3325,9 +3335,16 @@ class Builder:
     # ── [9] Site assets ───────────────────────────────────────
 
     def _copy_site_assets(self):
-        """assets/ → dist/assets/ 동기화.
+        """user/styles/ + user/branding/ + system/runtime/*.js → dist/assets/.
 
-        v0.5.1: assets/ 안의 raster 이미지도 webp 변환 대상. variants 는
+        v1.5.0: 전역 자산 소스가 셋으로 갈렸다 — user/styles (CSS),
+        user/branding (OG 이미지 등 정체성 자산), system/runtime 의 클라이언트
+        JS. 셋 다 dist/assets/ 한 곳으로 모여 `/assets/{rel}` URL 로 로드된다
+        (URL 계약·산출물은 v1.4.x 와 byte-불변). runtime 의 .php 는 서브타임
+        코드라 여기서 복사하지 않는다 — search.php 는 _build_search 가
+        dist/search.php 로 인라인 생성한다.
+
+        v0.5.1: 자산 안의 raster 이미지도 webp 변환 대상. variants 는
         `/assets/{rel}` URL 키로 등록 — 템플릿/HTML 에서 `/assets/foo.png` 형태로
         참조되는 이미지가 후처리에서 webp 로 치환된다.
 
@@ -3340,29 +3357,37 @@ class Builder:
         `resolve_og_image` 도 이 값을 문자열 그대로 쓰므로(webp 재매핑
         없음) 변환하면 그 URL 이 dist 에서 404 가 된다 (seo.py docstring 의
         "소비자가 다르다" 원칙과 같은 결). default_og_image 가 외부 URL
-        이거나 assets/ 밖이면 매칭되는 자산이 없어 이 예외는 무동작.
+        이거나 assets 밖이면 매칭되는 자산이 없어 이 예외는 무동작.
         """
-        if not self.assets_dir.is_dir():
-            return
+        # (source_dir, keep) — runtime 은 클라이언트 .js 만 기여한다.
+        # 서브타임 .php (search*) 는 _build_search 가 따로 낸다.
+        sources = (
+            (self.styles_dir, lambda p: True),
+            (self.branding_dir, lambda p: True),
+            (self.runtime_dir, lambda p: p.suffix == '.js'),
+        )
         dst_assets = self.dist / 'assets'
-        dst_assets.mkdir(parents=True, exist_ok=True)
         default_og = self.site.default_og_image
-        for src_file in self.assets_dir.rglob('*'):
-            if not src_file.is_file():
+        for src_dir, keep in sources:
+            if not src_dir.is_dir():
                 continue
-            rel = src_file.relative_to(self.assets_dir)
-            dst_file = dst_assets / rel
-            # 사이트 기본 og:image 자산은 원본 그대로 (위 docstring 참조).
-            is_default_og = ('/assets/' + rel.as_posix()) == default_og
-            if self._should_optimize_image(src_file) and not is_default_og:
-                self._optimize_and_register(
-                    src_file=src_file,
-                    dst_file=dst_file,
-                    url_prefix='/assets/',
-                    rel_path=rel,
-                )
-            else:
-                _copy_if_newer(src_file, dst_file)
+            for src_file in src_dir.rglob('*'):
+                if not src_file.is_file() or not keep(src_file):
+                    continue
+                dst_assets.mkdir(parents=True, exist_ok=True)
+                rel = src_file.relative_to(src_dir)
+                dst_file = dst_assets / rel
+                # 사이트 기본 og:image 자산은 원본 그대로 (위 docstring 참조).
+                is_default_og = ('/assets/' + rel.as_posix()) == default_og
+                if self._should_optimize_image(src_file) and not is_default_og:
+                    self._optimize_and_register(
+                        src_file=src_file,
+                        dst_file=dst_file,
+                        url_prefix='/assets/',
+                        rel_path=rel,
+                    )
+                else:
+                    _copy_if_newer(src_file, dst_file)
 
     # ── [6b] Home/Category page CSS sync (v0.6.4) ──────────────
 
@@ -3548,15 +3573,15 @@ class Builder:
             if p.exists():
                 p.unlink()
 
-        tpl_path = self.templates_dir / 'search.php'
+        tpl_path = self.runtime_dir / 'search.php'
         if not tpl_path.exists():
-            abort('templates/search.php not found')
-        tok_path = self.templates_dir / 'search_tokenize.php'
+            abort('system/runtime/search.php not found')
+        tok_path = self.runtime_dir / 'search_tokenize.php'
         if not tok_path.exists():
-            abort('templates/search_tokenize.php not found')
-        bm25_path = self.templates_dir / 'search_bm25.php'
+            abort('system/runtime/search_tokenize.php not found')
+        bm25_path = self.runtime_dir / 'search_bm25.php'
         if not bm25_path.exists():
-            abort('templates/search_bm25.php not found')
+            abort('system/runtime/search_bm25.php not found')
 
         tpl = tpl_path.read_text(encoding='utf-8')
         tok_body = self._inline_php_body(
@@ -3893,7 +3918,7 @@ class Builder:
         # 단조 증가한다.
         self._step(1, '설정 로드 (site.yaml / 토크나이저 패리티)')
         self._load_config()                    # [1]
-        self._step(2, '글 폴더 스캔 (Articles/)')
+        self._step(2, '글 폴더 스캔 (user/articles/)')
         self._scan_articles()                  # [2]
         self._step(3, 'meta.yaml 파싱')
         self._parse_frontmatter()              # [3]

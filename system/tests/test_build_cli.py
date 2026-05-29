@@ -16,11 +16,11 @@ import sys
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent       # src/
-PROJECT_ROOT = ROOT.parent                          # build.py 가 있는 폴더
-sys.path.insert(0, str(ROOT))                        # build.py 가 의존하는 scripts/
+ROOT = Path(__file__).resolve().parent.parent       # system/
+PROJECT_ROOT = ROOT.parent                          # Heron.py 가 있는 폴더 (<verdir>)
+sys.path.insert(0, str(ROOT))                        # Heron.py 가 의존하는 scripts/ (system/scripts)
 
-_spec = importlib.util.spec_from_file_location('build', PROJECT_ROOT / 'build.py')
+_spec = importlib.util.spec_from_file_location('heron', PROJECT_ROOT / 'Heron.py')
 build = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(build)
 

@@ -317,7 +317,7 @@ class DarkModeCssTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.css = (_SRC / 'assets' / 'common_template.css').read_text(
+        cls.css = (_SRC.parent / 'user' / 'styles' / 'common_template.css').read_text(
             encoding='utf-8')
 
     def test_prefers_color_scheme_dark_block_present(self):

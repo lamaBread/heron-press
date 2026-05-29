@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""단일 글 본문 렌더 — admin.php 실시간 미리보기 진입점 (v1.1.0).
+"""단일 글 본문 렌더 — Pond (Pond.php) 실시간 미리보기 진입점 (v1.1.0).
 
 v1.1.1: site.yaml `php_globals` 를 미리보기에도 적용 — imgBox 캡션의
 서명 변수 보간이 산출물과 동일하게 치환되도록(본문 충실도 유지).
@@ -35,9 +35,9 @@ HTML 조각을 stdout 으로 내고 exit 1 (admin 이 미리보기 창에 그대
 import sys
 from pathlib import Path
 
-# build.py 와 동일한 경로 해석: 이 파일은 <verdir>/src/admin/render_one.py
-# 이므로 parent.parent = <verdir>/src 를 sys.path 맨 앞에 올리면
-# `import scripts...` 가 빌더와 같은 패키지를 가리킨다.
+# Heron.py 와 동일한 경로 해석: 이 파일은 <verdir>/system/admin/render_one.py
+# 이므로 parent.parent = <verdir>/system 을 sys.path 맨 앞에 올리면
+# `import scripts...` 가 빌더와 같은 패키지(system/scripts)를 가리킨다.
 _SRC = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SRC))
 
@@ -82,7 +82,7 @@ def main(argv=None) -> None:
     if not source_dir.is_dir():
         _fail(f"글 폴더가 없습니다: {source_dir}")
 
-    # 빌더와 같은 모듈을 import (sys.path 에 <verdir>/src 가 올라 있음).
+    # 빌더와 같은 모듈을 import (sys.path 에 <verdir>/system 이 올라 있음).
     try:
         from scripts.markdown import (
             render_article_md, process_html, resolve_section_markers,
@@ -95,9 +95,9 @@ def main(argv=None) -> None:
     # v1.1.1: 빌더와 같은 site.yaml php_globals 를 미리보기에도 적용 —
     # imgBox 캡션의 `{$reference_hanbyeol}` 등이 산출물과 동일하게 치환
     # 되어야 본문 충실도가 유지된다 (설계 원칙 6·9, test_render_one 게이트).
-    # 빌더는 <verdir>/site.yaml 을 읽으므로 여기서도 같은 파일에서.
+    # 빌더는 <verdir>/user/site.yaml 을 읽으므로 여기서도 같은 파일에서.
     php_globals = {}
-    site_yaml = _SRC.parent / 'site.yaml'
+    site_yaml = _SRC.parent / 'user' / 'site.yaml'
     if site_yaml.is_file():
         try:
             php_globals = parse_php_globals(

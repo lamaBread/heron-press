@@ -1,21 +1,21 @@
 <?php
 /**
- * siheonlee.com — 로컬 글쓰기 admin (v1.1.0).
+ * Heron — 로컬 글쓰기 admin "Pond" (v1.5.0).
  *
- * 이 파일은 build.py 와 같은 위치(버전 폴더 루트)의 *얇은 라우터* 일
- * 뿐, 로직은 전부 src/admin/ 안에 있다 (build.py = 얇은 진입점 +
- * src/scripts/ 패턴 미러). 빌더는 Articles/ 만 스캔하므로 이 파일과
- * src/admin/ 은 dist 에 새지 않는다 (산출물 byte-불변).
+ * 이 파일은 Heron.py 와 같은 위치(버전 폴더 루트)의 *얇은 라우터* 일
+ * 뿐, 로직은 전부 system/admin/ 안에 있다 (Heron.py = 얇은 진입점 +
+ * system/scripts/ 패턴 미러). 빌더는 user/Articles/ 만 스캔하므로 이
+ * 파일과 system/admin/ 은 dist 에 새지 않는다 (산출물 byte-불변).
  *
  * 실행 (버전 폴더에서):
- *     php -S 127.0.0.1:8001 admin.php
+ *     php -S 127.0.0.1:8001 Pond.php
  *   브라우저: http://127.0.0.1:8001/
  *
  * 보안: **로컬 전용 단일 사용자 도구.** PHP 내장 서버(cli-server)
  * + 루프백에서만 동작 — 그 외 SAPI/원격이면 즉시 403. 배포(§13)는
- * dist/ 만 올리므로 admin.php·src/admin/ 은 빌드 머신을 떠나지 않는다.
- * 그래도 실수로 서버에 놓여도 열리지 않게 다층 가드를 둔다. **절대
- * 공개 서버에 두지 말 것.**
+ * dist/ 만 올리므로 Pond.php·system/admin/ 은 빌드 머신을 떠나지
+ * 않는다. 그래도 실수로 서버에 놓여도 열리지 않게 다층 가드를 둔다.
+ * **절대 공개 서버에 두지 말 것.**
  */
 declare(strict_types=1);
 
@@ -26,14 +26,14 @@ $loopback = in_array($remote, ['127.0.0.1', '::1', ''], true);
 if ($sapi !== 'cli-server' || !$loopback) {
     http_response_code(403);
     header('Content-Type: text/plain; charset=utf-8');
-    exit("403 — admin 은 로컬 PHP 내장 서버(php -S 127.0.0.1:8001 "
-        . "admin.php)에서만 동작합니다. (sapi={$sapi})");
+    exit("403 — Pond 는 로컬 PHP 내장 서버(php -S 127.0.0.1:8001 "
+        . "Pond.php)에서만 동작합니다. (sapi={$sapi})");
 }
 
-require_once __DIR__ . '/src/admin/lib/fs.php';
-require_once __DIR__ . '/src/admin/lib/proc.php';
-require_once __DIR__ . '/src/admin/lib/metayaml.php';
-require_once __DIR__ . '/src/admin/lib/articles.php';
+require_once __DIR__ . '/system/admin/lib/fs.php';
+require_once __DIR__ . '/system/admin/lib/proc.php';
+require_once __DIR__ . '/system/admin/lib/metayaml.php';
+require_once __DIR__ . '/system/admin/lib/articles.php';
 
 session_start();
 if (empty($_SESSION['csrf'])) {
@@ -107,8 +107,8 @@ if ($action === 'preview') {
             $body);
     }
 
-    $css = @file_get_contents(__DIR__ . '/src/assets/common_template.css') ?: '';
-    $js  = @file_get_contents(__DIR__ . '/src/assets/imgslidebox.js') ?: '';
+    $css = @file_get_contents(__DIR__ . '/user/styles/common_template.css') ?: '';
+    $js  = @file_get_contents(__DIR__ . '/system/runtime/imgslidebox.js') ?: '';
     header('Content-Type: text/html; charset=utf-8');
     echo "<!DOCTYPE html><html lang='ko'><head><meta charset='UTF-8'>"
        . "<meta name='viewport' content='width=device-width,initial-scale=1'>"
@@ -282,7 +282,7 @@ if ($action === 'build') {
     [$code, $out, $err] = admin_run_build($clean);
     $title = '빌드 ' . ($code === 0 ? '성공' : "실패 (exit {$code})");
     $bodyOut = trim($out . "\n" . $err);
-    require __DIR__ . '/src/admin/views/build.php';
+    require __DIR__ . '/system/admin/views/build.php';
     exit;
 }
 
@@ -291,7 +291,7 @@ if ($action === 'new') {
     $scan = admin_scan();
     $flashErrs = $_SESSION['flash_errs'] ?? [];
     unset($_SESSION['flash_errs']);
-    require __DIR__ . '/src/admin/views/new.php';
+    require __DIR__ . '/system/admin/views/new.php';
     exit;
 }
 
@@ -309,7 +309,7 @@ if ($action === 'edit') {
     $scan = admin_scan();
     $saved = !empty($_GET['saved']);
     $err = !empty($_GET['err']);
-    require __DIR__ . '/src/admin/views/edit.php';
+    require __DIR__ . '/system/admin/views/edit.php';
     exit;
 }
 
@@ -318,4 +318,4 @@ $scan = admin_scan();
 $trash = admin_scan_trash();
 $flashErrs = $_SESSION['flash_errs'] ?? [];
 unset($_SESSION['flash_errs']);
-require __DIR__ . '/src/admin/views/list.php';
+require __DIR__ . '/system/admin/views/list.php';

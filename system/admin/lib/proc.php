@@ -2,7 +2,7 @@
 // 파이썬 서브프로세스 실행 (admin v1.1.0).
 // admin 은 마크다운/slug 를 PHP 로 재구현하지 않는다 — 빌드가 쓰는 실제
 // scripts.* 를 render_one.py / slug_one.py 로 호출하고, 원클릭 빌드는
-// build.py 를 그대로 돌린다 (설계 원칙 6·9 단일 진실원 보존).
+// Heron.py 를 그대로 돌린다 (설계 원칙 6·9 단일 진실원 보존).
 
 declare(strict_types=1);
 
@@ -46,7 +46,7 @@ function admin_proc(array $argv, ?string $stdin, ?string $cwd): array {
     return [$code, $out ?? '', $err ?? ''];
 }
 
-/** <verdir>/src/admin/<script> 절대경로. */
+/** <verdir>/system/admin/<script> 절대경로. */
 function admin_pyscript(string $name): string {
     return __DIR__ . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . $name;
 }
@@ -77,11 +77,11 @@ function admin_suggest_slug(string $name): array {
             'non_ascii' => (bool)($j['non_ascii'] ?? false)];
 }
 
-/** 원클릭 빌드: python build.py [--clean]. 반환 [code,out,err]. */
+/** 원클릭 빌드: python Heron.py [--clean]. 반환 [code,out,err]. */
 function admin_run_build(bool $clean): array {
     $argv = array_merge(
         admin_python(),
-        [admin_base_dir() . DIRECTORY_SEPARATOR . 'build.py']
+        [admin_base_dir() . DIRECTORY_SEPARATOR . 'Heron.py']
     );
     if ($clean) $argv[] = '--clean';
     return admin_proc($argv, null, admin_base_dir());
