@@ -1,3 +1,7 @@
+<div class='gap'>
+    <p>About This Demo</p>
+</div>
+<section>
 <p>
   This is a <strong>live demo site</strong> for
   <a href="/">Heron</a>, a lightweight, PHP-targeted static site generator.
@@ -9,11 +13,16 @@
   This particular page is written as <code>content.html</code> (a raw HTML
   body) rather than Markdown. HTML bodies are emitted verbatim, which makes
   them the right choice when you are migrating existing HTML or need exact
-  control over the markup.
+  control over the markup. Because nothing is auto-wrapped, an HTML body must
+  supply its own <code>&lt;div class='gap'&gt;</code> +
+  <code>&lt;section&gt;</code> structure by hand — view source to see the
+  required idiom.
 </p>
-
-<h2>The image-box PHP function</h2>
-
+</section>
+<div class='gap'>
+    <p>The image-box PHP function</p>
+</div>
+<section>
 <p>
   Heron simulates two authoring helpers at build time — <code>imgBox()</code>
   and <code>imgSlideBox()</code> — so an HTML body can call them without a PHP
@@ -30,3 +39,4 @@
   <a href="/dynamic-year/">Dynamic Year</a> for the opposite case, where real
   PHP survives into the output.
 </p>
+</section>

@@ -1,4 +1,4 @@
-# Heron v1.5.2 — 사용설명서
+# Heron v1.5.3 — 사용설명서
 
 **Heron** 은 **글마다 폴더 하나**를 만들어 본문·첨부를 관리하고, `python Heron.py` 한 번으로 사이트를 만드는 **PHP 기반 경량 웹 사이트 생성기**입니다.
 
@@ -57,7 +57,7 @@ python Heron.py --no-cache     # 캐시 비활성
 성공 시 출력 형태:
 
 ```
-빌드 시작 - Heron v1.5.2 (...)
+빌드 시작 - Heron v1.5.3 (...)
 [ 1/16] 설정 로드 (site.yaml / 토크나이저 패리티)
 [ 2/16] 글 폴더 스캔 (user/articles/)
    …  (각 단계 [ n/16] 헤더, 무거운 단계는 \r 라이브 카운터)
@@ -757,6 +757,7 @@ curl -I https://your-domain.com/sitemap.xml     # 200 application/xml
 
 | 버전 | 날짜 | 요약 |
 |---|---|---|
+| **v1.5.3** | 2026-05-30 | **데모 콘텐츠 레이아웃 수정.** 예시 `content.html` 3건(About·Working with Images·Dynamic Year)이 HTML 본문이 직접 넣어야 하는 `<div class='gap'>` + `<section>` 래퍼를 빠뜨렸다 (마크다운의 자동 wrap·섹션 마커는 HTML 본문에 적용되지 않음 — § 4-4). `<section>` 이 없으면 본문이 `common_template.css` 의 `section` 스코프 타이포그래피 밖에 놓여, 해당 페이지들이 스타일 없이 렌더됐다. 각 본문을 `.md` 글이 내보내는 구조와 동일하게 감쌌다. `README.ko.md` § 4-4 가 `About/content.html` 을 정본 예시로 가리키므로, 이제 그 예시가 실제로 규칙을 시연한다. 엔진은 변경 없음 (`builder.py` 의 `.md`/`.html` 분기는 설계상 정상). 빌드 결정적(2회 빌드 동일, 57파일); 429 테스트 통과; 예시 세트 보완 0 / 살펴볼 사항 0 / 의도된 PHP 빌드 1건. |
 | **v1.5.2** | 2026-05-30 | **데모 콘텐츠 + 중립 기본값 릴리스.** ① `user/articles/` 에 모든 기능을 시연하는 작고 바로 빌드되는 예시 글 세트를 동봉 (§ 4-7) — 저장소가 곧 실행 가능한 문서. ② 사이트 식별 정보를 전부 중립 표지로 (`your-domain.com` / `Your Name` — 코드 기본값·주석·두 README); AdSense 는 기본 비활성. ③ 중립 `default-og.png` ("Hello, World!"). ④ `.gitignore` 가 `.DS_Store`·`build-report.md` 를 제외하고, 레거시 `articles/` 규칙을 루트 한정(`/articles/`)으로 좁혀 `user/articles/` 가 추적되도록. v1.5.1 대비 바이트 동일은 아님 (콘텐츠·설정 변경); 빌드는 여전히 결정적(두 빌드 동일). 429 테스트 통과; 예시 세트는 보완 0 / 살펴볼 사항 0 / 의도된 PHP 빌드 1건으로 빌드. |
 | **v1.5.1** | 2026-05-30 | **v1.5.0 안정화 리팩터링** (코드 릴리스, dist **byte-완전 동일**) — 동작·산출물을 바꾸지 않고 코드 정합성·가독성만 정리한 순수 내부 리팩터. ① **import 정리**: `builder.py` 의 `_pagination_*` 헬퍼 정의 사이에 끼어 있던 seo/search/sitemap/feed/report/cache import 를 상단 import 블록으로 통합(PEP 8), 빌더가 쓰지 않던 `ALL_IMAGE_EXTS` 미사용 import 제거. ② **모듈 경계 비공개 import 해소**: `images._split_url`·`_build_srcset` 를 공개명 `split_url`·`build_srcset` 로 승격(builder 가 갤러리 썸네일 조립에서 cross-module import — 밑줄=모듈 내부 관례와 충돌), `_HAS_PIL` 은 테스트가 직접 import 하는 사실상 공개 플래그라 유지. ③ **중복 제거(DRY)**: 글·카테고리·홈에 1:1 중복이던 `SeoMeta(...)` 생성을 `_seo_from_dict` 로, priority/nav_priority 정수 파싱+폴백 3 곳을 `_int_meta_field` 로 통합(3-상태·issue 메시지 byte-동일 보존). ④ **사문(死文) 제거**: `markdown._SECTION_SCOPED_TAGS` + `_resolve_selector` 의 항상-같은-결과 분기(화이트리스트 무관하게 모든 단일 태그가 `section TAG`), `BuildCache.stats()`(미호출). ⑤ **stale 명칭 정정**: `search.run_parity_test`·`_parity_cache_key` 의 인자명 `templates_dir`→`runtime_dir`(v1.5.0 폴더 이동 반영, 위치 인자라 동작 불변), `images.split_url` docstring 반환 튜플 표기 정정, `Pond.php` 의 `site.yaml reserved_slugs` 주석을 `Builder.RESERVED_SLUGS` 로 갱신. 코드 무결성: **정본 Articles 클린 재빌드 후 dist 787 파일 sha256 == v1.5.0** (열거 diff 아님 — 완전 byte-동일). 결정성 2회 빌드 동일. 단위 **429** · 진단 6/6 그대로. |
 | v1.5.0 | 2026-05-29 | 루트를 `user/`(편집 대상)·`system/`(프로그램)으로 분리하고 진입점을 `Heron.py`·`Pond.php`로 명명한 구조 릴리스. 순수 소스 레이아웃 변경이라 dist 는 v1.4.2 와 byte-동일. |
