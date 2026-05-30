@@ -1,0 +1,5 @@
+# Subcategory under Blog (Blog/Tutorials). Categories nest by folder depth.
+title: Tutorials
+layout: list
+seo:
+  description: Step-by-step tutorials. Currently a single example covering Heron's automatic image optimization.

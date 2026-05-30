@@ -1,0 +1,14 @@
+# Category settings for "Blog" (a top-level category).
+# Category meta.yaml has a different schema from articles — no slug/date.
+# NOTE: this YAML subset supports only own-line `#` comments (like these),
+# not inline comments after a value.
+title: Blog
+layout: list
+per_page: 20
+preview_per_page: 5
+# higher nav_priority = earlier in the top nav
+nav_priority: 100
+# higher priority = earlier when embedded as a section in a parent index
+priority: 100
+seo:
+  description: Long-form example articles — Markdown features, per-article styling, internationalization, and an images tutorial.

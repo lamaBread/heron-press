@@ -1,4 +1,4 @@
-/* siheonlee.com — DOM-based pagination (v0.4.5, gallery support v0.5.3)
+/* Heron — DOM-based pagination (v0.4.5, gallery support v0.5.3)
  *
  * 모든 항목은 서버에서 렌더된다 (SEO 친화). 이 스크립트는 클라이언트에서
  * DOM 을 hide/show 만 한다.

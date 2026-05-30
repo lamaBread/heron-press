@@ -246,23 +246,23 @@ def render_markdown(text: str) -> str:
 # PHP function simulation (imgBox / imgSlideBox)
 # ════════════════════════════════════════════════════════════════
 #
-# 정본 lama.pe.kr 서버는 `PHP/GlobalFunctions.php`(imgBox/imgSlideBox)
-# 와 `PHP/GlobalVariables.php`($reference_hanbyeol 등 서명 변수) 를
-# auto_prepend 해 글 본문의 `<?php … ?>` 블록을 런타임에 실행했다.
-# siheonlee.com 정적 빌드에는 그 런타임이 없으므로, 작성자가 .html
+# 원본 PHP 서버는 `PHP/GlobalFunctions.php`(imgBox/imgSlideBox)
+# 와 `PHP/GlobalVariables.php`(서명 변수) 를 auto_prepend 해 글 본문의
+# `<?php … ?>` 블록을 런타임에 실행했다.
+# 정적 빌드에는 그 런타임이 없으므로, 작성자가 .html
 # 본문에 쓴 imgBox/imgSlideBox PHP 를 빌드 시점에 정적 HTML 로 펼친다.
 #
 # v1.1.1 — 다중 구문 블록 지원 (배포 사고 수정):
 #   이전 구현은 한 블록당 호출 1개인 `<?php func(args) ?>` 한 줄 형태
 #   만 시뮬레이트했다. 실제 본문은 거의 다 다중 구문 블록
 #       <?php
-#           global $reference_hanbyeol_webDesign;   // 서명 변수 선언
-#           imgBox("a.png", "캡션 {$reference_hanbyeol_webDesign}");
+#           global $site_credit;   // 서명 변수 선언
+#           imgBox("a.png", "캡션 {$site_credit}");
 #           imgBox("b.png", "캡션");
 #       ?>
 #   형태라 시뮬레이트에 실패해 원본 PHP 가 그대로 dist 로 샜고,
-#   siheonlee.com 에서 `Call to undefined function imgBox()` (또는
-#   미정의 `$reference_*` 전역) fatal 이 나 그 지점부터 응답이 잘렸다.
+#   런타임이 없는 정적 빌드에서 `Call to undefined function imgBox()` (또는
+#   미정의 전역 변수) fatal 이 나 그 지점부터 응답이 잘렸다.
 #   이제 블록 전체를 토큰 스캔해 주석(`//` `#` `/* */`)·`global` 선언·
 #   세미콜론을 무시하고, 남는 게 imgBox/imgSlideBox 호출뿐이면 정적
 #   HTML 로 펼친다. 살아있는 다른 구문이 하나라도 있으면 블록을 원문
@@ -557,8 +557,8 @@ def has_live_php(html: str) -> bool:
 def parse_php_globals(raw) -> dict:
     """site.yaml `php_globals:` 블록 → `{변수명: 문자열}`.
 
-    정본 lama.pe.kr 의 `PHP/GlobalVariables.php` 가 auto_prepend 하던
-    서명 변수($reference_hanbyeol 등)를 운영자가 site.yaml 에 옮겨 적는
+    원본 PHP 서버의 `PHP/GlobalVariables.php` 가 auto_prepend 하던
+    서명 변수($site_credit 등)를 운영자가 site.yaml 에 옮겨 적는
     자리. 정적 빌드는 그 런타임이 없으므로 여기에 값을 두면 imgBox
     캡션의 `{$name}` 보간이 빌드 시점에 치환된다(`_interpolate_php`).
 

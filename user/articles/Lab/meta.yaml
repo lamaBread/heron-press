@@ -1,0 +1,5 @@
+title: Lab
+layout: list
+nav_priority: 20
+seo:
+  description: Experiments — including an article that intentionally keeps live PHP and is emitted as index.php.

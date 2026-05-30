@@ -80,7 +80,7 @@ class ImageConfig:
                       여도 이 옵션은 독립적으로 동작 (SEO 효과 따로).
     default_sizes   — srcset 과 짝이 되는 sizes 속성 디폴트. 기본
                       "(max-width: 800px) 100vw, 800px" — 모바일에선 viewport,
-                      데스크탑에선 800px 가정 (siheonlee.com main column 너비).
+                      데스크탑에선 800px 가정 (the site main column 너비).
     """
     enabled: bool = True
     widths: list = field(default_factory=lambda: [400, 800, 1600])
@@ -139,7 +139,7 @@ def _select_widths(orig_width: int, configured: list) -> list:
 def _primary_width(widths: list, default_target: int = 800) -> int:
     """srcset 의 1x 디스플레이를 위해 `<img src>` 가 가리킬 width 선택.
 
-    widths 중 default_target 에 가장 가까운 값. 800px 가 siheonlee.com 의
+    widths 중 default_target 에 가장 가까운 값. 800px 가 the site 의
     main column 표시 너비라 데스크탑/노트북에선 그 정도가 적당.
     """
     return min(widths, key=lambda w: (abs(w - default_target), -w))

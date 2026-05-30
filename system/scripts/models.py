@@ -44,8 +44,8 @@ v1.1.3 변경 — Google AdSense 통합:
     순수 데이터만.
 
 v1.1.1 변경 — PHP 서명 변수(배포 사고 수정):
-  - SiteConfig 에 `php_globals: dict` 추가. 정본 lama.pe.kr 의
-    `PHP/GlobalVariables.php`($reference_hanbyeol 등)가 auto_prepend
+  - SiteConfig 에 `php_globals: dict` 추가. 원본 PHP 서버의
+    `PHP/GlobalVariables.php`($site_credit 등)가 auto_prepend
     하던 서명 변수를 site.yaml `php_globals:` 로 옮겨 빌드 시점에
     imgBox 캡션의 `{$name}` 을 치환한다. 파싱·보간 로직은 markdown.py
     (parse_php_globals / _interpolate_php), 여기엔 순수 데이터만.
@@ -267,8 +267,8 @@ class SiteConfig:
     images: ImageConfig = field(default_factory=ImageConfig)
     # v0.8.3: schema.org JSON-LD 구조화 데이터 사이트 전역 토글.
     jsonld: JsonLdConfig = field(default_factory=JsonLdConfig)
-    # v1.1.1: 정본 lama.pe.kr 의 PHP/GlobalVariables.php 가 auto_prepend
-    # 하던 서명 변수($reference_hanbyeol 등)를 운영자가 옮겨 적는 자리.
+    # v1.1.1: 원본 PHP 서버의 PHP/GlobalVariables.php 가 auto_prepend
+    # 하던 서명 변수($site_credit 등)를 운영자가 옮겨 적는 자리.
     # imgBox 캡션의 `{$name}` 보간을 빌드 시점에 치환 (markdown.py
     # parse_php_globals / _interpolate_php). 키 부재 시 {} = 보간 없음.
     php_globals: dict = field(default_factory=dict)

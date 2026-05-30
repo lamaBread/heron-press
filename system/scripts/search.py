@@ -259,7 +259,7 @@ PARITY_FIXTURES = [
     ' ',
     'Hello',
     'HELLO world',
-    'siheonlee.com',
+    'your-domain.com',
     '한',                       # 1글자 한글 — 토큰 없음
     '한글',                     # bigram 1개
     '안녕하세요',                # bigram 4개

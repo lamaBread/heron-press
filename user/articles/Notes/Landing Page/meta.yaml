@@ -1,0 +1,10 @@
+slug: landing
+title: Standalone Landing Page
+date: 2026-02-12
+# drop the shared stylesheet entirely for a self-contained page
+use_common_css: false
+tags: [landing]
+seo:
+  description: A self-contained landing page that opts out of the shared CSS and ships only its own stylesheet.
+styles:
+  1: landing.css

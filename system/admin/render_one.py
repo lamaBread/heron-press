@@ -93,7 +93,7 @@ def main(argv=None) -> None:
         _fail(f"빌더 모듈 import 실패: {e!r}")
 
     # v1.1.1: 빌더와 같은 site.yaml php_globals 를 미리보기에도 적용 —
-    # imgBox 캡션의 `{$reference_hanbyeol}` 등이 산출물과 동일하게 치환
+    # imgBox 캡션의 `{$site_credit}` 등이 산출물과 동일하게 치환
     # 되어야 본문 충실도가 유지된다 (설계 원칙 6·9, test_render_one 게이트).
     # 빌더는 <verdir>/user/site.yaml 을 읽으므로 여기서도 같은 파일에서.
     php_globals = {}

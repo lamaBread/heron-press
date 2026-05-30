@@ -576,7 +576,7 @@ def _force_utf8_stdio():
 
 def main():
     _force_utf8_stdio()
-    parser = argparse.ArgumentParser(description='siheonlee.com SSG 진단')
+    parser = argparse.ArgumentParser(description='Heron SSG 진단')
     parser.add_argument('--report-path', default=None,
                         help='리포트 출력 경로 (default: tests/diagnostics_report.txt)')
     parser.add_argument('--no-build', action='store_true',

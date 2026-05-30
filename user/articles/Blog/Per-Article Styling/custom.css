@@ -1,0 +1,17 @@
+/* Per-article external stylesheet for "Per-Article Styling".
+   Loaded as /per-article-styling/custom.css, after common_template.css and
+   before the inline <style> block. This is the right place for anything the
+   inline channel intentionally rejects: @media, @keyframes, multi-line rules. */
+
+section blockquote {
+  border-left: 4px solid #2b6cb0;
+  background: rgba(43, 108, 176, 0.06);
+  padding: 0.6em 1em;
+  font-style: normal;
+}
+
+@media (max-width: 600px) {
+  section blockquote {
+    padding: 0.4em 0.7em;
+  }
+}

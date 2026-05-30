@@ -1,0 +1,6 @@
+slug: markdown-syntax
+title: Markdown Syntax Reference
+date: 2026-01-08
+tags: [markdown, reference]
+seo:
+  description: A dense reference of every Markdown construct Heron's Parsedown port supports — headings, lists, quotes, tables, links, and code.

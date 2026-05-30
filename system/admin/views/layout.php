@@ -10,7 +10,7 @@ function admin_head(string $title): void {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= h($title) ?> · siheonlee admin</title>
+<title><?= h($title) ?> · Pond admin</title>
 <style>
   :root{--bd:#dcdce0;--mut:#6b6b72;--accent:#2b6cb0;--bg:#fafafb}
   *{box-sizing:border-box}
@@ -56,7 +56,7 @@ function admin_head(string $title): void {
 </head>
 <body>
 <header class="bar">
-  <span class="brand">siheonlee admin</span>
+  <span class="brand">Pond admin</span>
   <nav>
     <a href="<?= h($self) ?>?a=list">목록</a>
     <a href="<?= h($self) ?>?a=new">+ 새 글</a>

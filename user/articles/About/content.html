@@ -1,0 +1,32 @@
+<p>
+  This is a <strong>live demo site</strong> for
+  <a href="/">Heron</a>, a lightweight, PHP-targeted static site generator.
+  Every article under <code>user/articles/</code> is here to exercise a
+  different feature, so the repository doubles as runnable documentation.
+</p>
+
+<p>
+  This particular page is written as <code>content.html</code> (a raw HTML
+  body) rather than Markdown. HTML bodies are emitted verbatim, which makes
+  them the right choice when you are migrating existing HTML or need exact
+  control over the markup.
+</p>
+
+<h2>The image-box PHP function</h2>
+
+<p>
+  Heron simulates two authoring helpers at build time — <code>imgBox()</code>
+  and <code>imgSlideBox()</code> — so an HTML body can call them without a PHP
+  runtime. The caption below interpolates <code>{$site_credit}</code> from
+  <code>site.yaml</code> &rarr; <code>php_globals</code>:
+</p>
+
+<?php imgBox("./imgs/portrait.png", "A placeholder portrait. {$site_credit}", "Placeholder portrait") ?>
+
+<p>
+  Because the only live PHP in this body is <code>imgBox()</code>, Heron
+  expands it to static HTML and the page is still emitted as
+  <code>index.html</code> (not <code>.php</code>). See
+  <a href="/dynamic-year/">Dynamic Year</a> for the opposite case, where real
+  PHP survives into the output.
+</p>

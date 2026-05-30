@@ -1,0 +1,10 @@
+slug: i18n
+title: Internationalization
+date: 2026-01-14
+# revision date (must be >= date); shows in the article-end meta line
+updated: 2026-02-01
+# override <html lang> for this one article (site default is ko)
+lang: en
+tags: [i18n, lang]
+seo:
+  description: Demonstrates a per-article language override and a revision (updated) date distinct from the publish date.

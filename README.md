@@ -1,4 +1,4 @@
-# Heron v1.5.1 — User Guide
+# Heron v1.5.2 — User Guide
 
 **Heron** is a lightweight, **PHP-targeted static site generator**: keep **one folder per article** for its body and attachments, and `python Heron.py` builds the whole site once. *A site that stands still.*
 
@@ -108,13 +108,13 @@ visitor    ├─ normal page       → Apache serves static HTML (fast)
 Since v1.5.0 the root is split into **`user/` (what you edit) and `system/` (the program):**
 
 ```
-siheonlee.com_v1.5.1/
+heron-press/
 │
 ├── user/                    ← ★ everything you own and edit
-│   ├── articles/                ← all articles
+│   ├── articles/                ← all articles (ships with a runnable example set — § 4-7)
 │   │   ├── About/                   ← top-level article (meta.yaml + content.html + assets)
 │   │   └── Blog/                    ← category folder
-│   │       └── Hello World/         ← article folder (folder name = display name)
+│   │       └── Welcome to Heron/    ← article folder (folder name = display name)
 │   │           ├── meta.yaml        ← slug / title / date / styles
 │   │           ├── content.md       ← body (or content.html)
 │   │           └── imgs/            ← attachments (optional)
@@ -350,7 +350,7 @@ dist/
 
 | Page | URL | Example |
 |---|---|---|
-| Home | `/` | `https://siheonlee.com/` |
+| Home | `/` | `https://your-domain.com/` |
 | Article | `/{slug}/` | `/mask-intake-3d-printing/` |
 | Category (top) | `/{cat}/` | `/blog/` |
 | Category (sub) | `/{top}/{sub}/` | `/blog/tutorials/` |
@@ -404,14 +404,14 @@ Only *truly global* (multi-page) settings live in `user/site.yaml`. Page-type-sp
 | `user/articles/<cat>/<article>/meta.yaml` | article only (§ 4-2) |
 
 ```yaml
-domain: siheonlee.com
-base_url: https://siheonlee.com
-name: heron
-main_title: heron
-default_author: 이시헌
+domain: your-domain.com
+base_url: https://your-domain.com
+name: Heron Demo
+main_title: Heron Demo
+default_author: Your Name
 default_og_image: /assets/default-og.png
 lang: ko
-copyright_holder: 이시헌
+copyright_holder: Your Name
 copyright_year_start: 2025
 category_per_page: 20
 category_preview_per_page: 5
@@ -428,13 +428,11 @@ jsonld:
 prev_next:
   enabled: true                       #   sibling pool = same-parent non-noindex, date asc
 php_globals:                          # PHP signature variables for imgBox captions
-  reference_hanbyeol: "Character illustration by 김한별"
-google_adsense:                       # all three fields empty → AdSense disabled
-  ads_txt: |
-    google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, fXXXXXXXXXXXXXXXX
-  head_script: |
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXX" crossorigin="anonymous"></script>
-  exclude_urls: ['/404.html', '/search.php', '/about/']   # URLs to skip injection; [] = inject everywhere
+  site_credit: "Illustrations by the Heron Demo team"
+google_adsense:                       # all three fields empty → AdSense disabled (the shipped default)
+  ads_txt: ""                         #   e.g. google.com, pub-0000000000000000, DIRECT, 0000000000000000
+  head_script: ""                     #   e.g. <script async src="…adsbygoogle.js?client=ca-pub-0000…"></script>
+  exclude_urls: []                    #   URLs to skip injection; [] = inject everywhere (when enabled)
 ```
 
 The five v1.4.0-retired keys (`reserved_slugs` / `warn_on_underscore_ref` / `warn_on_missing_asset` / `error_404_title` / `search_title`) are now code constants in `system/scripts/builder.py`; if left in `site.yaml`, the parser silently ignores them.
@@ -479,14 +477,14 @@ Raster conversion fans out across `ProcessPoolExecutor`; the worker is a module-
 Build, upload `dist/` to the server DocumentRoot, and register an Apache VirtualHost **once**. Adding/removing articles afterward needs no server change. No `.htaccess`.
 
 ```bash
-rsync -avz --delete dist/ user@siheonlee.com:/var/www/siheonlee.com/
+rsync -avz --delete dist/ user@your-domain.com:/var/www/your-domain.com/
 ```
 
 ```apache
 <VirtualHost *:443>
-    ServerName siheonlee.com
-    DocumentRoot /var/www/siheonlee.com         # ← deploy the contents of dist/
-    <Directory /var/www/siheonlee.com>
+    ServerName your-domain.com
+    DocumentRoot /var/www/your-domain.com         # ← deploy the contents of dist/
+    <Directory /var/www/your-domain.com>
         AllowOverride None
         DirectoryIndex index.html index.php
         DirectorySlash On                       # /slug → /slug/ redirect
@@ -548,6 +546,7 @@ rsync -avz --delete dist/ user@siheonlee.com:/var/www/siheonlee.com/
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.5.2** | 2026-05-30 | **Demo content + neutral defaults release.** ① `user/articles/` now ships a small, fully-buildable example set that exercises every feature (§ 4-7) — the repo doubles as runnable documentation. ② All site-identity placeholders genericized to `your-domain.com` / `Your Name` (code defaults, comments, and both READMEs); AdSense ships disabled by default. ③ A neutral `default-og.png` ("Hello, World!"). ④ `.gitignore` now excludes `.DS_Store` and `build-report.md` and scopes the legacy `articles/` rules to the repo root so `user/articles/` is tracked. Not byte-identical to v1.5.1 (content/config change); the build is still deterministic (two builds identical). 429 tests pass; example set builds with 0 issues / 0 warnings / 1 intended PHP-built article. |
 | **v1.5.1** | 2026-05-30 | **v1.5.0 stabilization refactor** (code release, dist **byte-identical**) — a pure internal refactor of code consistency/readability with no behavior or output change. ① **Import hygiene**: in `builder.py` the seo/search/sitemap/feed/report/cache imports that sat between the `_pagination_*` helper defs are hoisted into the top import block (PEP 8); the unused `ALL_IMAGE_EXTS` import is dropped. ② **Cross-module encapsulation**: `images._split_url`/`_build_srcset` promoted to public `split_url`/`build_srcset` (builder imported them across the module boundary — underscore = module-internal convention clash); `_HAS_PIL` kept (tests import it directly, a de-facto public flag). ③ **De-duplication (DRY)**: the `SeoMeta(...)` construction duplicated 1:1 across article/category/home folded into `_seo_from_dict`; the priority/nav_priority integer parse-with-fallback at three sites folded into `_int_meta_field` (3-state + issue messages preserved byte-for-byte). ④ **Dead code removed**: `markdown._SECTION_SCOPED_TAGS` + the always-same-result branch in `_resolve_selector` (every bare tag becomes `section TAG` regardless of the whitelist), `BuildCache.stats()` (never called). ⑤ **Stale naming fixed**: `search.run_parity_test`/`_parity_cache_key` arg `templates_dir` → `runtime_dir` (reflects the v1.5.0 folder move; positional call so behavior unchanged), `images.split_url` docstring return-tuple corrected, `Pond.php`'s `site.yaml reserved_slugs` comment updated to `Builder.RESERVED_SLUGS`. Code integrity: **clean rebuild from canonical Articles, dist 787 files sha256 == v1.5.0** (not an enumerated diff — fully byte-identical). Determinism: two builds identical. 429 tests · 6/6 diagnostics unchanged. |
 | v1.5.0 | 2026-05-29 | Structure release — root split into `user/` (what you edit) and `system/` (the program); entry points renamed `Heron.py` / `Pond.php`. Pure source-layout change, so dist is byte-identical to v1.4.2. |
 | v1.4.1 | 2026-05-28 | Fixed the v1.4.0 internal-link validation regex (`\bhref=` → `\s+href=`) — no more `data-href` mismatch. dist byte-invariant. |

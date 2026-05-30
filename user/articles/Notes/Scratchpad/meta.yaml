@@ -1,0 +1,8 @@
+slug: scratchpad
+title: Scratchpad (noindex)
+date: 2026-02-10
+# excluded from search engines, sitemap, search index, and feeds
+noindex: true
+tags: [notes]
+# Note: no seo.description here on purpose. Normally that raises a build issue,
+# but noindex articles are exempt — this article demonstrates that exemption.

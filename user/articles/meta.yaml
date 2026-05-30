@@ -1,0 +1,14 @@
+# Home page settings (user/articles/meta.yaml).
+# The home page is special: it has no slug/date. Only the keys below apply.
+title: Heron Demo
+# Articles shown on the home feed (newest first).
+per_page: 10
+# Top-level categories to hide from the home feed (still built + reachable).
+excludes_categories: []
+seo:
+  description: A live demo site for the Heron static site generator — every example article exercises a different feature.
+  og_image: /assets/default-og.png
+# Home-only inline style demo (see §4-6). Tag keys become `section TAG` selectors.
+styles:
+  p:
+    line-height: 1.75em

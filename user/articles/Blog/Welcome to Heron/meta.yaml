@@ -1,0 +1,7 @@
+slug: welcome-to-heron
+title: Welcome to Heron
+date: 2026-01-05
+tags: [welcome, getting-started, markdown]
+seo:
+  description: A guided tour of Heron's core Markdown and section-marker syntax, with a hero image and an image box.
+  og_image: /welcome-to-heron/imgs/hero.png

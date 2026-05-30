@@ -1,0 +1,6 @@
+slug: dynamic-year
+title: Dynamic Year (PHP output)
+date: 2026-02-15
+tags: [php, dynamic]
+seo:
+  description: An article that keeps a live PHP statement, so Heron emits it as index.php instead of index.html.

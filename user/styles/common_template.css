@@ -600,8 +600,8 @@ section.listup-gallery > p {
 
 /* ════════════════════════════════════════════════════════════════
    imgSlideBox  (v1.1.2 — 오류 수정 + 페이지네이션형 재디자인)
-   정본 lama.pe.kr 의 imgSlideBox 는 단일 <img> 의 src 를 JS 로 갈아끼워
-   한 장만 보였다. siheonlee 정적 빌드(markdown.py _simulate_imgslidebox)
+   원본 PHP 서버의 imgSlideBox 는 단일 <img> 의 src 를 JS 로 갈아끼워
+   한 장만 보였다. 정적 빌드(markdown.py _simulate_imgslidebox)
    는 폴더의 모든 이미지를 <img class="slide"> 로 미리 펼치고 그중 한
    장에만 .active 를 주며, assets/imgslidebox.js 가 .active 를 옮긴다.
    (1) 오류 수정 — "active 한 장만 보이기"는 전적으로 CSS 책임인데

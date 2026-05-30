@@ -328,11 +328,11 @@ class SimulatePhpTests(unittest.TestCase):
         src = ('<?php\n'
                '    global $sig;  // GlobalVariable.php\n'
                '    imgBox("./x.png", "Cap.<br>&nbsp;{$sig}");\n?>')
-        out = self.sim(src, {'sig': 'by 김한별'})
+        out = self.sim(src, {'sig': 'by An Illustrator'})
         self.assertNotIn('<?php', out)
         self.assertNotIn('global', out)
         # 캡션은 이스케이프되지 않는다 — <br> 가 살아 있어야 함
-        self.assertIn('<p class="caption">Cap.<br>&nbsp;by 김한별</p>', out)
+        self.assertIn('<p class="caption">Cap.<br>&nbsp;by An Illustrator</p>', out)
 
     def test_bare_dollar_interpolation_double_quoted(self):
         out = self.sim('<?php imgBox("a.png", "x $v y") ?>', {'v': 'Z'})

@@ -1,0 +1,8 @@
+# A top-level category using the "gallery" layout (image tiles instead of a
+# text list). Each child article's first image becomes its tile thumbnail.
+title: Gallery
+layout: gallery
+per_page: 12
+nav_priority: 80
+seo:
+  description: A gallery-layout category — articles are shown as image tiles built from each article's hero image.

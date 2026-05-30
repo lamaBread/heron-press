@@ -39,7 +39,7 @@ v0.5.5 변경 — 본문 ↔ 메타데이터 분리 원칙:
     무한 반복해도 산출물이 동일하다.
 
 ID 정책:
-  - entry id 는 글의 절대 URL (`https://siheonlee.com/{slug}/`). 피드 ID 는
+  - entry id 는 글의 절대 URL (`https://your-domain.com/{slug}/`). 피드 ID 는
     사이트 base_url. 안정적이고 영구적인 식별자 — slug 가 살아있는 한 같은
     글에 같은 id 가 부여된다.
 """

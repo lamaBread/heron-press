@@ -1,4 +1,4 @@
-# Heron v1.5.1 — 사용설명서
+# Heron v1.5.2 — 사용설명서
 
 **Heron** 은 **글마다 폴더 하나**를 만들어 본문·첨부를 관리하고, `python Heron.py` 한 번으로 사이트를 만드는 **PHP 기반 경량 웹 사이트 생성기**입니다.
 
@@ -57,7 +57,7 @@ python Heron.py --no-cache     # 캐시 비활성
 성공 시 출력 형태:
 
 ```
-빌드 시작 - siheonlee.com v1.5.1 (...)
+빌드 시작 - Heron v1.5.2 (...)
 [ 1/16] 설정 로드 (site.yaml / 토크나이저 패리티)
 [ 2/16] 글 폴더 스캔 (user/articles/)
    …  (각 단계 [ n/16] 헤더, 무거운 단계는 \r 라이브 카운터)
@@ -123,13 +123,13 @@ cd dist && python -m http.server 8000   # → http://localhost:8000/
 v1.5.0 부터 루트가 **`user/` (네가 편집) 와 `system/` (프로그램) 로 갈렸다:**
 
 ```
-siheonlee.com_v1.5.1/
+heron-press/
 │
 ├── user/                    ← ★ 네가 소유·편집하는 모든 것
-│   ├── articles/                ← 모든 글
+│   ├── articles/                ← 모든 글 (바로 빌드되는 예시 글 세트 포함 — § 4-7)
 │   │   ├── About/                   ← 톱레벨 글 (meta.yaml + content.html + 자산)
 │   │   └── Blog/                    ← 카테고리 폴더
-│   │       └── Hello World/         ← 글 폴더 (폴더명 = 화면 표시명)
+│   │       └── Welcome to Heron/    ← 글 폴더 (폴더명 = 화면 표시명)
 │   │           ├── meta.yaml        ← slug/제목/날짜/styles
 │   │           ├── content.md       ← 본문 (또는 content.html)
 │   │           └── imgs/            ← 첨부 (선택)
@@ -314,6 +314,27 @@ styles:
 
 ---
 
+### 4-7. 예시 콘텐츠 (이 저장소에 동봉)
+
+`user/articles/` 에는 작고 **그대로 빌드되는** 데모 사이트가 들어 있다. 실행 가능한 문서를 겸한다 — 각 예시가 서로 다른 기능을 시연하므로, 갓 clone 한 상태에서 `python Heron.py` 만 돌려도 브라우저로 읽을 수 있는 사이트가 나온다. 자기 사이트를 시작할 때 폴더째 지우면 된다 (레퍼런스로 남겨도 좋다).
+
+| 예시 글 (폴더) | URL | 시연하는 기능 |
+|---|---|---|
+| `About` | `/about/` | `content.html` 본문 · `imgBox()` PHP 시뮬레이션 · `php_globals` 의 `{$site_credit}` 보간 |
+| `Blog/Welcome to Heron` | `/welcome-to-heron/` | 기본 마크다운 · 섹션 마커(`===t===` / `======`) · 이미지 박스 `![[alt]](경로){캡션}` · 정렬 표 · `og_image` |
+| `Blog/Markdown Syntax Reference` | `/markdown-syntax/` | 마크다운 총정리 — ATX·Setext 제목, 참조 링크, 중첩 리스트, 3중 인용, 펜스 코드 |
+| `Blog/Per-Article Styling` | `/per-article-styling/` | `styles` 두 채널: 외부 CSS(정수 키) + 인라인 규칙(문자열 키), 로드 순서대로 |
+| `Blog/Internationalization` | `/i18n/` | 글 단위 `lang:` 오버라이드 + `updated:` 수정일 |
+| `Blog/Tutorials/Working with Images` | `/working-with-images/` | **서브카테고리** · `imgBox()` + `imgSlideBox()` · raster → 다중 해상도 WebP `srcset` |
+| `Gallery/*` (Sunset · Mountains · Ocean) | `/gallery-*/` | 카테고리 `layout: gallery` (이미지 타일) |
+| `Notes/Scratchpad` | `/scratchpad/` | `noindex: true` (sitemap/검색/피드 제외) + `seo.description` 면제 |
+| `Notes/Landing Page` | `/landing/` | `use_common_css: false` 자기완결형 페이지 |
+| `Lab/Dynamic Year` | `/dynamic-year/` | 살아있는 `<?php … ?>` 가 남아 `index.php` 로 출력 ("PHP 빌드 글" 로 보고) |
+
+카테고리(`Blog`·`Gallery`·`Notes`·`Lab`) 자체는 `nav_priority`·`priority`·`layout`·`preview_per_page` 를 보여준다. 이 세트를 클린 빌드하면 **보완 0 / 살펴볼 사항 0 / PHP 빌드 1건**(Dynamic Year, 의도)으로 보고된다.
+
+---
+
 ## 5. 카테고리
 
 `user/articles/` 아래 폴더 구조가 그대로 카테고리. 별도 설정 없이 **폴더 = 카테고리**. 빌더는 `content.md`/`content.html` 유무로 글 폴더와 카테고리 폴더를 구분 (둘 다 없으면 카테고리).
@@ -406,7 +427,7 @@ dist/
 
 | 페이지 | URL | 예시 |
 |---|---|---|
-| 홈 | `/` | `https://siheonlee.com/` |
+| 홈 | `/` | `https://your-domain.com/` |
 | 글 | `/{slug}/` | `/mask-intake-3d-printing/` |
 | 카테고리 톱레벨 | `/{cat}/` | `/blog/` |
 | 카테고리 서브 | `/{top}/{sub}/` | `/blog/tutorials/` |
@@ -486,16 +507,16 @@ dist/
 > **v1.4.0 폐기** — `reserved_slugs` · `warn_on_underscore_ref` · `warn_on_missing_asset` · `error_404_title` · `search_title` 다섯 키는 코드 상수로 승격됐다 (`system/scripts/builder.py`의 `RESERVED_SLUGS` / `DEFAULT_ERROR_404_TITLE` / `DEFAULT_SEARCH_TITLE`, 그리고 항상-경고 행동 고정 + dead config 정리). 옛 site.yaml 에 키가 남아 있어도 파서가 silently 무시한다.
 
 ```yaml
-domain: siheonlee.com
-base_url: https://siheonlee.com
-name: Lama
-main_title: Lama
-default_author: 이시헌
+domain: your-domain.com
+base_url: https://your-domain.com
+name: Heron Demo
+main_title: Heron Demo
+default_author: Your Name
 default_og_image: /assets/default-og.png
 lang: ko                              # 모든 페이지 <html lang> 디폴트
 default_title_prefix: ""              # 모든 페이지 <title> prefix/suffix
 default_title_suffix: ""
-copyright_holder: 이시헌
+copyright_holder: Your Name
 copyright_year_start: 2025
 category_per_page: 20                 # 카테고리 페이지네이션 디폴트
 category_preview_per_page: 5
@@ -504,7 +525,7 @@ robots_txt_main: |
   User-agent: *
   Allow: /
 
-  Sitemap: https://siheonlee.com/sitemap.xml
+  Sitemap: https://your-domain.com/sitemap.xml
 images:                               # 이미지 자동 최적화 (생략 시 아래 기본값)
   enabled: true                       #   false 면 Pillow 없이 빌드 통과
   widths: [400, 800, 1600]            #   생성할 WebP 변종 너비
@@ -519,19 +540,15 @@ prev_next:                            # v1.4.0: 글 푸터 이전/다음 글 nav
   enabled: true                       #   sibling 풀 = 같은 부모 폴더의 non-noindex
                                       #   글, date asc 정렬. 글 단위 끄기 없음.
 php_globals:                          # PHP 서명 변수 (생략 시 보간 없음)
-  reference_hanbyeol: "Character illustration by 김한별 (kakao ID: zzang767401)"
-  reference_hanbyeol_webDesign: "Illustration and Web Design by 김한별 (kakao ID: zzang767401)"
-#   정본 lama.pe.kr 의 PHP/GlobalVariables.php(auto_prepend) 가 런타임에
+  site_credit: "Illustrations by the Heron Demo team"
+#   원본 PHP 서버의 PHP/GlobalVariables.php(auto_prepend) 가 런타임에
 #   채우던 서명 변수. 정적 빌드엔 그 런타임이 없으므로 여기 옮겨 적으면
-#   글 본문 imgBox 캡션 안의 {$reference_hanbyeol} 등을 빌드 시 치환한다
+#   글 본문 imgBox 캡션 안의 {$site_credit} 등을 빌드 시 치환한다
 #   (미정의 변수 = 빈 문자열, PHP 미정의 echo 동등). 변수명 앞 $ 는 생략.
-google_adsense:                       # Google AdSense
-  ads_txt: |                          #   빈 문자열 → dist/ads.txt 미생성·잔존 자동 삭제
-    google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, fXXXXXXXXXXXXXXXX
-  head_script: |                      #   빈 문자열 → 5 페이지 head 에 미주입(라인 자체 strip)
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
-         crossorigin="anonymous"></script>
-  exclude_urls: ['/404.html', '/search.php', '/about/']   # 비주입할 URL / [] 면 5 페이지 전체 주입
+google_adsense:                       # Google AdSense (기본 비활성)
+  ads_txt: ""                         #   예: google.com, pub-0000000000000000, DIRECT, 0000000000000000
+  head_script: ""                     #   예: <script async src="…adsbygoogle.js?client=ca-pub-0000…"></script>
+  exclude_urls: []                    #   비주입할 URL / [] 면 (활성 시) 5 페이지 전체 주입
 #   ads_txt 는 dist/ads.txt 로 그대로 기록 (robots.txt 와 같은 패턴);
 #   head_script 는 5 템플릿 (article·home·category·404·search.php) <head>
 #   에 raw 그대로 주입 (escape 없음). 둘 다 빈 문자열/키 부재 시 자동 비활성
@@ -630,20 +647,20 @@ raster 변환은 `ProcessPoolExecutor(workers=min(cpu_count, len(jobs)))` 로 fa
 빌드 후 `dist/` 를 서버 DocumentRoot 에 올리고 Apache VirtualHost 를 **한 번** 등록. 이후 글 추가/삭제해도 서버 설정 불변. `.htaccess` 미사용 — 공유 호스팅에서 메인 설정 접근이 안 되면 호스팅 사업자에 등록 요청.
 
 ```bash
-rsync -avz --delete dist/ user@siheonlee.com:/var/www/siheonlee.com/
+rsync -avz --delete dist/ user@your-domain.com:/var/www/your-domain.com/
 ```
 
 ```apache
 <VirtualHost *:443>
-    ServerName siheonlee.com
-    ServerAlias www.siheonlee.com
-    DocumentRoot /var/www/siheonlee.com         # ← dist/ 내용 배포
+    ServerName your-domain.com
+    ServerAlias www.your-domain.com
+    DocumentRoot /var/www/your-domain.com         # ← dist/ 내용 배포
 
     SSLEngine on
-    SSLCertificateFile    /etc/letsencrypt/live/siheonlee.com/fullchain.pem
-    SSLCertificateKeyFile /etc/letsencrypt/live/siheonlee.com/privkey.pem
+    SSLCertificateFile    /etc/letsencrypt/live/your-domain.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/your-domain.com/privkey.pem
 
-    <Directory /var/www/siheonlee.com>
+    <Directory /var/www/your-domain.com>
         AllowOverride None                      # .htaccess 무시
         DirectoryIndex index.html index.php
         DirectorySlash On                       # /slug → /slug/ 자동 리다이렉트
@@ -657,10 +674,10 @@ rsync -avz --delete dist/ user@siheonlee.com:/var/www/siheonlee.com/
 </VirtualHost>
 
 <VirtualHost *:80>                              # HTTP → HTTPS (선택)
-    ServerName siheonlee.com
-    ServerAlias www.siheonlee.com
+    ServerName your-domain.com
+    ServerAlias www.your-domain.com
     RewriteEngine On
-    RewriteRule ^.*$ https://siheonlee.com%{REQUEST_URI} [L,R=301]
+    RewriteRule ^.*$ https://your-domain.com%{REQUEST_URI} [L,R=301]
 </VirtualHost>
 ```
 
@@ -671,10 +688,10 @@ rsync -avz --delete dist/ user@siheonlee.com:/var/www/siheonlee.com/
 **배포 검증:**
 
 ```bash
-curl -I https://siheonlee.com/                # 200
-curl -I https://siheonlee.com/hello-world     # 301 → /hello-world/
-curl -I https://siheonlee.com/hello-world/    # 200
-curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
+curl -I https://your-domain.com/                # 200
+curl -I https://your-domain.com/hello-world     # 301 → /hello-world/
+curl -I https://your-domain.com/hello-world/    # 200
+curl -I https://your-domain.com/sitemap.xml     # 200 application/xml
 ```
 
 ---
@@ -740,6 +757,7 @@ curl -I https://siheonlee.com/sitemap.xml     # 200 application/xml
 
 | 버전 | 날짜 | 요약 |
 |---|---|---|
+| **v1.5.2** | 2026-05-30 | **데모 콘텐츠 + 중립 기본값 릴리스.** ① `user/articles/` 에 모든 기능을 시연하는 작고 바로 빌드되는 예시 글 세트를 동봉 (§ 4-7) — 저장소가 곧 실행 가능한 문서. ② 사이트 식별 정보를 전부 중립 표지로 (`your-domain.com` / `Your Name` — 코드 기본값·주석·두 README); AdSense 는 기본 비활성. ③ 중립 `default-og.png` ("Hello, World!"). ④ `.gitignore` 가 `.DS_Store`·`build-report.md` 를 제외하고, 레거시 `articles/` 규칙을 루트 한정(`/articles/`)으로 좁혀 `user/articles/` 가 추적되도록. v1.5.1 대비 바이트 동일은 아님 (콘텐츠·설정 변경); 빌드는 여전히 결정적(두 빌드 동일). 429 테스트 통과; 예시 세트는 보완 0 / 살펴볼 사항 0 / 의도된 PHP 빌드 1건으로 빌드. |
 | **v1.5.1** | 2026-05-30 | **v1.5.0 안정화 리팩터링** (코드 릴리스, dist **byte-완전 동일**) — 동작·산출물을 바꾸지 않고 코드 정합성·가독성만 정리한 순수 내부 리팩터. ① **import 정리**: `builder.py` 의 `_pagination_*` 헬퍼 정의 사이에 끼어 있던 seo/search/sitemap/feed/report/cache import 를 상단 import 블록으로 통합(PEP 8), 빌더가 쓰지 않던 `ALL_IMAGE_EXTS` 미사용 import 제거. ② **모듈 경계 비공개 import 해소**: `images._split_url`·`_build_srcset` 를 공개명 `split_url`·`build_srcset` 로 승격(builder 가 갤러리 썸네일 조립에서 cross-module import — 밑줄=모듈 내부 관례와 충돌), `_HAS_PIL` 은 테스트가 직접 import 하는 사실상 공개 플래그라 유지. ③ **중복 제거(DRY)**: 글·카테고리·홈에 1:1 중복이던 `SeoMeta(...)` 생성을 `_seo_from_dict` 로, priority/nav_priority 정수 파싱+폴백 3 곳을 `_int_meta_field` 로 통합(3-상태·issue 메시지 byte-동일 보존). ④ **사문(死文) 제거**: `markdown._SECTION_SCOPED_TAGS` + `_resolve_selector` 의 항상-같은-결과 분기(화이트리스트 무관하게 모든 단일 태그가 `section TAG`), `BuildCache.stats()`(미호출). ⑤ **stale 명칭 정정**: `search.run_parity_test`·`_parity_cache_key` 의 인자명 `templates_dir`→`runtime_dir`(v1.5.0 폴더 이동 반영, 위치 인자라 동작 불변), `images.split_url` docstring 반환 튜플 표기 정정, `Pond.php` 의 `site.yaml reserved_slugs` 주석을 `Builder.RESERVED_SLUGS` 로 갱신. 코드 무결성: **정본 Articles 클린 재빌드 후 dist 787 파일 sha256 == v1.5.0** (열거 diff 아님 — 완전 byte-동일). 결정성 2회 빌드 동일. 단위 **429** · 진단 6/6 그대로. |
 | v1.5.0 | 2026-05-29 | 루트를 `user/`(편집 대상)·`system/`(프로그램)으로 분리하고 진입점을 `Heron.py`·`Pond.php`로 명명한 구조 릴리스. 순수 소스 레이아웃 변경이라 dist 는 v1.4.2 와 byte-동일. |
 | v1.4.1 | 2026-05-28 | v1.4.0 내부 링크 검증 정규식(`\bhref=`→`\s+href=`) 결함 수정 — `data-href` 오매칭 제거. dist byte-불변. |

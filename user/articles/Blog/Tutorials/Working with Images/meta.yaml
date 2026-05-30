@@ -1,0 +1,6 @@
+slug: working-with-images
+title: Working with Images
+date: 2026-01-18
+tags: [images, webp, tutorial]
+seo:
+  description: How Heron turns a source PNG into multiple WebP widths with srcset and lazy loading, plus a slideshow demo.

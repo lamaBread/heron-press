@@ -1,0 +1,18 @@
+<p>
+  Most articles compile to static <code>index.html</code>. This one keeps a
+  <em>live</em> PHP statement that Heron cannot pre-compute, so it is emitted
+  as <code>index.php</code> instead. The URL is unchanged
+  (<code>/dynamic-year/</code>), and the build report lists it under
+  "PHP-built articles" — that is an intended outcome, not an error.
+</p>
+
+<p>
+  The current year, evaluated by PHP on each request:
+  <strong><?php echo date('Y'); ?></strong>.
+</p>
+
+<p>
+  This is the escape hatch for the rare page that needs server logic. It
+  assumes PHP 7.4+ on the deploy server, the same requirement as
+  <code>search.php</code>.
+</p>

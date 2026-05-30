@@ -918,10 +918,10 @@ class Builder:
             pn_enabled = True
 
         self.site = SiteConfig(
-            domain=get('domain', 'siheonlee.com'),
-            base_url=get('base_url', 'https://siheonlee.com'),
-            name=get('name', 'siheonlee.com'),
-            main_title=get('main_title') or get('name', 'siheonlee.com'),
+            domain=get('domain', 'your-domain.com'),
+            base_url=get('base_url', 'https://your-domain.com'),
+            name=get('name', 'your-domain.com'),
+            main_title=get('main_title') or get('name', 'your-domain.com'),
             default_author=get('default_author', ''),
             default_og_image=get('default_og_image', '/assets/default-og.png'),
             default_title_prefix=get('default_title_prefix') or '',
@@ -3517,7 +3517,7 @@ class Builder:
         # 콘솔 / build-report.md 전용 (모두 dist 밖) 이고, 릴리스 버전을
         # 자유롭게 추종할 수 있다. 귀속(attribution) 은 그대로 유지.
         # (Atom RFC 4287 / RSS 2.0 모두 <generator> 는 optional — 스펙 유효.)
-        generator = 'siheonlee.com — github.com/siheonlee'
+        generator = 'Heron static site generator'
         doc = build_feed_document(
             articles=self.articles,
             site=self.site,
@@ -3865,7 +3865,7 @@ class Builder:
         self._step_times = []
         self._step_current = ()
         self._build_started = datetime.datetime.now()
-        self._emit(f'빌드 시작 - siheonlee.com v{_SITE_VERSION} '
+        self._emit(f'빌드 시작 - Heron v{_SITE_VERSION} '
                    f'({self._build_started.strftime("%Y-%m-%d %H:%M:%S")})')
         if not self.cache.enabled:
             self._emit('  (증분 캐시 비활성 - --no-cache)')
@@ -3986,7 +3986,7 @@ class Builder:
                     f'증분 캐시: {self._cache_hits} 히트 / '
                     f'{self._cache_misses} 미스 (글 {total_attempts}건).'
                 )
-        self._emit('산출물: dist/ (siheonlee.com).')
+        self._emit('산출물: dist/ (Heron).')
 
         # v0.5.5: 빌드 종료 시 일원화 리포트 출력. meta.yaml 의 필드 부족 /
         # 빈 문자열 / 형식 오류 등 모든 콘텐츠 결함이 여기 모아진다.
@@ -4005,7 +4005,7 @@ class Builder:
         """build-report.md 를 self.base 에 작성.
 
         구성:
-          # siheonlee.com 빌드 리포트
+          # Heron 빌드 리포트
           - 메타 (버전 / 시각 / 소요 / 글·카테고리 수 / 캐시)
           ## 빌드 진행            — _emit 트랜스크립트 (코드 블록)
           ## 보완이 필요한 항목   — BuildReport.render_markdown() 의 issue 절
@@ -4025,7 +4025,7 @@ class Builder:
                 cache_line = '활성 (대상 글 없음)'
 
         lines = []
-        lines.append('# siheonlee.com 빌드 리포트')
+        lines.append('# Heron 빌드 리포트')
         lines.append('')
         lines.append(f'- **버전**: v{_SITE_VERSION}')
         lines.append(f'- **빌드 시각**: {finished}')

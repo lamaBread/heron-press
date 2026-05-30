@@ -1,0 +1,7 @@
+slug: gallery-sunset
+title: Sunset
+date: 2026-02-03
+tags: [gallery, photo]
+seo:
+  description: A placeholder gallery entry, used to demonstrate image-tile thumbnails in a gallery-layout category.
+  og_image: /gallery-sunset/imgs/sunset.png

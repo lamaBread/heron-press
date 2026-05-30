@@ -1,0 +1,33 @@
+<p>
+  This tutorial lives in the <code>Blog/Tutorials</code> subcategory, so it
+  also demonstrates how categories nest. It is an HTML body because it uses
+  both image-box helpers.
+</p>
+
+<h2>Single image with a caption</h2>
+
+<p>
+  The diagram below is a source PNG. At build time Heron downsizes it into the
+  widths configured in <code>site.yaml</code> (<code>400 / 800 / 1600</code>),
+  writes WebP variants, and emits an <code>&lt;img&gt;</code> with
+  <code>srcset</code>, <code>sizes</code>, and <code>loading="lazy"</code>.
+  View source to see the generated markup.
+</p>
+
+<?php imgBox("./imgs/diagram.png", "A source PNG that becomes multi-resolution WebP. {$site_credit}", "Pipeline diagram") ?>
+
+<h2>A slideshow</h2>
+
+<p>
+  <code>imgSlideBox()</code> turns a folder of images into a slideshow. All
+  images are rendered server-side as <code>&lt;img class="slide"&gt;</code>;
+  the bundled <code>imgslidebox.js</code> only toggles which one is active, so
+  the page still works without JavaScript (you simply see the first slide).
+</p>
+
+<?php imgSlideBox("./slides") ?>
+
+<p>
+  Both helpers are expanded to static HTML at build, so this page is emitted as
+  <code>index.html</code> despite being authored with PHP calls.
+</p>

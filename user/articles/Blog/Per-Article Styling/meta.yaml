@@ -1,0 +1,18 @@
+slug: per-article-styling
+title: Per-Article Styling
+date: 2026-01-11
+tags: [css, styling]
+seo:
+  description: How a single article overrides presentation with both inline style rules and an external CSS file, in load order.
+# The `styles:` key has two channels, split by key type:
+#   integer key  -> external CSS file in this article folder (a <link>)
+#   string key   -> inline rule injected as a <style> block
+# (Comments must be on their own line — never after a value.)
+styles:
+  # external stylesheet (loads after common_template.css):
+  1: custom.css
+  # inline rule -> auto-scoped to `section p`:
+  p:
+    line-height: 1.9em
+  h3:
+    letter-spacing: 0.02em
