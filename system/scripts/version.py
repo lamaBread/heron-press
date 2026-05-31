@@ -83,9 +83,14 @@ def read_schema_version(base) -> str:
 
 
 def write_schema_version(base, version: str) -> None:
-    """스탬프를 원자적으로 기록 (필요 시 user/.heron/ 생성)."""
+    """스탬프를 원자적으로 기록 (필요 시 user/.heron/ 생성).
+
+    bytes 로 쓴다 — write_text 는 Windows 텍스트 모드에서 ``\\n`` → ``\\r\\n``
+    번역을 해 커밋되는 스탬프 파일이 플랫폼마다 달라진다. 항상 LF 로 고정해
+    체크아웃·OS 무관하게 동일한 한 줄 파일을 만든다.
+    """
     heron_dir(base).mkdir(parents=True, exist_ok=True)
     f = version_file(base)
     tmp = f.with_suffix('.tmp')
-    tmp.write_text(version.strip() + '\n', encoding='utf-8')
+    tmp.write_bytes((version.strip() + '\n').encode('utf-8'))
     tmp.replace(f)

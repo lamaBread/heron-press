@@ -46,7 +46,7 @@ class Migration_1_6_0(Migration):
         sy = self._site_yaml(base)
         if not sy.is_file():
             return changes
-        original = sy.read_text(encoding='utf-8')
+        original = _yamledit.read_preserving(sy)
         text = original
         removed = []
         for key in RETIRED_SITE_KEYS:

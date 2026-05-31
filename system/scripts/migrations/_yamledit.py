@@ -68,9 +68,27 @@ def remove_key(text: str, key: str):
     return ''.join(out), removed
 
 
+def read_preserving(path) -> str:
+    """파일을 개행 번역 없이 읽는다 (CRLF/LF 원본을 문자열에 그대로 보존).
+
+    ``Path.read_text`` 는 universal-newline 이라 ``\\r\\n``·``\\r`` 을 읽는 즉시
+    ``\\n`` 으로 바꾼다 — 그 뒤 무엇을 쓰든 개행은 이미 LF 로 뭉개진 상태다.
+    bytes 로 읽어 디코드하면 원본 개행이 살아 있어, remove_key(keepends) →
+    atomic_write(bytes) 전 구간이 LF·CRLF 어느 쪽이든 그대로 보존한다.
+    """
+    return Path(path).read_bytes().decode('utf-8')
+
+
 def atomic_write(path, data: str) -> None:
-    """temp → rename 으로 원자적 쓰기 (같은 디렉터리)."""
+    """temp → rename 으로 원자적 쓰기 (같은 디렉터리).
+
+    bytes 로 쓴다 — ``Path.write_text`` 는 플랫폼 텍스트 모드라 Windows 에서
+    ``\\n`` 을 ``\\r\\n`` 으로 번역해 사용자 파일의 개행 방식을 통째로 뒤집는다
+    (LF 원본 → 전부 CRLF). ``remove_key`` 가 ``splitlines(keepends=True)`` 로
+    원본 개행을 보존하므로, 쓰기 단계도 번역 없이 그대로 내보내야 LF 원본은
+    LF·CRLF 원본은 CRLF 로 남아 "건드린 줄만 바뀌는" 외과적 편집이 성립한다.
+    """
     p = Path(path)
     tmp = p.with_name(p.name + '.heron_tmp')
-    tmp.write_text(data, encoding='utf-8')
+    tmp.write_bytes(data.encode('utf-8'))
     tmp.replace(p)

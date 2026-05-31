@@ -18,11 +18,18 @@ MIGRATIONS 는 순서 레지스트리. ``run()`` 이 기록된 스키마 버전 
 버전까지의 체인을 계산해 순서대로 실행한다. 스탬프 기록은 엔진이 중앙에서 한다
 (각 마이그레이션은 콘텐츠 편집에만 집중).
 """
+import shutil
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, List, Optional
 
 from .. import version as _version
+
+# 마이그레이션이 user/ 콘텐츠를 변형하기 직전, 바뀔 파일의 원본을 떠 두는 곳.
+# user/.heron/backups/migrate-<UTC>/<상대경로>. .gitignore 가 backups/ 를 제외
+# 하므로 커밋에 새지 않고, .heron/ 아래라 빌더도 자동 제외(dist 미누수).
+BACKUPS_DIR_NAME = 'backups'
 
 
 @dataclass
@@ -65,6 +72,38 @@ def _build_registry() -> List[Migration]:
     return steps
 
 
+def _backup_dir(base) -> Path:
+    """``<base>/user/.heron/backups`` — 마이그레이션 백업 루트."""
+    return _version.heron_dir(base) / BACKUPS_DIR_NAME
+
+
+def _backup_user_files(base, rels: List[str], *,
+                       log: Callable[[str], None]) -> Optional[Path]:
+    """rels(존재하는 base 기준 상대경로)를 타임스탬프 폴더에 떠 둔다.
+
+    반환: 만든 백업 폴더(``user/.heron/backups/migrate-<UTC>``) 또는 백업 대상
+    이 없으면 None. 상대 경로 구조를 폴더 안에 그대로 보존한다 (user/site.yaml
+    → backups/migrate-.../user/site.yaml). 같은 초에 두 번 돌려도 안 겹치도록
+    이미 있으면 ``-2``, ``-3`` … 을 붙인다.
+    """
+    base = Path(base)
+    existing = [r for r in rels if (base / r).is_file()]
+    if not existing:
+        return None
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    root = _backup_dir(base) / f'migrate-{stamp}'
+    n = 2
+    while root.exists():
+        root = _backup_dir(base) / f'migrate-{stamp}-{n}'
+        n += 1
+    for rel in existing:
+        dst = root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(base / rel, dst)
+    log(f'백업: {root.relative_to(base).as_posix()} ({len(existing)}개 파일)')
+    return root
+
+
 def plan_chain(from_version: str, to_version: str) -> List[Migration]:
     """from_version 너머이면서 to_version 이하인 종점을 가진 스텝들 (순서대로).
 
@@ -85,7 +124,7 @@ def run(base, *, target: str, dry_run: bool = False,
     기록한다 (업그레이드 = 콘텐츠 변경 0건이라도 스키마 도달 사실은 기록).
 
     반환: {from, to, dry_run, steps:[{from,to,summary,changes:[Change..]}],
-           changes:[Change..], stamped:bool}.
+           changes:[Change..], stamped:bool, backup:str|None}.
     """
     base = Path(base)
     log = log or (lambda _m: None)
@@ -101,6 +140,20 @@ def run(base, *, target: str, dry_run: bool = False,
             log('이미 최신 스키마입니다 — 적용할 마이그레이션 없음.')
         else:
             log('적용할 마이그레이션 스텝이 없습니다.')
+
+    # 실제 적용 전, 바뀔(edit/delete) 사용자 파일의 원본을 백업한다. plan() 은
+    # 읽기 전용이라 먼저 돌려 "무엇이 바뀔지" 안전하게 알아낸다. 바뀔 게 없으면
+    # (fresh/이미-정리됨) 백업 폴더도 안 만든다. dry-run 은 쓰기 자체가 없으니
+    # 백업 불필요.
+    backup = None
+    if not dry_run and chain:
+        planned: List[Change] = []
+        for m in chain:
+            planned.extend(m.plan(base))
+        at_risk = sorted({c.path for c in planned
+                          if c.kind in ('edit', 'delete')})
+        root = _backup_user_files(base, at_risk, log=log)
+        backup = root.relative_to(base).as_posix() if root else None
 
     for m in chain:
         log(f'  [{m.from_version} → {m.to_version}] {m.summary}')
@@ -124,6 +177,7 @@ def run(base, *, target: str, dry_run: bool = False,
     return {
         'from': current, 'to': target, 'dry_run': dry_run,
         'steps': steps_meta, 'changes': all_changes, 'stamped': stamped,
+        'backup': backup,
     }
 
 

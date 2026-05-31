@@ -66,6 +66,55 @@ class TestYamlEdit(unittest.TestCase):
         self.assertEqual(out, text)
 
 
+class TestNewlinePreservation(unittest.TestCase):
+    """v1.6.1 — 마이그레이션 편집이 원본 개행(LF/CRLF)을 통째로 뒤집지 않는다.
+
+    회귀 방지: read_text + write_text(텍스트 모드)는 Windows 에서 LF↔CRLF 를
+    번역해 "건드린 줄만 바뀐다"는 외과적 편집을 깨뜨렸다 (실제 v1.2.2 site.yaml
+    마이그레이션에서 전 라인이 CRLF 로 뒤집힘). read_preserving(bytes) +
+    atomic_write(bytes) 로 양방향 모두 보존한다.
+    """
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        (self.tmp / 'user').mkdir()
+        self.sy = self.tmp / 'user' / 'site.yaml'
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _apply(self):
+        from scripts.migrations.m_1_6_0 import Migration_1_6_0
+        Migration_1_6_0().apply(self.tmp)
+
+    def test_lf_original_stays_lf(self):
+        self.sy.write_bytes(
+            b'domain: x.com\nreserved_slugs:\n  - a\n  - b\nname: Site\n')
+        self._apply()
+        out = self.sy.read_bytes()
+        self.assertNotIn(b'\r', out)            # CRLF 로 뒤집히지 않음
+        self.assertNotIn(b'reserved_slugs', out)
+        self.assertIn(b'domain: x.com\n', out)
+        self.assertIn(b'name: Site\n', out)
+
+    def test_crlf_original_stays_crlf(self):
+        self.sy.write_bytes(
+            b'domain: x.com\r\nreserved_slugs:\r\n  - a\r\n  - b\r\n'
+            b'name: Site\r\n')
+        self._apply()
+        out = self.sy.read_bytes()
+        self.assertNotIn(b'\n', out.replace(b'\r\n', b''))  # 순수 LF 없음
+        self.assertIn(b'domain: x.com\r\n', out)
+        self.assertIn(b'name: Site\r\n', out)
+        self.assertNotIn(b'reserved_slugs', out)
+
+    def test_atomic_write_roundtrip_is_byte_exact(self):
+        # 편집이 없을 만큼 무관한 키만 있으면 파일은 한 바이트도 안 변한다.
+        raw = b'domain: x.com\nname: Site\nimages:\n  enabled: true\n'
+        self.sy.write_bytes(raw)
+        self._apply()                            # 폐기 키 없음 → no-op
+        self.assertEqual(self.sy.read_bytes(), raw)
+
+
 class TestM160(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -158,6 +207,38 @@ class TestRunChain(unittest.TestCase):
         res = migrations.run(self.tmp, target='1.6.0')
         self.assertFalse(res['stamped'])  # current == target → 재기록 안 함
         self.assertEqual(res['changes'], [])
+
+    # ── v1.6.1: 적용 전 사용자 콘텐츠 백업 ──────────────────────────
+    def _backups_root(self):
+        return self.tmp / 'user' / '.heron' / 'backups'
+
+    def test_apply_backs_up_original_before_mutating(self):
+        res = migrations.run(self.tmp, target='1.6.0')
+        # 반환에 백업 경로가 있고, 실제 폴더가 존재한다.
+        self.assertIsNotNone(res['backup'])
+        self.assertTrue(self._backups_root().is_dir())
+        backups = list(self._backups_root().glob('migrate-*'))
+        self.assertEqual(len(backups), 1)
+        # 백업본은 *원본* — 폐기 키가 아직 들어 있어야 한다.
+        saved = (backups[0] / 'user' / 'site.yaml').read_text(encoding='utf-8')
+        self.assertIn('reserved_slugs', saved)
+        # 현재 파일은 마이그레이션됨 (폐기 키 제거).
+        self.assertNotIn(
+            'reserved_slugs',
+            (self.tmp / 'user' / 'site.yaml').read_text(encoding='utf-8'))
+
+    def test_clean_site_makes_no_backup(self):
+        # 바뀔 게 없으면(폐기 키 없음) 백업 폴더도 안 만든다 — 스탬프만 전진.
+        (self.tmp / 'user' / 'site.yaml').write_text(
+            'domain: x.com\nname: Site\n', encoding='utf-8')
+        res = migrations.run(self.tmp, target='1.6.0')
+        self.assertIsNone(res['backup'])
+        self.assertFalse(self._backups_root().exists())
+        self.assertTrue(res['stamped'])  # 콘텐츠 변경 0건이어도 스탬프는 찍힘
+
+    def test_dry_run_makes_no_backup(self):
+        migrations.run(self.tmp, target='1.6.0', dry_run=True)
+        self.assertFalse(self._backups_root().exists())
 
 
 if __name__ == '__main__':
