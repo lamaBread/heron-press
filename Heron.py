@@ -36,6 +36,16 @@ Usage:
     python -m unittest discover -s system/tests   # unit tests
     python system/tests/run_diagnostics.py        # integration diagnostics
 
+Version / upgrade actions (v1.6.0 — build 대신 실행되고 종료):
+    python Heron.py --check              # 프로그램/스키마 버전 + MANIFEST 무결성
+    python Heron.py --migrate            # user/ 스키마를 프로그램 버전까지 마이그레이션
+    python Heron.py --migrate --dry-run  # 적용 없이 변경 미리보기
+    python Heron.py --check-update       # GitHub 최신 버전 확인 (Pond 배너 캐시 갱신)
+    python Heron.py --update             # 최신 릴리스 다운로드 → 오버레이 → 마이그레이션
+
+이 액션들은 보통 Pond.php 가 내부적으로 호출한다 (사용자 UX = 터미널 0줄).
+Heron.py 직접 실행은 전문 사용자/CI 경로.
+
 After a build, ``build-report.md`` is written next to Heron.py — a Markdown
 report of progress, summary, and follow-up items. It lives outside dist/ and
 does not affect build determinism.
@@ -77,12 +87,106 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--no-cache', action='store_true',
         help='증분 캐시 lookup/store 비활성 (v0.6.5 동작).')
+    # v1.6.0: 버전/업그레이드 액션 (build 대신 실행되고 종료).
+    parser.add_argument(
+        '--check', action='store_true',
+        help='프로그램/스키마 버전 상태 + MANIFEST 무결성을 출력하고 종료.')
+    parser.add_argument(
+        '--migrate', action='store_true',
+        help='user/ 스키마를 프로그램 버전까지 마이그레이션하고 종료.')
+    parser.add_argument(
+        '--dry-run', action='store_true',
+        help='--migrate 와 함께: 적용 없이 변경 미리보기.')
+    parser.add_argument(
+        '--check-update', action='store_true',
+        help='GitHub 최신 버전을 확인하고 종료 (Pond 배너 캐시 갱신).')
+    parser.add_argument(
+        '--update', action='store_true',
+        help='최신 릴리스를 받아 오버레이 후 마이그레이션하고 종료.')
     return parser
 
 
-def main(argv=None) -> None:
+def _action_check(base: Path) -> int:
+    """프로그램/스키마 버전 + MANIFEST 무결성 출력."""
+    from scripts import __version__
+    from scripts import version, make_manifest
+    schema = version.read_schema_version(base)
+    print(f'프로그램 버전  : {__version__}')
+    print(f'스키마 스탬프  : {schema}  (user/.heron/version)')
+    cmp = version.compare(schema, __version__)
+    if cmp < 0:
+        print('→ 마이그레이션 필요: python Heron.py --migrate '
+              '(미리보기: --migrate --dry-run)')
+    elif cmp > 0:
+        print('→ 콘텐츠가 프로그램보다 최신입니다. 프로그램 업그레이드를 권장.')
+    else:
+        print('→ 스키마 최신.')
+    man = make_manifest.load_manifest(base)
+    if not man:
+        print('MANIFEST.json 없음 — 무결성 검증 생략.')
+        return 0
+    v = make_manifest.verify(base)
+    if v['ok']:
+        print(f"MANIFEST 무결성: OK ({len(man.get('files', {}))} 파일, "
+              f"v{v['manifest_version']}).")
+    else:
+        print(f"MANIFEST 무결성: 불일치 — missing={v['missing']} "
+              f"modified={v['modified']}")
+    return 0
+
+
+def _action_migrate(base: Path, *, dry_run: bool) -> int:
+    from scripts import __version__
+    from scripts import migrations
+    migrations.run(base, target=__version__, dry_run=dry_run, log=print)
+    if dry_run:
+        print('\n(dry-run — 실제 변경 없음. 적용하려면 --dry-run 없이 다시 실행.)')
+    return 0
+
+
+def _action_check_update(base: Path) -> int:
+    from scripts import update
+    r = update.check_update(base)
+    if r['error']:
+        print(f"업데이트 확인 실패: {r['error']}")
+        return 1
+    if r['update_available']:
+        print(f"새 버전 있음: v{r['current']} → v{r['latest']}")
+        print('업데이트: python Heron.py --update (또는 Pond 의 업데이트 버튼)')
+    else:
+        print(f"최신입니다 (v{r['current']}).")
+    return 0
+
+
+def _action_update(base: Path) -> int:
+    from scripts import update
+    r = update.self_update(base, log=print)
+    return 0 if r['ok'] else 1
+
+
+def main(argv=None) -> int:
+    # 콘솔/파이프 인코딩을 UTF-8 로 고정 — Windows 기본 cp949 에서 한글/em-dash
+    # 출력이 깨지거나 UnicodeEncodeError 로 죽는 것을 막는다. Pond 는 출력 파이프
+    # 를 UTF-8 로 읽어 HTML(UTF-8)에 그대로 싣는다. 산출물(dist/)은 별도로
+    # 명시적 UTF-8 쓰기라 빌드 결정성과 무관.
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(encoding='utf-8')
+        except (AttributeError, ValueError):
+            pass
+
     args = _build_arg_parser().parse_args(argv)
     base = Path(__file__).parent
+
+    # v1.6.0: 버전/업그레이드 액션은 build 대신 실행되고 종료 (우선순위 순).
+    if args.check:
+        return _action_check(base)
+    if args.migrate:
+        return _action_migrate(base, dry_run=args.dry_run)
+    if args.check_update:
+        return _action_check_update(base)
+    if args.update:
+        return _action_update(base)
 
     # --clean wipes .build_cache/ as well as dist/ (a full rebuild).
     if args.clean:
@@ -99,7 +203,8 @@ def main(argv=None) -> None:
             print(f'Cleaned: {cache_dir}')
 
     Builder(base, enable_cache=not args.no_cache).build()
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

@@ -99,6 +99,20 @@ function admin_trash_dir(): string {
     return admin_articles_dir() . DIRECTORY_SEPARATOR . '.trash';
 }
 
+/** user/.heron/update.json 경로 (v1.6.0 업데이트 체크 캐시). */
+function admin_update_cache_path(): string {
+    return admin_base_dir() . DIRECTORY_SEPARATOR . 'user'
+        . DIRECTORY_SEPARATOR . '.heron' . DIRECTORY_SEPARATOR . 'update.json';
+}
+
+/** 업데이트 체크 캐시 읽기 — 배너용 (없거나 깨지면 []). */
+function admin_read_update_cache(): array {
+    $p = admin_update_cache_path();
+    if (!is_file($p)) return [];
+    $j = json_decode((string)@file_get_contents($p), true);
+    return is_array($j) ? $j : [];
+}
+
 /** 콘텐츠 타입 추정 (미리보기 asset 프록시용). */
 function admin_mime(string $path): string {
     static $map = [

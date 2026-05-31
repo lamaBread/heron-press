@@ -11,7 +11,28 @@ foreach ([['moved','카테고리 이동 완료 (slug 불변이라 URL 영구).']
     if (!empty($_GET[$f[0]])) echo '<div class="flash ok">' . h($f[1]) . '</div>';
 }
 $cats = $scan['categories'];
+
+// v1.6.0 업데이트 배너 — admin_read_update_cache() 결과($updateInfo)에 기반.
+// 캐시는 헤더 "업데이트 확인" 버튼이 GitHub 를 조회해 갱신한다 (페이지 로드마다
+// 네트워크를 치지 않음).
+$ui = $updateInfo ?? [];
+if (!empty($ui['error'])):
 ?>
+  <div class="flash err">업데이트 확인 실패 — <?= h((string)$ui['error']) ?></div>
+<?php elseif (!empty($ui['update_available'])): ?>
+  <div class="flash" style="background:#eef4ff;border:1px solid #c5d6f5;color:#234">
+    <strong>새 버전 v<?= h((string)($ui['latest'] ?? '?')) ?> 있음</strong>
+    (현재 v<?= h((string)($ui['current'] ?? '?')) ?>).
+    <form method="post" action="<?= h($self) ?>?a=update" style="display:inline;margin-left:8px"
+          onsubmit="return confirm('GitHub 에서 최신 릴리스를 받아 프로그램(system/·Heron.py·Pond.php)을 교체하고 마이그레이션을 실행합니다. user/ 콘텐츠는 보존되고 직전 스냅샷이 user/.heron/backups/ 에 백업됩니다. 완료 후 Pond 재시작이 필요합니다. 계속할까요?')">
+      <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+      <button class="primary" type="submit">지금 업데이트</button>
+    </form>
+  </div>
+<?php elseif (!empty($_GET['checked']) && !empty($ui)): ?>
+  <div class="flash ok">최신 버전입니다 (v<?= h((string)($ui['current'] ?? '?')) ?>).</div>
+<?php endif; ?>
+<?php // (배너 종료) ?>
 <div class="row" style="justify-content:space-between;margin-bottom:14px">
   <h2 style="margin:0">글 <span class="muted">(<?= count($scan['posts']) ?>)</span></h2>
   <a class="btn" href="<?= h($self) ?>?a=new">+ 새 글</a>

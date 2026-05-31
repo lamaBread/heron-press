@@ -965,6 +965,22 @@ class Builder:
                      f"로 이전되었습니다. site.yaml 에서 제거하고 Articles/meta.yaml "
                      f"의 해당 필드를 사용하세요.")
 
+        # v1.6.0: 스키마 버전 미스매치 경고 (읽기 전용 — 빌드는 user/ 를 절대
+        # 쓰지 않는다, 설계원칙 5). user/.heron/version 이 프로그램 __version__
+        # 보다 낮으면 마이그레이션을 권한다. 부재 = 베이스라인으로 간주.
+        from . import version as _schema_version
+        _schema = _schema_version.read_schema_version(self.base)
+        _cmp = _schema_version.compare(_schema, _SITE_VERSION)
+        if _cmp < 0:
+            self._warning('site', '', f"스키마 스탬프(user/.heron/version={_schema}) 가 "
+                 f"프로그램 버전(v{_SITE_VERSION}) 보다 낮습니다. "
+                 f"`python Heron.py --migrate` (미리보기 --migrate --dry-run) "
+                 f"또는 Pond 의 업데이트 기능으로 마이그레이션하세요.")
+        elif _cmp > 0:
+            self._warning('site', '', f"스키마 스탬프(user/.heron/version={_schema}) 가 "
+                 f"프로그램 버전(v{_SITE_VERSION}) 보다 높습니다 — 더 낮은 버전의 "
+                 f"프로그램으로 새 콘텐츠를 빌드 중입니다. 프로그램 업그레이드를 권장.")
+
         # 토크나이저 패리티 검증 (PHP 없으면 워닝만)
         # v0.5.5: 패리티 검증 실패는 시스템 결함 (Py/PHP 토크나이저 동등성
         # 위배 — 검색 인덱스 신뢰도에 직결) 이라 abort 경로로 보낸다.

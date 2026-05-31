@@ -8,3 +8,8 @@ __pycache__/
 .DS_Store
 /build-report.md
 /system/tests/diagnostics_report.txt
+
+# v1.6.0: Heron 인스턴스 상태. user/.heron/version (스키마 스탬프) 은 커밋하되
+# 업데이트 체크 캐시와 마이그레이션 백업은 기계 생성물이라 제외.
+/user/.heron/update.json
+/user/.heron/backups/

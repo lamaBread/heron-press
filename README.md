@@ -1,4 +1,4 @@
-# Heron v1.5.3 — User Guide
+# Heron v1.6.0 — User Guide
 
 **Heron** is a lightweight, **PHP-targeted static site generator**: keep **one folder per article** for its body and attachments, and `python Heron.py` builds the whole site once. *A site that stands still.*
 
@@ -123,15 +123,21 @@ heron-press/
 │   │   └── article.html · category.html · home.html · 404.html
 │   ├── styles/                  ← site-wide stylesheet
 │   │   └── common_template.css      ← loaded as /assets/common_template.css
-│   └── branding/                ← site-identity assets
-│       └── default-og.png           ← default og:image (favicon / logo go here too)
+│   ├── branding/                ← site-identity assets
+│   │   └── default-og.png           ← default og:image (favicon / logo go here too)
+│   └── .heron/                  ← (v1.6.0) machine-managed instance state — do not hand-edit
+│       ├── version                  ← schema-version stamp (see § 17-5; survives system/ replacement)
+│       ├── update.json              ← update-check cache (Pond banner; .gitignore)
+│       └── backups/                 ← pre-migrate/update snapshots (.gitignore)
 │
 ├── system/                  ← ★ the program (you do not touch this to run your site)
+│   ├── MANIFEST.json            ← (v1.6.0) program-surface file list + sha256 (integrity / safe overlay)
 │   ├── scripts/                 ← build-time Python package (Heron.py's internal modules)
-│   │   ├── __init__.py             ← __version__ (single source of the version string)
+│   │   ├── __init__.py             ← __version__ (single source of the program version string)
 │   │   ├── yaml_parser.py · models.py · slugs.py · parsedown.py · markdown.py
 │   │   ├── seo.py · search.py · sitemap.py · feed.py · images.py
 │   │   ├── cache.py · report.py
+│   │   ├── version.py · migrations/ · update.py · make_manifest.py  ← (v1.6.0) schema stamp / migration engine / self-update / MANIFEST
 │   │   └── builder.py              ← the build pipeline (Builder class)
 │   ├── runtime/                 ← serve-time code (runs on a visitor's request)
 │   │   ├── search.php               ← runtime search (routing / filter / render)
@@ -534,8 +540,9 @@ rsync -avz --delete dist/ user@your-domain.com:/var/www/your-domain.com/
 10. **Body ↔ metadata separation** — SEO/OG/feed copy comes only from author-written `seo:` values, never guessed from the body.
 11. **`template:` cross-use — allowed but announced** — a page may pick a template of a different kind; placeholders the builder cannot fill are stripped + warned (neither silent strip nor auto-reject).
 12. **(v1.5.0) user / system separation** — `user/` is everything you own and edit; `system/` is the program. The presentation surface (templates, CSS, identity assets) lives in `user/`, not inside the builder.
+13. **(v1.6.0) migration & self-update — build stays read-only** — upgrades replace only the program surface (`system/` + entry points) and never `user/`; a recorded schema stamp (`user/.heron/version`) drives an idempotent, `user/`-only migration chain. The build itself never writes to `user/` (principle 5 intact); `--migrate`/`--update` are the only writers and back up first.
 
-**Limits (intrinsic)** — single-frame image optimization (animated GIF → first frame only); incremental cache covers article pages only; internal-link validation covers article pages only; the Pond preview is body-fidelity only (full-page chrome is verified by building); Pond is local single-user with no auth.
+**Limits (intrinsic)** — single-frame image optimization (animated GIF → first frame only); incremental cache covers article pages only; internal-link validation covers article pages only; the Pond preview is body-fidelity only (full-page chrome is verified by building); Pond is local single-user with no auth; the self-update needs network + GitHub reachability and (on some Windows Python) a working TLS cert store.
 
 ---
 
@@ -546,9 +553,10 @@ rsync -avz --delete dist/ user@your-domain.com:/var/www/your-domain.com/
 
 | Version | Date | Summary |
 |---|---|---|
-| **v1.5.3** | 2026-05-30 | **Demo-content layout fix.** The three example `content.html` bodies (About, Working with Images, Dynamic Year) were missing the manual `<div class='gap'>` + `<section>` wrappers that HTML bodies must supply themselves (markdown auto-wrap/section markers do not apply to HTML — § 4-4). Without a `<section>`, the body fell outside the `section`-scoped typography in `common_template.css`, so those pages rendered unstyled. Each body is now wrapped to match the structure a `.md` article emits; `README.ko.md` § 4-4 points to `About/content.html` as the canonical example, so the example now actually demonstrates the rule. Engine unchanged (the `.md`/`.html` branch in `builder.py` is correct by design). Build is deterministic (two builds identical, 57 files); 429 tests pass; example set builds 0 issues / 0 warnings / 1 intended PHP-built article. |
-| **v1.5.2** | 2026-05-30 | **Demo content + neutral defaults release.** ① `user/articles/` now ships a small, fully-buildable example set that exercises every feature (§ 4-7) — the repo doubles as runnable documentation. ② All site-identity placeholders genericized to `your-domain.com` / `Your Name` (code defaults, comments, and both READMEs); AdSense ships disabled by default. ③ A neutral `default-og.png` ("Hello, World!"). ④ `.gitignore` now excludes `.DS_Store` and `build-report.md` and scopes the legacy `articles/` rules to the repo root so `user/articles/` is tracked. Not byte-identical to v1.5.1 (content/config change); the build is still deterministic (two builds identical). 429 tests pass; example set builds with 0 issues / 0 warnings / 1 intended PHP-built article. |
-| **v1.5.1** | 2026-05-30 | **v1.5.0 stabilization refactor** (code release, dist **byte-identical**) — a pure internal refactor of code consistency/readability with no behavior or output change. ① **Import hygiene**: in `builder.py` the seo/search/sitemap/feed/report/cache imports that sat between the `_pagination_*` helper defs are hoisted into the top import block (PEP 8); the unused `ALL_IMAGE_EXTS` import is dropped. ② **Cross-module encapsulation**: `images._split_url`/`_build_srcset` promoted to public `split_url`/`build_srcset` (builder imported them across the module boundary — underscore = module-internal convention clash); `_HAS_PIL` kept (tests import it directly, a de-facto public flag). ③ **De-duplication (DRY)**: the `SeoMeta(...)` construction duplicated 1:1 across article/category/home folded into `_seo_from_dict`; the priority/nav_priority integer parse-with-fallback at three sites folded into `_int_meta_field` (3-state + issue messages preserved byte-for-byte). ④ **Dead code removed**: `markdown._SECTION_SCOPED_TAGS` + the always-same-result branch in `_resolve_selector` (every bare tag becomes `section TAG` regardless of the whitelist), `BuildCache.stats()` (never called). ⑤ **Stale naming fixed**: `search.run_parity_test`/`_parity_cache_key` arg `templates_dir` → `runtime_dir` (reflects the v1.5.0 folder move; positional call so behavior unchanged), `images.split_url` docstring return-tuple corrected, `Pond.php`'s `site.yaml reserved_slugs` comment updated to `Builder.RESERVED_SLUGS`. Code integrity: **clean rebuild from canonical Articles, dist 787 files sha256 == v1.5.0** (not an enumerated diff — fully byte-identical). Determinism: two builds identical. 429 tests · 6/6 diagnostics unchanged. |
+| **v1.6.0** | 2026-05-31 | **Migration & one-click update system.** The infrastructure that lets a site follow future upgrades comfortably, built on the v1.5.0 user/system split (§ 17-5). ① **Schema-version stamp** — `user/.heron/version` records the schema version the `user/` tree conforms to (distinct from the program `__version__`); it survives `system/` replacement, travels with content, and is auto-excluded from the build (`.`-prefix). Missing stamp = pre-1.6.0 baseline. ② **Migration engine** (`system/scripts/migrations/`) — ordered, idempotent steps that transform **only** `user/` (never program code); the 1.5.3→1.6.0 step tidies the five v1.4.0-retired `site.yaml` keys via line-oriented editing that preserves comments/order (`yaml_parser` is read-only). ③ **One-click update via Pond** — checks GitHub for the latest tag, downloads + verifies (`MANIFEST.json` sha256) + overlays only the program surface (`system/` + `Heron.py` + `Pond.php`) + runs migrations, then asks for a restart; header gets **업데이트 확인**, the list a banner. Logic is Python (`update.py`, stdlib `urllib`+`zipfile`); Pond is a thin trigger (mirrors one-click build); repo pinned `lamaBread/heron-press`. ④ **CLI escape hatch** for power users/CI: `Heron.py --check / --migrate [--dry-run] / --check-update / --update`. ⑤ **MANIFEST.json** — program-surface list + sha256 for `--check` integrity and allowlist overlay (never touches `user/`). Build stays read-only on `user/` (principle 5); `--migrate`/`--update` are the only writers and back up to `user/.heron/backups/` first. **dist byte-identical to v1.5.3** (57 files, sha256 `fa131350…`; `__version__` never reaches dist, no output-path code changed). 458 tests (429 + 29 new) pass; 6/6 diagnostics; example set builds 0 issues / 0 warnings / 1 intended PHP-built article. |
+| v1.5.3 | 2026-05-30 | Demo-content layout fix — the three example `content.html` bodies were missing the manual `<div class='gap'>` + `<section>` wrappers HTML bodies must supply (§ 4-4), so they rendered unstyled; each is now wrapped to match a `.md` article. Engine unchanged; dist deterministic (57 files). |
+| v1.5.2 | 2026-05-30 | Demo content + neutral defaults — `user/articles/` ships a runnable example set exercising every feature; site-identity placeholders genericized (`your-domain.com` / `Your Name`), AdSense disabled by default; neutral `default-og.png`; `.gitignore` scoped so `user/articles/` is tracked. |
+| v1.5.1 | 2026-05-30 | v1.5.0 stabilization refactor (code release, dist byte-identical) — import hygiene, cross-module encapsulation (`images.split_url`/`build_srcset` public), DRY (`_seo_from_dict`/`_int_meta_field`), dead-code removal, stale-name fixes. dist 787 files sha256 == v1.5.0. |
 | v1.5.0 | 2026-05-29 | Structure release — root split into `user/` (what you edit) and `system/` (the program); entry points renamed `Heron.py` / `Pond.php`. Pure source-layout change, so dist is byte-identical to v1.4.2. |
 | v1.4.1 | 2026-05-28 | Fixed the v1.4.0 internal-link validation regex (`\bhref=` → `\s+href=`) — no more `data-href` mismatch. dist byte-invariant. |
 | v1.4.0 | 2026-05-28 | Six-feature bundle — prev/next nav, article-end meta line, dark mode, internal-link validation, five site.yaml keys → code constants, BuildReport "PHP-built articles" category. |
@@ -630,11 +638,38 @@ Local single-user only. Layered guards:
 - **Edit** (`?a=edit&id=…`) — split view: left = body (`content.md`/`.html`, no frontmatter — body↔meta separation), right = meta form + collapsible **raw `meta.yaml`** + live preview. **Saving is raw-`meta.yaml`-based** (comments/advanced keys/`styles` preserved); raw is the source of truth.
 - **Move/hide/delete** — folder rename (slug stays → URL permanent) / `_` prefix toggle / move to `user/articles/.trash/` (`.`-prefixed → auto-excluded, recoverable).
 - **One-click build** — runs `python Heron.py` (`--clean` optional) in the version folder and shows the output.
+- **Check / one-click update** (v1.6.0) — the header **업데이트 확인** queries GitHub for the latest tag; when one exists, the list banner's **지금 업데이트** downloads → verifies → overlays → migrates, then asks for a restart (§ 17-5).
 
 ### 17-4. Preview = body fidelity (single parser)
 
 No separate markdown engine. `system/admin/render_one.py` reuses the very `scripts.markdown` path the builder uses, so the preview *body* is byte-identical to the output. Full-page chrome (header/nav/footer, `<meta>`, JSON-LD) is not built — that is the template-fill step — so the full-page exact version is verified by building to `dist/`. This parity is locked by `system/tests/test_render_one.py`.
 
+### 17-5. Updating & migration (v1.6.0)
+
+The goal of v1.6.0 is that a site can follow future upgrades comfortably. It builds on the v1.5.0 `user/` ↔ `system/` split: on upgrade the **program surface** (`system/` + `Heron.py` + `Pond.php`) is replaced wholesale while `user/` is preserved, and a small **migration engine** adapts `user/` to any schema change.
+
+**Schema-version stamp.** `user/.heron/version` records the schema version the `user/` tree conforms to — distinct from the program `__version__`. It lives under `user/` so it survives `system/` replacement and travels with your content, and its `.`-prefix auto-excludes it from the build (§ 6). A missing stamp is treated as the pre-1.6.0 baseline (so a fresh install is just stamped; all migration steps are idempotent).
+
+**One-click update via Pond (the intended path — no terminal).**
+
+1. Header → **업데이트 확인** queries GitHub for the latest tag (cached in `user/.heron/update.json`); the list shows a banner when an update is available.
+2. **지금 업데이트** downloads the latest release, verifies its `MANIFEST.json` (sha256), backs up the program surface + stamp to `user/.heron/backups/`, overlays **only** the program surface (never `user/`), then runs the migration chain and bumps the stamp.
+3. Pond asks you to **restart** it (`Ctrl+C` → `php -S 127.0.0.1:8001 Pond.php`) — the running PHP process still holds the old code in memory; this is the honest handling of a self-update rather than a silent reload.
+
+The logic lives in Python (`system/scripts/update.py` + `migrations/`, stdlib `urllib`+`zipfile` only); Pond is a thin trigger, exactly like one-click build. The repo is pinned (`lamaBread/heron-press`).
+
+**CLI escape hatch (power users / CI).** Direct `Heron.py` use is left to programmers; Pond covers the everyday path. The build itself stays **read-only** on `user/` (design principle 5) — only `--migrate`/`--update` write, and they back up first.
+
+```bash
+python Heron.py --check              # program/schema version + MANIFEST integrity
+python Heron.py --migrate --dry-run  # preview the migration without writing
+python Heron.py --migrate            # migrate user/ to the program version (backs up, then stamps)
+python Heron.py --check-update       # query GitHub (refreshes Pond's banner cache)
+python Heron.py --update             # download → verify → overlay → migrate
+```
+
+> **Caveat** — the update reaches GitHub over HTTPS. On some Windows Python installs the system certificate store may need to be set up for TLS verification (certificates are *not* disabled). If a check fails with a certificate error, fix the cert store rather than bypassing verification.
+
 ---
 
-*Heron v1.5.1 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [README.ko.md § 16](README.ko.md).*
+*Heron v1.6.0 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [README.ko.md § 16](README.ko.md).*

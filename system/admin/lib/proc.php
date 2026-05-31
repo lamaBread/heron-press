@@ -86,3 +86,17 @@ function admin_run_build(bool $clean): array {
     if ($clean) $argv[] = '--clean';
     return admin_proc($argv, null, admin_base_dir());
 }
+
+/**
+ * python Heron.py <flags...> 호출 (v1.6.0 — 버전/업데이트 액션).
+ * 빌드와 동일 패턴 — 로직은 Python 엔진에, Pond 는 얇은 트리거.
+ * 반환 [code,out,err].
+ */
+function admin_run_heron(array $flags): array {
+    $argv = array_merge(
+        admin_python(),
+        [admin_base_dir() . DIRECTORY_SEPARATOR . 'Heron.py'],
+        $flags
+    );
+    return admin_proc($argv, null, admin_base_dir());
+}

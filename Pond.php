@@ -286,6 +286,23 @@ if ($action === 'build') {
     exit;
 }
 
+// ── 업데이트 확인 (v1.6.0) — GitHub 최신 버전 조회, 캐시 갱신 후 목록 복귀 ─
+if ($action === 'checkupdate') {
+    want_post(); check_csrf();
+    admin_run_heron(['--check-update']);   // user/.heron/update.json 갱신
+    redirect('?a=list&checked=1');
+}
+
+// ── 업데이트 실행 (v1.6.0) — 다운로드 → 오버레이 → 마이그레이션 ──────────
+if ($action === 'update') {
+    want_post(); check_csrf();
+    [$code, $out, $err] = admin_run_heron(['--update']);
+    $title = '업데이트 ' . ($code === 0 ? '완료' : "실패 (exit {$code})");
+    $bodyOut = trim($out . "\n" . $err);
+    require __DIR__ . '/system/admin/views/update.php';
+    exit;
+}
+
 // ── 새 글 폼 ─────────────────────────────────────────────────────
 if ($action === 'new') {
     $scan = admin_scan();
@@ -318,4 +335,5 @@ $scan = admin_scan();
 $trash = admin_scan_trash();
 $flashErrs = $_SESSION['flash_errs'] ?? [];
 unset($_SESSION['flash_errs']);
+$updateInfo = admin_read_update_cache();   // v1.6.0 업데이트 배너용 (캐시)
 require __DIR__ . '/system/admin/views/list.php';

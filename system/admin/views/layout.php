@@ -61,6 +61,11 @@ function admin_head(string $title): void {
     <a href="<?= h($self) ?>?a=list">목록</a>
     <a href="<?= h($self) ?>?a=new">+ 새 글</a>
   </nav>
+  <form method="post" action="<?= h($self) ?>?a=checkupdate" style="display:inline"
+        title="GitHub 에서 새 버전이 있는지 확인합니다">
+    <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
+    <button type="submit">업데이트 확인</button>
+  </form>
   <form class="bld" method="post" action="<?= h($self) ?>?a=build"
         onsubmit="return confirm('python Heron.py 를 실행해 dist/ 를 다시 만듭니다. 계속할까요?')">
     <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
