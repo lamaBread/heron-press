@@ -67,7 +67,8 @@ def _build_registry() -> List[Migration]:
     Change 가 이 호출 전에 이미 정의돼 있기 때문 (모듈 끝에서 호출).
     """
     from .m_1_6_0 import Migration_1_6_0
-    steps = [Migration_1_6_0()]
+    from .m_1_7_0 import Migration_1_7_0
+    steps = [Migration_1_6_0(), Migration_1_7_0()]
     steps.sort(key=lambda m: _version.parse_version(m.to_version) or ())
     return steps
 

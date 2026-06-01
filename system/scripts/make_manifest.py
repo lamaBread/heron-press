@@ -34,6 +34,11 @@ _EXCLUDE_SYSTEM_REL = {
     MANIFEST_REL,
     'system/tests/diagnostics_report.txt',
 }
+# 제외할 경로 접두 (base 기준 POSIX). v1.7.0: 다운로드된 rclone 바이너리는
+# system/ 아래지만 **머신 종속물이라 프로그램 표면이 아니다** — OS/arch 마다
+# 내용이 달라 커밋 MANIFEST 에 박으면 (1) 머신별 --check 무결성이 깨지고
+# (2) 다음 오버레이가 "폐기 파일"로 오인해 삭제한다. .gitignore 제외와 짝.
+_EXCLUDE_PREFIXES = ('system/runtime/bin/',)
 
 
 def _sha256_file(path: Path) -> str:
@@ -59,6 +64,8 @@ def _excluded(rel: str) -> bool:
     if rel.endswith(_EXCLUDE_SUFFIXES):
         return True
     if rel in _EXCLUDE_SYSTEM_REL:
+        return True
+    if rel.startswith(_EXCLUDE_PREFIXES):
         return True
     return False
 

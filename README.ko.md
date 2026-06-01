@@ -1,4 +1,4 @@
-# Heron v1.6.2 — 사용설명서
+# Heron v1.7.0 — 사용설명서
 
 **Heron** 은 **글마다 폴더 하나**를 만들어 본문·첨부를 관리하고, `python Heron.py` 한 번으로 사이트를 만드는 **PHP 기반 경량 웹 사이트 생성기**입니다.
 
@@ -145,6 +145,8 @@ heron-press/
 │   └── .heron/                  ← (v1.6.0) 기계 관리 인스턴스 상태 — 손으로 편집 금지
 │       ├── version                  ← 스키마 버전 스탬프 (§ 17-6; system/ 교체에도 생존)
 │       ├── update.json              ← 업데이트 체크 캐시 (Pond 배너; .gitignore)
+│       ├── deploy.example.json      ← (v1.7.0) 배포 설정 견본 (커밋; § 17-7)
+│       ├── deploy.json              ← (v1.7.0) 실제 배포 좌표·키 경로 (.gitignore)
 │       └── backups/                 ← 마이그레이션/업데이트 직전 스냅샷 (.gitignore)
 │
 ├── system/                  ← ★ 프로그램 (사이트 운영에는 손대지 않음)
@@ -167,6 +169,8 @@ heron-press/
 │   │   ├── migrations/             ← (v1.6.0) 마이그레이션 엔진 (순서 스텝, user/ 만 변형)
 │   │   ├── update.py               ← (v1.6.0) GitHub 자가 업데이트 (다운로드/검증/오버레이)
 │   │   ├── make_manifest.py        ← (v1.6.0) MANIFEST.json 생성/검증
+│   │   ├── rclone_bin.py           ← (v1.7.0) rclone 바이너리 확보 (다운로드/SHA256 검증/추출)
+│   │   ├── deploy.py               ← (v1.7.0) dist 서버 배포 오케스트레이션 (rclone SFTP)
 │   │   └── builder.py              ← 빌드 파이프라인 (Builder 클래스)
 │   ├── runtime/                 ← 서브타임 코드 (방문자 요청 시 실행)
 │   │   ├── search.php               ← 런타임 검색 (라우팅/필터/렌더)
@@ -178,8 +182,8 @@ heron-press/
 │   │   ├── render_one.py            ← 단일 글 본문 렌더 (scripts.markdown 재사용)
 │   │   ├── slug_one.py              ← 폴더명 → slug (scripts.slugs 재사용)
 │   │   ├── lib/                     ← fs · proc · metayaml · articles (PHP)
-│   │   └── views/                   ← layout · list · new · edit · build (PHP)
-│   └── tests/                   ← 단위 테스트 (464) + run_diagnostics.py (6 항목)
+│   │   └── views/                   ← layout · list · new · edit · build · deploy (PHP)
+│   └── tests/                   ← 단위 테스트 (490) + run_diagnostics.py (6 항목)
 │
 ├── dist/                    ← 빌드 산출물 (배포 대상 / 직접 수정 금지)
 │
@@ -193,6 +197,8 @@ heron-press/
   .build_cache/            ← 글 단위 증분 캐시 + tokenizer parity 캐시
   user/.heron/update.json  ← (v1.6.0) 업데이트 체크 캐시 (스탬프 version 은 커밋, 캐시·백업은 제외)
   user/.heron/backups/     ← (v1.6.0) 마이그레이션/업데이트 직전 스냅샷
+  user/.heron/deploy.json  ← (v1.7.0) 실제 배포 설정 (견본 deploy.example.json 은 커밋)
+  system/runtime/bin/      ← (v1.7.0) 다운로드된 rclone 바이너리 (<os>-<arch>/; MANIFEST 표면 제외)
 ```
 
 > **`dist/assets/` 는 어디서 오나** — `user/styles/*.css` + `user/branding/*` + `system/runtime/*.js` 세 곳을 빌더가 `dist/assets/` 한 곳으로 모은다 (`/assets/{경로}` URL 은 v1.4.x 와 불변). `system/runtime/*.php` 는 서브타임 코드라 `dist/search.php` 로 따로 인라인된다.
@@ -707,6 +713,17 @@ curl -I https://your-domain.com/hello-world/    # 200
 curl -I https://your-domain.com/sitemap.xml     # 200 application/xml
 ```
 
+### 13-1. Pond 원클릭 배포 (rclone, v1.7.0)
+
+위 `rsync` 는 수동 경로다. v1.7.0 부터 **Pond 상단 [배포]** 가 같은 일을 버튼으로 한다 — rclone 의 SFTP 백엔드로 `dist/` 를 서버에 **증분 동기화**(바뀐 파일만 전송 + 서버에만 남은 고아 파일 삭제). rsync 가 Windows 네이티브가 아닌 문제를 **rclone**(MIT, DLL 0 의 단일 정적 바이너리)으로 푼다 — 핀 버전(v1.74.2)을 처음 한 번 받아 `system/runtime/bin/<os>-<arch>/` 에 두고 다운로드 아카이브 SHA256 을 소스 핀과 대조해 공급망을 차단한다. 바이너리는 머신 종속물이라 커밋·MANIFEST·dist 어디에도 새지 않는다.
+
+- **설정** — `user/.heron/deploy.json` (gitignore): `host`/`user`/`port`/`remote_path`/`ssh_key_path` (+ 선택 `known_hosts_path`). 견본 `deploy.example.json` 을 복사해 채운다. **개인키 자체는 저장소 밖** OS 표준 위치에 두고 deploy.json 엔 *경로만*.
+- **2단계 게이트** — ① 미리보기(`--dry-run`)로 “보낼/지울” 목록을 확인한 뒤 ② 적용. `sync` 는 원격을 *삭제*하므로 `remote_path` 오타가 엉뚱한 디렉터리를 비우지 않도록 막는 안전장치다.
+- **호스트키 검증** — 최초 1회 `ssh user@host` 로 접속해 `known_hosts` 에 등록(rclone sftp 기본은 미검증이라 강제 = MITM 방어). 서버는 **SFTP 만** 쓰므로 추가 설치 0.
+- **첫 전송은 느림** — 전체 자산(~157MB) 첫 동기화는 수 분 걸릴 수 있고, Pond 는 진행 로그를 실시간 스트리밍한다. 이후는 증분이라 빠름.
+- CLI: `python Heron.py --fetch-rclone` / `--deploy --dry-run` / `--deploy`. 상세·안전장치는 [§ 17-7](#17-7-배포-rclone-v170).
+- 비목표: 다중 타깃(staging/prod)·비밀번호 인증·무중단 원자 교체는 이번 범위 밖(단일 타깃·키파일·in-place). `Pond.php`·`system/` 자체 배포는 절대 금지 — dist 만 올린다.
+
 ---
 
 ## 14. 트러블슈팅
@@ -772,7 +789,8 @@ curl -I https://your-domain.com/sitemap.xml     # 200 application/xml
 
 | 버전 | 날짜 | 요약 |
 |---|---|---|
-| **v1.6.2** | 2026-06-01 | **이중언어 README 동등화.** 영문 README가 한국어의 축약본으로 흐른 흔적("Korean is the more exhaustive reference" 디스클레이머)을 걷어내고 완전 동등으로 맞췄다. 영문이 빠뜨렸던 두 절 — § 4-7(동봉 예시 콘텐츠 표)·§ 18(추가 업데이트 제안) — 을 복원하고, § 3 폴더트리·§ 10 SEO 표·§ 11 site.yaml 주석·§ 12 내부구현·§ 13 배포(SSL/:80/검증 curl)·§ 15 한계 표·§ 17 Pond(17-5 제약 + 17-6 업데이트/마이그레이션 절)를 한국어 깊이로 확장. 한국어도 다듬음: v1.6.0 changelog 행을 "최신만 상세" 규칙대로 압축, **(v1.5.0) user/system 분리** 설계원칙을 독립 항목으로 추가(양 언어 13개로 정렬), § 3의 stale 테스트 수 458→464 정정, 두 문서 상단에 상호 링크 안내 추가. 문서 전용 — 코드 무변경; `__version__`·스키마 스탬프만 1.6.1 → 1.6.2 전진(마이그레이션 스텝 없음); dist byte-동일 to v1.6.1 (57파일). |
+| **v1.7.0** | 2026-06-01 | **rclone 원클릭 dist 배포 (§ 13-1 · § 17-7).** Pond 상단 **[배포]** 가 빌드된 `dist/` 를 rclone 의 SFTP 백엔드로 서버에 **증분 동기화**한다 — 바뀐 파일만 전송 + 서버 고아 파일 삭제, **2단계 dry-run 게이트**(① 미리보기로 “보낼/지울” 목록 → ② 적용)로 `sync` 의 원격 삭제를 방어한다. rsync 가 Windows 네이티브가 아닌 문제를 **rclone**(MIT, DLL 0 의 단일 정적 바이너리)으로 푼다: 핀 버전 **v1.74.2** 를 온디맨드로 받아 `system/runtime/bin/<os>-<arch>/` 에 두고 아카이브 SHA256 을 6개 플랫폼 소스 핀과 대조(불일치=즉시 거부), 오프라인이면 PATH 폴백. 인증은 **SSH 키파일**(deploy.json 엔 *경로만*, 개인키는 저장소 밖) + `known_hosts` 검증 강제(rclone sftp 기본은 미검증 → MITM 방어). 설정은 gitignore 된 `user/.heron/deploy.json`(견본 `deploy.example.json` 커밋 + `m_1_7_0` 마이그레이션이 기존 사용자에게 시드 — 오버레이는 user/ 미접촉이라). 얇은 트리거 패턴 유지: PHP 는 `python Heron.py --deploy [--dry-run]` 을 띄워 **진행 로그를 실시간 스트리밍**(첫 ~157MB 전송도 멈춤 없이 보임)하고, 로직 일체는 Python(`deploy.py` + `rclone_bin.py`, stdlib `urllib`+`zipfile`)에 둔다. 다운로드된 바이너리는 머신 종속물이라 `make_manifest` 가 `system/runtime/bin/` 를 프로그램 표면에서 제외(.gitignore 와 짝) → 커밋·MANIFEST·dist 무누수. 빌더 무변경이라 **dist byte-동일 to v1.6.2 (57파일)**; 스탬프 1.6.2 → 1.7.0; 단위 464 → **490** + 진단 6/6. |
+| v1.6.2 | 2026-06-01 | 이중언어 README 동등화 — 영문을 한국어 깊이로 맞추고(축약 디스클레이머 제거, § 4-7·§ 18 복원, § 3·10·11·12·13·15·17 확장), 한국어도 changelog 압축·설계원칙 13개 정렬. 문서 전용(코드 무변경); 스탬프 1.6.1 → 1.6.2; dist byte-동일 (57파일). |
 | v1.6.1 | 2026-06-01 | 마이그레이션 충실도 수정(실제 v1.2.2 `site.yaml` 재현으로 발견) — 이제 개행(LF/CRLF)을 bytes 읽기/쓰기로 그대로 보존하고, 변형 전 모든 위험 파일을 스냅샷 백업한다. 스키마 변경 없음; 스탬프 1.6.0 → 1.6.1 전진. dist 무변경(57파일); 단위 464 + 진단 6/6. |
 | v1.6.0 | 2026-05-31 | 마이그레이션 · 원클릭 업데이트 시스템 (§ 17-6) — 스키마 버전 스탬프(`user/.heron/version`) + `user/`-한정 멱등 마이그레이션 엔진 + `MANIFEST.json` 무결성 + Pond/CLI 원클릭 GitHub 업데이트. 빌드는 `user/` 읽기 전용 유지, dist byte-동일 to v1.5.3 (57파일). |
 | v1.5.3 | 2026-05-30 | 데모 콘텐츠 레이아웃 수정 — 예시 `content.html` 3건이 HTML 본문이 직접 넣어야 하는 `<div class='gap'>` + `<section>` 래퍼를 빠뜨려(§ 4-4) 스타일 없이 렌더되던 것을 `.md` 글 구조와 동일하게 감쌌다. 엔진 무변경; dist 결정적(57파일). |
@@ -860,6 +878,7 @@ php -S 127.0.0.1:8001 Pond.php
 - **이동** — 폴더 rename. `slug` 불변이라 **URL 영구**(설계 원칙 1). **비공개** — 폴더명 `_` 접두 토글. **삭제** — `user/articles/.trash/` 로 이동: `.` 접두라 빌드 자동 제외, 파일은 남아 복구 가능(영구 삭제 UI 는 의도적으로 두지 않음 — 복구는 파일 탐색기에서 `.trash` 밖으로).
 - **원클릭 빌드** — 상단 버튼이 `python Heron.py`(`--clean` 체크 가능)를 버전 폴더 cwd 로 실행하고 출력을 표시. 사이트(`dist/`)에 반영하는 단계.
 - **업데이트 확인 / 원클릭 업데이트** (v1.6.0) — 헤더 **업데이트 확인** 이 GitHub 최신 태그를 조회하고, 새 버전이 있으면 목록 배너의 **지금 업데이트** 가 다운로드→검증→오버레이→마이그레이션을 수행한 뒤 재시작을 안내한다 (§ 17-6).
+- **배포** (v1.7.0) — 헤더/네비의 **배포** 가 빌드된 `dist/` 를 서버에 rclone(SFTP) 증분 동기화한다. ① 미리보기(dry-run)로 보낼·지울 목록 확인 → ② 적용의 2단계, 진행 로그 실시간 스트리밍 (§ 17-7).
 
 ### 17-4. 미리보기 = 본문 충실도 (파서 단일화)
 
@@ -896,6 +915,39 @@ python Heron.py --update             # 다운로드 → 검증 → 오버레이 
 > **주의** — 업데이트는 HTTPS 로 GitHub 에 접속한다. 일부 Windows Python 설치는 TLS 검증을 위해 시스템 인증서 저장소 설정이 필요할 수 있다(인증서 검증을 끄지는 *않는다*). 인증서 오류로 확인이 실패하면 검증을 우회하지 말고 인증서 저장소를 바로잡을 것.
 
 **마이그레이션 스텝 작성 규약 (앞으로의 버전).** 각 스텝은 `system/scripts/migrations/m_<버전>.py` 의 `Migration` 서브클래스로, `from_version`/`to_version`/`summary` 와 `plan(base)`/`apply(base)` 를 둔다. `apply()` 는 **오직 `user/` 만** 변형하고(프로그램 코드는 통째 교체라 손댈 일 없음) **멱등**이어야 한다(이미 반영된 트리엔 `[]` 반환). `site.yaml` 은 줄단위 텍스트 편집(`_yamledit`)으로 다뤄 주석·순서·`|` 블록을 보존한다(`yaml_parser` 는 읽기 전용). 스탬프 기록은 엔진이 중앙에서 하므로 스텝은 콘텐츠 편집에만 집중한다.
+
+### 17-7. 배포 (rclone, v1.7.0)
+
+빌드된 `dist/` 를 서버에 올리는 일을 Pond 의 **[배포]** 버튼으로 한다 ([§ 13-1](#13-1-pond-원클릭-배포-rclone-v170) 개요). 빌드/업데이트와 같은 **얇은 트리거** 철학 — PHP 는 `python Heron.py --deploy [--dry-run]` 을 띄울 뿐, 다운로드·검증·동기화 로직은 전부 Python(`system/scripts/deploy.py` + `rclone_bin.py`)에 있다.
+
+**왜 rclone 인가.** dist 는 ~157MB 정적 사이트라 매번 전체 전송은 낭비 → 증분이 맞다. `scp -r` 은 고아(서버에만 남은 옛 파일)를 못 지우고, `ssh + rm -rf` 청소는 경로 변수 사고로 서버를 날릴 위험이라 기각. `rsync --delete` 가 정답에 가깝지만 **Windows 네이티브가 아니고 Git for Windows 에도 없다**. 동봉하려니 rsync 는 GPL(재배포 의무) — 그래서 **rclone(MIT, DLL 0 단일 정적 바이너리)**: 동봉/재배포 자유 + rsync 급 증분 + `--dry-run` + `sync` 고아 삭제 + **SFTP 백엔드로 기존 SSH/로컬 키 그대로**(서버 추가 설치 0).
+
+**바이너리 확보 (`rclone_bin.ensure`).** 핀 버전 **v1.74.2** 가 `system/runtime/bin/<os>-<arch>/` 에 이미 있고 `rclone version` 이 일치하면 그대로 쓴다(멱등, 네트워크 0). 없으면 `https://downloads.rclone.org/<ver>/rclone-<ver>-<os>-<arch>.zip` 를 받아 **아카이브 SHA256 을 소스 핀(6개 플랫폼)과 대조** — 불일치면 폐기·중단(공급망 차단). 통과하면 `rclone(.exe)` 만 추출해 원자적으로 배치(임시파일→`os.replace`, POSIX 는 `chmod +x`). 네트워크 실패/오프라인이면 PATH 의 rclone 으로 폴백, 그래도 없으면 명확한 오류. 다운로드 바이너리는 머신 종속물이라 `.gitignore` + `make_manifest` 가 `system/runtime/bin/` 를 프로그램 표면에서 제외해 커밋·MANIFEST·dist 어디에도 새지 않는다.
+
+**2단계 안전 게이트.** `sync` 는 원격을 *삭제*하므로 `remote_path` 오타가 엉뚱한 디렉터리를 비울 수 있다. 그래서 ① **미리보기**(`--dry-run`)로 “보낼/지울” 목록을 먼저 보이고 → ② 확인 버튼으로만 실제 `sync`. 미리보기도 서버에 접속해 양쪽을 비교하므로 사실상 **연결성·호스트키·키 권한 사전 점검**까지 겸한다. 첫 ~157MB 전송이 수 분 걸려도 Pond 는 자식 stdout 을 한 줄씩 받아 **실시간 스트리밍**한다(블로킹 일괄 출력이 아님).
+
+**설정 (`user/.heron/deploy.json` — gitignore).**
+
+```json
+{
+  "host": "your-domain.com",
+  "user": "deployuser",
+  "port": 22,
+  "remote_path": "/var/www/your-domain.com",
+  "ssh_key_path": "C:/Users/you/.ssh/id_ed25519",
+  "known_hosts_path": "C:/Users/you/.ssh/known_hosts"
+}
+```
+
+견본 `deploy.example.json` 을 복사해 채운다. `known_hosts_path` 는 선택(생략 시 `~/.ssh/known_hosts`). `port` 기본 22. **개인키 자체는 절대 deploy.json·저장소에 넣지 않는다 — 경로만.** `.` 접두 + gitignore 라 dist·커밋에 새지 않고 머신별 비공유. 견본은 커밋되지만, 자가 업데이트 오버레이는 `user/` 를 안 건드리므로 **기존 사용자에겐 `m_1_7_0` 마이그레이션이 견본을 시드**한다(멱등 — 이미 있으면 no-op).
+
+**보안.** rclone sftp 백엔드는 기본이 호스트키 미검증(MITM 취약)이라 `--sftp-known-hosts` 로 검증을 **강제**한다 — 최초 1회 `ssh user@host` 로 known_hosts 에 등록(TOFU). 인증은 키파일(`--sftp-key-file`)뿐(비밀번호/rclone.conf 미사용). argv 리스트 + `bypass_shell` + Python `subprocess`(shell 미경유)로 인젝션을 막고, Pond 는 cli-server+루프백에서만 동작([§ 17-2](#17-2-보안--절대-공개-서버에-두지-말-것))하므로 키는 로컬을 떠나지 않고 dist 바이트만 암호화 SSH 로 간다. (암호 걸린 키는 ssh-agent 가 필요하다.)
+
+```bash
+python Heron.py --fetch-rclone        # rclone 바이너리 선확보 (검증 포함). 멱등.
+python Heron.py --deploy --dry-run    # 미리보기: 보낼/지울 목록. 서버 변경 0.
+python Heron.py --deploy              # 실제 증분 동기화 (삭제 포함).
+```
 
 ---
 

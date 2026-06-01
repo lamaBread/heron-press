@@ -286,6 +286,27 @@ if ($action === 'build') {
     exit;
 }
 
+// ── dist 서버 배포 (v1.7.0) — rclone SFTP 증분 동기화 ────────────
+if ($action === 'deploy') {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        want_post(); check_csrf();
+        // stage=apply 만 실제 sync(삭제 포함). 그 외(미지정 포함)=미리보기.
+        $stage = (($_POST['stage'] ?? '') === 'apply') ? 'apply' : 'preview';
+        $dryRun = ($stage === 'preview');
+        // 스트리밍 응답: 출력 버퍼를 끄고 자식 출력을 한 줄씩 흘려보낸다
+        // (첫 ~157MB 전송이 수 분 걸려도 진행이 실시간으로 보이게).
+        while (ob_get_level() > 0) { @ob_end_flush(); }
+        ob_implicit_flush(true);
+        require __DIR__ . '/system/admin/views/deploy_run.php';
+        exit;
+    }
+    // GET → 랜딩: 설정 상태 패널 + 미리보기 버튼 (적용은 미리보기 뒤에만).
+    $deployCfg = admin_deploy_config();
+    $deployExample = admin_deploy_example_exists();
+    require __DIR__ . '/system/admin/views/deploy.php';
+    exit;
+}
+
 // ── 업데이트 확인 (v1.6.0) — GitHub 최신 버전 조회, 캐시 갱신 후 목록 복귀 ─
 if ($action === 'checkupdate') {
     want_post(); check_csrf();

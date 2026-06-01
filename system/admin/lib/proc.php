@@ -100,3 +100,67 @@ function admin_run_heron(array $flags): array {
     );
     return admin_proc($argv, null, admin_base_dir());
 }
+
+/**
+ * proc_open 으로 명령 실행 + stdout 을 **줄 단위로 실시간 콜백** (v1.7.0).
+ * 첫 dist 배포(~157MB)는 수 분이 걸려 블로킹 출력은 UX 가 죽으므로, 자식
+ * 프로세스가 한 줄 flush 할 때마다 $onLine 으로 흘려보낸다.
+ *
+ * 이식성: Windows 에서 stream_select() 는 proc_open 파이프(소켓 아님)에 안
+ * 먹으므로 stdout 블로킹 fgets 루프를 쓴다. 자식(deploy.run)이 rclone stderr
+ * 를 자기 stdout 으로 합치고 자체 로그도 stdout 으로 내므로 거의 모든 출력이
+ * pipe1 로 온다 — 남은 stderr(예외/argparse)는 종료 후 드레인. 반환: exit code.
+ */
+function admin_proc_stream(array $argv, ?string $cwd, callable $onLine): int {
+    $desc = [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    $proc = @proc_open($argv, $desc, $pipes, $cwd, null, ['bypass_shell' => true]);
+    if (!is_resource($proc)) { $onLine('proc_open 실패'); return -1; }
+    fclose($pipes[0]);
+
+    stream_set_blocking($pipes[1], true);
+    while (($line = fgets($pipes[1])) !== false) {
+        $onLine(rtrim($line, "\r\n"));
+    }
+    fclose($pipes[1]);
+
+    stream_set_blocking($pipes[2], true);
+    $err = stream_get_contents($pipes[2]);
+    fclose($pipes[2]);
+    if ($err !== '' && $err !== false) {
+        foreach (preg_split('/\r?\n/', rtrim($err)) as $l) {
+            if ($l !== '') $onLine($l);
+        }
+    }
+    return proc_close($proc);
+}
+
+/**
+ * dist 배포 스트리밍: python Heron.py --deploy [--dry-run].
+ * $dryRun=true 면 미리보기(서버 변경 0), false 면 실제 sync(삭제 포함).
+ * 반환: rclone/Heron exit code (0=성공).
+ */
+function admin_deploy_stream(bool $dryRun, callable $onLine): int {
+    $argv = array_merge(
+        admin_python(),
+        [admin_base_dir() . DIRECTORY_SEPARATOR . 'Heron.py', '--deploy']
+    );
+    if ($dryRun) $argv[] = '--dry-run';
+    return admin_proc_stream($argv, admin_base_dir(), $onLine);
+}
+
+/** user/.heron/deploy.json 을 표시용으로 읽는다 (없거나 깨지면 null). */
+function admin_deploy_config(): ?array {
+    $p = admin_base_dir() . '/user/.heron/deploy.json';
+    if (!is_file($p)) return null;
+    $j = json_decode((string)@file_get_contents($p), true);
+    return is_array($j) ? $j : null;
+}
+
+/** 배포 설정 견본(deploy.example.json) 존재 여부. */
+function admin_deploy_example_exists(): bool {
+    return is_file(admin_base_dir() . '/user/.heron/deploy.example.json');
+}

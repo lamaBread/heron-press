@@ -43,6 +43,11 @@ Version / upgrade actions (v1.6.0 — build 대신 실행되고 종료):
     python Heron.py --check-update       # GitHub 최신 버전 확인 (Pond 배너 캐시 갱신)
     python Heron.py --update             # 최신 릴리스 다운로드 → 오버레이 → 마이그레이션
 
+배포 액션 (v1.7.0 — dist 를 서버로 rclone SFTP 증분 동기화):
+    python Heron.py --fetch-rclone       # rclone 바이너리 선확보 (검증 포함). 멱등.
+    python Heron.py --deploy --dry-run   # 미리보기: 보낼/지울 목록. 서버 변경 0.
+    python Heron.py --deploy             # 실제 증분 동기화 (삭제 포함).
+
 이 액션들은 보통 Pond.php 가 내부적으로 호출한다 (사용자 UX = 터미널 0줄).
 Heron.py 직접 실행은 전문 사용자/CI 경로.
 
@@ -103,6 +108,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--update', action='store_true',
         help='최신 릴리스를 받아 오버레이 후 마이그레이션하고 종료.')
+    # v1.7.0: dist 서버 배포 (rclone SFTP 증분 동기화).
+    parser.add_argument(
+        '--fetch-rclone', action='store_true',
+        help='rclone 바이너리를 선확보(다운로드+SHA256 검증)하고 종료. 멱등.')
+    parser.add_argument(
+        '--deploy', action='store_true',
+        help='dist/ 를 서버에 증분 동기화하고 종료 (--dry-run 으로 미리보기).')
     return parser
 
 
@@ -164,6 +176,30 @@ def _action_update(base: Path) -> int:
     return 0 if r['ok'] else 1
 
 
+def _action_fetch_rclone(base: Path) -> int:
+    """rclone 바이너리 선확보 (다운로드+SHA256 검증). 멱등."""
+    from scripts import rclone_bin
+    try:
+        rclone_bin.ensure(base, log=lambda m: print(m, flush=True))
+    except Exception as e:
+        print(f'rclone 확보 실패: {e}', flush=True)
+        return 1
+    return 0
+
+
+def _action_deploy(base: Path, *, dry_run: bool) -> int:
+    """dist/ 를 서버에 증분 동기화 (rclone SFTP). 출력은 실시간 스트리밍."""
+    from scripts import deploy
+    try:
+        return deploy.run(base, dry_run, log=lambda m: print(m, flush=True))
+    except deploy.DeployConfigError as e:
+        print(f'배포 설정 오류:\n{e}', flush=True)
+        return 1
+    except Exception as e:
+        print(f'배포 실패: {type(e).__name__}: {e}', flush=True)
+        return 1
+
+
 def main(argv=None) -> int:
     # 콘솔/파이프 인코딩을 UTF-8 로 고정 — Windows 기본 cp949 에서 한글/em-dash
     # 출력이 깨지거나 UnicodeEncodeError 로 죽는 것을 막는다. Pond 는 출력 파이프
@@ -187,6 +223,10 @@ def main(argv=None) -> int:
         return _action_check_update(base)
     if args.update:
         return _action_update(base)
+    if args.fetch_rclone:
+        return _action_fetch_rclone(base)
+    if args.deploy:
+        return _action_deploy(base, dry_run=args.dry_run)
 
     # --clean wipes .build_cache/ as well as dist/ (a full rebuild).
     if args.clean:

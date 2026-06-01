@@ -1,0 +1,8 @@
+{
+  "host": "your-domain.com",
+  "user": "deployuser",
+  "port": 22,
+  "remote_path": "/var/www/your-domain.com",
+  "ssh_key_path": "C:/Users/you/.ssh/id_ed25519",
+  "known_hosts_path": "C:/Users/you/.ssh/known_hosts"
+}

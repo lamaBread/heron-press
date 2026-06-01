@@ -13,3 +13,9 @@ __pycache__/
 # 업데이트 체크 캐시와 마이그레이션 백업은 기계 생성물이라 제외.
 /user/.heron/update.json
 /user/.heron/backups/
+
+# v1.7.0: 배포. 실값 deploy.json (서버 좌표·키 경로) 은 머신별 비공유라 제외
+# — deploy.example.json (견본) 은 커밋. 다운로드된 rclone 바이너리도 머신
+# 종속물이라 제외 (make_manifest 도 system/runtime/bin/ 를 표면에서 제외).
+/user/.heron/deploy.json
+/system/runtime/bin/

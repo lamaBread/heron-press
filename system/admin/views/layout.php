@@ -60,6 +60,7 @@ function admin_head(string $title): void {
   <nav>
     <a href="<?= h($self) ?>?a=list">목록</a>
     <a href="<?= h($self) ?>?a=new">+ 새 글</a>
+    <a href="<?= h($self) ?>?a=deploy" title="빌드된 dist/ 를 서버로 증분 동기화">배포</a>
   </nav>
   <form method="post" action="<?= h($self) ?>?a=checkupdate" style="display:inline"
         title="GitHub 에서 새 버전이 있는지 확인합니다">
