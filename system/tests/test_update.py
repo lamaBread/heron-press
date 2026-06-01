@@ -192,7 +192,10 @@ class TestSelfUpdateMocked(unittest.TestCase):
         _write(self.dst / 'user' / 'site.yaml',
                'domain: keep.me\nreserved_slugs: [a, b]\nname: Site\n')
         _write(self.dst / 'user' / 'articles' / 'A' / 'content.md', 'body\n')
-        # 스탬프 부재 → 베이스라인. (fresh 설치 상태가 아니라 업그레이드 대상)
+        # 실제 업그레이드 대상은 한 번이라도 실행돼 스탬프가 찍혀 있다. 베이스라인
+        # ('1.5.3') 으로 둬 마이그레이션 체인은 전체 실행하되, 백업이 이 스탬프를
+        # user/.heron/version 으로 복사하는 분기(부모 디렉터리 부재 회귀)를 탄다.
+        version.write_schema_version(self.dst, '1.5.3')
 
         # 새 릴리스 (1.7.0) — MANIFEST 동봉 후 zip.
         _make_program_tree(self.rel, '1.7.0',
@@ -230,9 +233,13 @@ class TestSelfUpdateMocked(unittest.TestCase):
         self.assertEqual(version.read_schema_version(self.dst), '1.7.0')
         # user/ 콘텐츠 보존
         self.assertTrue((self.dst / 'user/articles/A/content.md').is_file())
-        # 백업 생성
+        # 프로그램 백업 생성 — 스탬프도 함께 백업됐는가 (부모 디렉터리 자동 생성).
+        # backups/ 엔 마이그레이션 엔진의 migrate-* 백업도 함께 들어오므로
+        # 프로그램 백업 디렉터리(<from>-to-<to>-*)를 정확히 집는다.
         backups = self.dst / 'user' / '.heron' / 'backups'
-        self.assertTrue(backups.is_dir() and any(backups.iterdir()))
+        label_dirs = list(backups.glob('*-to-*'))
+        self.assertEqual(len(label_dirs), 1)
+        self.assertTrue((label_dirs[0] / 'user' / '.heron' / 'version').is_file())
 
     def test_no_update_when_current(self):
         _make_program_tree(self.dst, '1.6.0')

@@ -1,4 +1,4 @@
-# Heron v1.7.0 — User Guide
+# Heron v1.7.1 — User Guide
 
 **Heron** is a lightweight, **PHP-targeted static site generator**: keep **one folder per article** for its body and attachments, and `python Heron.py` builds the whole site once.
 
@@ -59,7 +59,7 @@ python Heron.py --no-cache     # disable the incremental cache
 On success the output looks like:
 
 ```
-Build start - Heron v1.6.2 (...)
+Build start - Heron v1.7.1 (...)
 [ 1/16] Load settings (site.yaml / tokenizer parity)
 [ 2/16] Scan article folders (user/articles/)
    …  (each step has an [ n/16] header; heavy steps show a \r live counter)
@@ -792,7 +792,8 @@ The `rsync` above is the manual path. From v1.7.0, **[Deploy] in Pond's top bar*
 
 | Version | Date | Summary |
 |---|---|---|
-| **v1.7.0** | 2026-06-01 | **rclone one-click dist deploy (§ 13-1 · § 17-7).** **[Deploy]** in Pond's top bar **incrementally syncs** the built `dist/` to the server via rclone's SFTP backend — only changed files transferred + server-side orphans deleted, behind a **two-stage dry-run gate** (① preview the would-send/delete list → ② apply) that guards `sync`'s remote deletion. It solves rsync's "not native on Windows" problem with **rclone** (MIT, a single static binary with zero DLLs): a pinned **v1.74.2** is fetched on demand into `system/runtime/bin/<os>-<arch>/`, with the archive SHA256 checked against per-platform source pins (mismatch = rejected) and a PATH fallback when offline. Auth is an **SSH key file** (deploy.json holds only the *path*; the private key stays outside the repo) with forced `known_hosts` verification (rclone's sftp skips it by default → MITM defense). Config lives in the gitignored `user/.heron/deploy.json` (the committed `deploy.example.json` template, plus an `m_1_7_0` migration that seeds it for existing users since the overlay never touches user/). The thin-trigger pattern holds: PHP spawns `python Heron.py --deploy [--dry-run]` and **streams the progress log live** (even the first ~157MB transfer stays visible), with all logic in Python (`deploy.py` + `rclone_bin.py`, stdlib `urllib`+`zipfile`). The downloaded binary is machine-specific, so `make_manifest` excludes `system/runtime/bin/` from the program surface (paired with .gitignore) → no leak into commits, MANIFEST, or dist. The builder is unchanged, so **dist is byte-identical to v1.6.2 (57 files)**; stamp 1.6.2 → 1.7.0; 464 → **490** unit tests + 6/6 diagnostics. |
+| **v1.7.1** | 2026-06-01 | **Self-update backup crash hotfix.** Fixes a bug where the update died with `FileNotFoundError` at the backup step: when copying the schema stamp (`user/.heron/version`) into the backup folder, the destination's **parent directory was never created** — `update.py::_backup_program` was the one copy site missing a preceding `parent.mkdir(parents=True, exist_ok=True)` (the other 3 copies in the same function all mkdir first; download + MANIFEST sha256 verification pass, then the backup blows up — OS-agnostic). Regression cause: the only integration test `test_full_flow` deliberately left the stamp absent, so the `stamp.is_file()` branch never ran — it now writes a baseline stamp (1.5.3) to exercise that branch (the missing parent dir). No user/ schema change → no new migration step; stamp 1.7.0 → 1.7.1. dist byte-identical to v1.7.0 (57 files); 490 unit tests + 6/6 diagnostics. |
+| v1.7.0 | 2026-06-01 | rclone one-click dist deploy (§ 13-1 · § 17-7) — **[Deploy]** in Pond **incrementally syncs** the built `dist/` to the server via rclone (SFTP) — only changed files sent + server orphans deleted, behind a **two-stage dry-run gate** guarding `sync`'s remote deletion. A pinned rclone (**v1.74.2**) is fetched on demand, archive SHA256-verified against platform source pins, and placed under `system/runtime/bin/<os>-<arch>/` (machine-specific → `make_manifest` excludes it from the program surface, paired with .gitignore → no leak into commits, MANIFEST, or dist); auth is an **SSH key file** (path only) with forced `known_hosts` verification. Config lives in the gitignored `user/.heron/deploy.json` (template `deploy.example.json` committed + seeded by an `m_1_7_0` migration). Builder unchanged → dist byte-identical to v1.6.2 (57 files); stamp 1.6.2 → 1.7.0; 464 → 490 unit tests + 6/6 diagnostics. |
 | v1.6.2 | 2026-06-01 | Bilingual README parity — English brought to the Korean's depth (dropped the lighter-summary disclaimer, restored § 4-7 · § 18, expanded § 3·10·11·12·13·15·17); Korean side compressed the changelog and aligned the 13 design principles. Docs-only (no code change); stamp 1.6.1 → 1.6.2; dist byte-identical (57 files). |
 | v1.6.1 | 2026-06-01 | Migration fidelity fixes (surfaced by replaying a real v1.2.2 `site.yaml`) — the migration now preserves LF/CRLF newlines exactly (reads/writes bytes) and snapshots every at-risk file before mutating. No schema change; stamp advanced 1.6.0 → 1.6.1. dist unchanged (57 files); 464 tests + 6/6 diagnostics. |
 | v1.6.0 | 2026-05-31 | Migration & one-click update system (§ 17-6) — a schema-version stamp (`user/.heron/version`) + an idempotent `user/`-only migration engine + `MANIFEST.json` integrity + Pond/CLI one-click update from GitHub. Build stays read-only on `user/`; dist byte-identical to v1.5.3 (57 files). |
@@ -990,4 +991,4 @@ At the time of writing there may be more candidates that *were discussed but dro
 
 ---
 
-*Heron v1.6.2 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [§ 16](#16-changelog).*
+*Heron v1.7.1 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [§ 16](#16-changelog).*

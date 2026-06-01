@@ -225,7 +225,9 @@ def _backup_program(base: Path, label: str, log: Callable) -> Path:
         shutil.copy2(s, d)
     stamp = _version.version_file(base)
     if stamp.is_file():
-        shutil.copy2(stamp, dest / 'user' / '.heron' / 'version')
+        stamp_dst = dest / 'user' / '.heron' / 'version'
+        stamp_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(stamp, stamp_dst)
     log(f'백업: {dest}')
     return dest
 
