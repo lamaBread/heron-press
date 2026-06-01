@@ -1,0 +1,96 @@
+# Locale pack (en) — Surface 3: operator-facing CLI/deploy/update/migration
+# messages. These stream into Pond's build/deploy/update panels and the
+# `python Heron.py <action>` console. Looked up by tool language
+# (user/.heron/locale) via the global i18n.t() (v1.9.1). ko is canonical.
+# Format: flat dotted keys -> quoted strings. {name} = .format. \n = newline.
+
+# ── Heron.py --check (version / MANIFEST status) ───────────────────
+cli.check.program_version: "Program version : {ver}"
+cli.check.schema_stamp: "Schema stamp    : {schema}  (user/.heron/version)"
+cli.check.need_migrate: "→ Migration needed: python Heron.py --migrate (preview: --migrate --dry-run)"
+cli.check.content_newer: "→ Content is newer than the program. Upgrading the program is recommended."
+cli.check.schema_current: "→ Schema is up to date."
+cli.check.no_manifest: "No MANIFEST.json — skipping integrity check."
+cli.check.manifest_ok: "MANIFEST integrity: OK ({files} files, v{ver})."
+cli.check.manifest_mismatch: "MANIFEST integrity: mismatch — missing={missing} modified={modified}"
+
+# ── Heron.py --migrate / migration engine ─────────────────────────
+cli.migrate.dry_run_footer: "\n(dry-run — no changes made. Re-run without --dry-run to apply.)"
+cli.migrate.header: "Current schema: {current}  →  target: {target}"
+cli.migrate.dry_run_marker: "  (dry-run)"
+cli.migrate.already_current: "Already on the latest schema — no migrations to apply."
+cli.migrate.no_steps: "No migration steps to apply."
+cli.migrate.step: "  [{from_v} → {to_v}] {summary}"
+cli.migrate.change: "      · {kind}: {path} — {detail}"
+cli.migrate.no_change: "      · (no change — already applied)"
+cli.migrate.stamped: "Stamp written: user/.heron/version = {target}"
+cli.migrate.backup: "Backup: {path} ({count} files)"
+cli.migrate.m160.summary: "Introduced the Heron migration system — schema stamp (user/.heron/version) + cleanup of site.yaml keys retired in v1.4.0"
+cli.migrate.m160.removed: "Removed keys retired in v1.4.0: {keys}"
+cli.migrate.m170.summary: "Introduced one-click rclone deploy — seeded the deploy config example (user/.heron/deploy.example.json)"
+cli.migrate.m170.seed: "Created the deploy config example (schema placeholder, no real values)"
+cli.migrate.m190.summary: "Introduced tool localization (language packs) — seeded the tool-language setting (user/.heron/locale, canonical ko)"
+cli.migrate.m190.seed: "Seeded the tool-language setting ({locale})"
+
+# ── Heron.py --check-update ────────────────────────────────────────
+cli.checkupdate.failed: "Update check failed: {error}"
+cli.checkupdate.available: "New version available: v{current} → v{latest}"
+cli.checkupdate.howto: "Update: python Heron.py --update (or the Update button in Pond)"
+cli.checkupdate.uptodate: "You are up to date (v{current})."
+
+# ── Heron.py --check-config ────────────────────────────────────────
+cli.checkconfig.ok: "site.yaml validation passed — valid as build configuration."
+cli.checkconfig.review_item: "  · To review: {message}"
+
+# ── Heron.py --clean / general ─────────────────────────────────────
+cli.build.cleaned: "Cleaned: {path}"
+
+# ── Deploy (deploy.py + Heron.py deploy wrappers) ──────────────────
+cli.deploy.config_error: "Deploy configuration error:\n{error}"
+cli.deploy.failed: "Deploy failed: {error}"
+cli.deploy.cfg.absent: "No deploy configuration: {path}\nCopy {example} and fill in the values (do not include the private key — path only)."
+cli.deploy.cfg.unreadable: "Cannot read deploy.json: {error}"
+cli.deploy.cfg.not_object: "The top level of deploy.json must be an object."
+cli.deploy.cfg.missing_keys: "Missing/empty required keys: {keys}\nExample: {example}"
+cli.deploy.cfg.port_not_int: "port is not an integer: {port}"
+cli.deploy.cfg.key_not_found: "SSH private key file not found: {path}\n(deploy.json holds only the key path; keep the key itself in an OS-standard location.)"
+cli.deploy.cfg.known_hosts_missing: "known_hosts file not found: {path}\nConnect once with `ssh <user>@<host>` to register the host key (required by rclone's host-key verification — MITM protection)."
+cli.deploy.mode.preview: "preview (dry-run — no server changes)"
+cli.deploy.mode.apply: "real sync (including deletions)"
+cli.deploy.sync_line: "rclone sync → {user}@{host}:{remote}  [{mode}]"
+cli.deploy.done: "Done."
+cli.deploy.preview_done: 'Preview complete — review the "transfer/delete" list above, then apply.'
+cli.deploy.rclone_exit: "rclone exit code {code} — check the log above (host key not registered, key permissions, path typo, etc.)."
+
+# ── Self-update (update.py) ────────────────────────────────────────
+cli.update.unsafe_overlay: "Refused unsafe overlay path: {rel}"
+cli.update.copied: "Copied: {count} program files"
+cli.update.deleted: "Deleted (program files dropped in the new release): {count}"
+cli.update.backup: "Backup: {path}"
+cli.update.already_latest: "Already up to date (v{current})."
+cli.update.downloading: "Downloading: {tag}"
+cli.update.download_failed: "Download failed: {error}"
+cli.update.unsafe_zip: "Unsafe zip entry: {entry}"
+cli.update.integrity_failed: "Download integrity check failed — missing={missing} modified={modified}"
+cli.update.integrity_ok: "Download integrity check passed (MANIFEST sha256 match)."
+cli.update.no_manifest: "Note: the download has no MANIFEST.json, so integrity verification is skipped."
+cli.update.complete: "Update complete: v{from_v} → v{to_v} (schema {schema}). Restart Pond (php -S 127.0.0.1:8001 Pond.php)."
+
+# ── rclone binary provisioning (rclone_bin.py) ─────────────────────
+cli.rclone.fetch_failed: "Failed to obtain rclone: {error}"
+cli.rclone.unsupported_os: "Unsupported OS: {os}. Automatic rclone fetch supports only Windows/macOS/Linux. Put rclone on PATH or place it manually under system/runtime/bin/<os>-<arch>/."
+cli.rclone.unsupported_arch: "Unsupported CPU architecture: {arch}. Only amd64/arm64 are supported. Put rclone on PATH or place it manually under system/runtime/bin/<os>-<arch>/."
+cli.rclone.no_pin: "No pinned platform: {platform}."
+cli.rclone.verified_skip: "rclone {ver} verified ({path}). Skipping download."
+cli.rclone.version_mismatch: "Existing rclone version mismatch (installed={have}, required={need}) — re-fetching."
+cli.rclone.downloading: "Downloading rclone {ver}: {url}"
+cli.rclone.download_failed: "Download failed: {error}"
+cli.rclone.sha_mismatch: "rclone archive SHA256 mismatch — download refused (supply-chain protection). expected={want} actual={got}. URL={url}"
+cli.rclone.sha_ok: "SHA256 verification passed ({bytes} bytes)."
+cli.rclone.extracted: "Extracted and placed: {path}"
+cli.rclone.binary_not_found: "Could not find {name} in the archive (corrupted download?)."
+cli.rclone.unsafe_zip: "Unsafe zip entry: {entry}"
+cli.rclone.reverify_failed: "Post-placement version re-check failed (got={have}, expected={need})."
+cli.rclone.ready: "rclone {ver} ready."
+cli.rclone.fallback_path: "Fallback: using rclone from PATH ({path}, version={ver})."
+cli.rclone.unavailable: "Could not obtain rclone. You need an internet connection, or put rclone on PATH, or place it manually under system/runtime/bin/<os>-<arch>/. (cause: {why})"

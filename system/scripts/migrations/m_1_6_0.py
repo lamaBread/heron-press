@@ -31,6 +31,7 @@ class Migration_1_6_0(Migration):
     to_version = '1.6.0'
     summary = ('Heron 마이그레이션 시스템 도입 — 스키마 스탬프'
                '(user/.heron/version) + v1.4.0 폐기 site.yaml 키 정리')
+    summary_key = 'cli.migrate.m160.summary'
 
     def _site_yaml(self, base) -> Path:
         return Path(base) / 'user' / 'site.yaml'
@@ -58,6 +59,8 @@ class Migration_1_6_0(Migration):
                 path='user/site.yaml',
                 kind='edit',
                 detail='v1.4.0 폐기 키 제거: ' + ', '.join(removed),
+                detail_key='cli.migrate.m160.removed',
+                detail_params={'keys': ', '.join(removed)},
             ))
             if not dry and text != original:
                 _yamledit.atomic_write(sy, text)

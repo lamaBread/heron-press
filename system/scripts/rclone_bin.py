@@ -30,6 +30,8 @@ import zipfile
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 
+from . import i18n
+
 # 핀 버전 + 6개 플랫폼 아카이브(.zip) SHA256 — 공식
 # https://downloads.rclone.org/{ver}/SHA256SUMS 에서 수집 (v1.74.2).
 RCLONE_VERSION = 'v1.74.2'
@@ -61,20 +63,16 @@ def platform_key() -> Tuple[str, str]:
     os_map = {'Windows': 'windows', 'Darwin': 'osx', 'Linux': 'linux'}
     os_key = os_map.get(sysname)
     if os_key is None:
-        raise RuntimeError(
-            f'지원하지 않는 OS: {sysname!r}. rclone 자동 확보는 Windows/macOS/'
-            'Linux 만 지원합니다. rclone 을 PATH 에 두거나 '
-            'system/runtime/bin/<os>-<arch>/ 에 수동 배치하세요.')
+        raise RuntimeError(i18n.t('cli.rclone.unsupported_os',
+                                  os=repr(sysname)))
     machine = platform.machine().lower()
     if machine in ('amd64', 'x86_64', 'x64'):
         arch_key = 'amd64'
     elif machine in ('arm64', 'aarch64'):
         arch_key = 'arm64'
     else:
-        raise RuntimeError(
-            f'지원하지 않는 CPU 아키텍처: {platform.machine()!r}. v1.7.0 은 '
-            'amd64/arm64 만 지원합니다. rclone 을 PATH 에 두거나 '
-            'system/runtime/bin/<os>-<arch>/ 에 수동 배치하세요.')
+        raise RuntimeError(i18n.t('cli.rclone.unsupported_arch',
+                                  arch=repr(platform.machine())))
     return os_key, arch_key
 
 
@@ -146,14 +144,14 @@ def _extract_binary(zip_bytes: bytes, os_key: str, dst: Path) -> None:
         for name in zf.namelist():
             # 절대/상위탈출 엔트리 거부 (zip slip 방어).
             if name.startswith('/') or '..' in Path(name).parts:
-                raise ValueError(f'안전하지 않은 zip 엔트리: {name}')
+                raise ValueError(i18n.t('cli.rclone.unsafe_zip', entry=name))
             if name.replace('\\', '/').rstrip('/').endswith('/' + want) \
                     or name == want:
                 member = name
                 break
         if member is None:
-            raise RuntimeError(
-                f'아카이브에서 {want} 를 찾지 못했습니다 (손상된 다운로드?).')
+            raise RuntimeError(i18n.t('cli.rclone.binary_not_found',
+                                      name=want))
         payload = zf.read(member)
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.parent / (dst.name + '.heron_tmp')
@@ -184,8 +182,8 @@ def ensure(base, *, opener: Optional[Callable] = None,
     os_key, arch_key = platform_key()
     pin = PINS.get((os_key, arch_key))
     if pin is None:
-        raise RuntimeError(
-            f'핀이 없는 플랫폼: {os_key}-{arch_key}.')
+        raise RuntimeError(i18n.t('cli.rclone.no_pin',
+                                  platform=f'{os_key}-{arch_key}'))
 
     dst = binary_path(base)
 
@@ -193,35 +191,37 @@ def ensure(base, *, opener: Optional[Callable] = None,
     if dst.is_file():
         have = installed_version(dst)
         if have == RCLONE_VERSION:
-            log(f'rclone {RCLONE_VERSION} 확인됨 ({dst}). 다운로드 생략.')
+            log(i18n.t('cli.rclone.verified_skip',
+                       ver=RCLONE_VERSION, path=dst))
             return dst
-        log(f'기존 rclone 버전 불일치(설치={have}, 필요={RCLONE_VERSION}) — 재확보.')
+        log(i18n.t('cli.rclone.version_mismatch',
+                   have=have, need=RCLONE_VERSION))
 
     # 2) 다운로드 + 검증 + 추출.
     url = download_url(os_key, arch_key)
     try:
-        log(f'rclone {RCLONE_VERSION} 다운로드: {url}')
+        log(i18n.t('cli.rclone.downloading', ver=RCLONE_VERSION, url=url))
         data = _download(url, opener)
     except Exception as e:  # 네트워크/오프라인 — 폴백 시도
-        log(f'다운로드 실패: {type(e).__name__}: {e}')
+        log(i18n.t('cli.rclone.download_failed',
+                   error=f'{type(e).__name__}: {e}'))
         return _fallback_or_raise(allow_path_fallback, log, str(e))
 
     digest = hashlib.sha256(data).hexdigest()
     if digest != pin:
         # 공급망 차단 — 폴백 없이 즉시 중단.
-        raise RuntimeError(
-            'rclone 아카이브 SHA256 불일치 — 다운로드를 거부합니다 (공급망 '
-            f'보호). 기대={pin} 실제={digest}. URL={url}')
-    log(f'SHA256 검증 통과 ({len(data)} 바이트).')
+        raise RuntimeError(i18n.t('cli.rclone.sha_mismatch',
+                                  want=pin, got=digest, url=url))
+    log(i18n.t('cli.rclone.sha_ok', bytes=len(data)))
 
     _extract_binary(data, os_key, dst)
-    log(f'추출·배치 완료: {dst}')
+    log(i18n.t('cli.rclone.extracted', path=dst))
 
     have = installed_version(dst)
     if have != RCLONE_VERSION:
-        raise RuntimeError(
-            f'배치 후 버전 재확인 실패 (실행={have!r}, 기대={RCLONE_VERSION}).')
-    log(f'rclone {RCLONE_VERSION} 준비 완료.')
+        raise RuntimeError(i18n.t('cli.rclone.reverify_failed',
+                                  have=repr(have), need=RCLONE_VERSION))
+    log(i18n.t('cli.rclone.ready', ver=RCLONE_VERSION))
     return dst
 
 
@@ -231,9 +231,6 @@ def _fallback_or_raise(allow: bool, log, why: str) -> Path:
         found = shutil.which('rclone')
         if found:
             ver = installed_version(Path(found))
-            log(f'폴백: PATH 의 rclone 사용 ({found}, 버전={ver}).')
+            log(i18n.t('cli.rclone.fallback_path', path=found, ver=ver))
             return Path(found)
-    raise RuntimeError(
-        'rclone 을 확보하지 못했습니다. 인터넷 연결이 필요하거나, rclone 을 '
-        'PATH 에 두거나, system/runtime/bin/<os>-<arch>/ 에 수동 배치하세요. '
-        f'(원인: {why})')
+    raise RuntimeError(i18n.t('cli.rclone.unavailable', why=why))

@@ -235,6 +235,12 @@ admin.settings.locale.heading: "③ 도구 언어 / Tool language"
 admin.settings.locale.intro: "The display language of the Pond admin panel. It does not affect the site (dist/) output and is stored in a single line at <code class=\"k\">user/.heron/locale</code>."
 admin.settings.locale.label: "Tool language"
 admin.settings.locale.save: "Save language"
+# Language display names — for the dropdown / language picker. These are each
+# language's endonym, so the values are identical across the ko/en packs
+# (independent of the current UI language). Add a name here when adding a new
+# locale; if a key is missing, the locale code (e.g. 'fr') is shown as-is.
+admin.locale.name.ko: "한국어 (ko)"
+admin.locale.name.en: "English (en)"
 
 # ── build.php (build result) ───────────────────────────────────────
 admin.build.banner: "— <code class=\"k\">python Heron.py</code> (cwd = version folder)."
@@ -277,6 +283,7 @@ admin.settings.locale.err.write: "Failed to save the tool language — check per
 admin.site.err.write: "Failed to back up/write site.yaml — check permissions/path."
 
 # ── proc.php / lib (config-validation errors surfaced to the UI) ───
+admin.error.proc_open: "proc_open failed — PHP could not start the child process."
 admin.deploy_cfg.err.host_empty: "host is empty."
 admin.deploy_cfg.err.user_empty: "user is empty."
 admin.deploy_cfg.err.remote_empty: "remote_path is empty."

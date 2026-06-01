@@ -94,7 +94,7 @@ admin_head(t('admin.home.title'));
   <div class="arr">→</div>
   <div class="node srv">
     <div class="k"><?= t('admin.home.flow.serve.k') ?></div>
-    <div class="t">Apache + PHP</div>
+    <div class="t"><?= t('admin.home.flow.serve.t') ?></div>
     <div class="d"><?= t('admin.home.flow.serve.d') ?></div>
   </div>
 </div>

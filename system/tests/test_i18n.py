@@ -9,6 +9,9 @@
   (c) 자리표시자 치환 — site.search.result_count 가 n=3 으로 치환됨.
   (d) ko 정본 불변 — site/build 의 대표 키가 옛 하드코딩 한국어와 동일.
 """
+import json
+import shutil
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -125,6 +128,95 @@ class CanonicalInvarianceTests(unittest.TestCase):
             '템플릿에 채우지 못한 placeholder 가 발견되어 빈 문자열로 '
             'strip 되었습니다: {{BODY}}.',
         )
+
+
+class EscapeDecodingTests(unittest.TestCase):
+    """v1.9.1 — 큰따옴표 값 escape 해석 (\\" \\\\ \\n \\t), 작은따옴표는 리터럴."""
+
+    def test_double_quote_escapes(self):
+        self.assertEqual(i18n._unquote(r'"a\"b"'), 'a"b')
+        self.assertEqual(i18n._unquote(r'"a\\b"'), 'a\\b')
+        self.assertEqual(i18n._unquote(r'"a\nb"'), 'a\nb')
+        self.assertEqual(i18n._unquote(r'"a\tb"'), 'a\tb')
+
+    def test_unknown_escape_preserved(self):
+        # 알 수 없는 escape 는 백슬래시째 보존 (예: Windows 경로 토큰).
+        self.assertEqual(i18n._unquote(r'"a\xb"'), r'a\xb')
+
+    def test_single_quote_is_literal(self):
+        self.assertEqual(i18n._unquote(r"'a\nb'"), r'a\nb')
+        self.assertEqual(i18n._unquote('"' + "class='k'" + '"'), "class='k'")
+
+    def test_no_resolved_value_has_stray_backslash(self):
+        # 회귀 가드: 모든 로케일의 모든 해석값에 백슬래시가 남지 않아야 한다.
+        # (v1.9.0 의 `class=\\"k\\"` / pillow `\\n` 누수 버그 재발 방지. 어떤
+        # 값이든 리터럴 백슬래시가 필요해지면 이 테스트를 의도적으로 갱신할 것.)
+        for locale in i18n.available_locales():
+            for k, v in i18n._load_pack(locale).items():
+                self.assertNotIn(
+                    '\\', v,
+                    f"[{locale}] {k} 에 미해석 백슬래시가 남아 있습니다: {v!r}")
+
+
+class CliPackTests(unittest.TestCase):
+    """v1.9.1 — Surface 3 cli.* 팩 (운영자 CLI/배포/업데이트/마이그레이션)."""
+
+    def test_cli_keys_present_and_translated(self):
+        ko, en = i18n.load('ko'), i18n.load('en')
+        self.assertEqual(ko.t('cli.deploy.done'), '완료.')
+        self.assertEqual(en.t('cli.deploy.done'), 'Done.')
+        self.assertEqual(ko.t('cli.checkupdate.uptodate', current='1.9.1'),
+                         '최신입니다 (v1.9.1).')
+        self.assertEqual(en.t('cli.checkupdate.uptodate', current='1.9.1'),
+                         'You are up to date (v1.9.1).')
+
+    def test_cli_newline_escape_decoded(self):
+        # cli.deploy.config_error 의 \n 이 실제 개행으로 해석돼야 한다.
+        self.assertIn('\n', i18n.load('ko').t('cli.deploy.config_error',
+                                              error='X'))
+
+    def test_global_t_switches_with_init(self):
+        # 전역 i18n.t() 가 init() 으로 도구 언어를 바꾼다 (Heron.py 진입 패턴).
+        try:
+            i18n.init('en')
+            self.assertEqual(i18n.t('cli.deploy.done'), 'Done.')
+            i18n.init('ko')
+            self.assertEqual(i18n.t('cli.deploy.done'), '완료.')
+        finally:
+            i18n.init('ko')   # 다른 테스트 오염 방지 — ko 로 복원.
+
+
+class LocaleNameParityTests(unittest.TestCase):
+    """v1.9.1 — 설정 드롭다운 표시명: available 로케일마다 endonym 키가 있다."""
+
+    def test_every_available_locale_has_display_name(self):
+        ko = i18n.load('ko')
+        for loc in i18n.available_locales():
+            key = f'admin.locale.name.{loc}'
+            self.assertNotEqual(
+                ko.t(key), key,
+                f'로케일 {loc} 의 표시명 키({key})가 없습니다.')
+
+
+@unittest.skipUnless(shutil.which('php'), 'php 미설치 — PHP 파서 패리티 생략')
+class PhpParserParityTests(unittest.TestCase):
+    """v1.9.1 — PHP(i18n.php) 와 Python(i18n.py) 파서가 **바이트 동일** 맵을
+    낸다 (Surface 2 admin UI 와 Surface 1/3 의 번역 누수/불일치 방지)."""
+
+    def test_php_python_packs_identical(self):
+        php_lib = (_SRC / 'admin' / 'lib' / 'i18n.php').as_posix()
+        code = (f'require {json.dumps(php_lib)};'
+                '$a=[];foreach(i18n_available_locales() as $l)'
+                '$a[$l]=i18n_load_pack($l);'
+                'echo json_encode($a, JSON_UNESCAPED_UNICODE);')
+        out = subprocess.run(['php', '-r', code], capture_output=True,
+                             text=True, encoding='utf-8')
+        self.assertEqual(out.returncode, 0, out.stderr)
+        php = json.loads(out.stdout)
+        for locale in i18n.available_locales():
+            self.assertEqual(
+                i18n._load_pack(locale), php.get(locale, {}),
+                f"로케일 '{locale}' 의 PHP/Python 파싱 결과가 다릅니다.")
 
 
 if __name__ == '__main__':

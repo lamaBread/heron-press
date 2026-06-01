@@ -1,0 +1,95 @@
+# 로케일 팩 (ko, 정본) — Surface 3: 운영자 대면 CLI/배포/업데이트/마이그레이션
+# 메시지. Pond 의 빌드·배포·업데이트 패널과 `python Heron.py <액션>` 콘솔에
+# 그대로 흐른다. 도구 언어(user/.heron/locale)로 조회 — 전역 i18n.t() (v1.9.1).
+# 형식: 플랫 닷키 → 인용 문자열. {name} 은 .format 치환. \n 은 개행.
+
+# ── Heron.py --check (버전/MANIFEST 상태) ──────────────────────────
+cli.check.program_version: "프로그램 버전  : {ver}"
+cli.check.schema_stamp: "스키마 스탬프  : {schema}  (user/.heron/version)"
+cli.check.need_migrate: "→ 마이그레이션 필요: python Heron.py --migrate (미리보기: --migrate --dry-run)"
+cli.check.content_newer: "→ 콘텐츠가 프로그램보다 최신입니다. 프로그램 업그레이드를 권장."
+cli.check.schema_current: "→ 스키마 최신."
+cli.check.no_manifest: "MANIFEST.json 없음 — 무결성 검증 생략."
+cli.check.manifest_ok: "MANIFEST 무결성: OK ({files} 파일, v{ver})."
+cli.check.manifest_mismatch: "MANIFEST 무결성: 불일치 — missing={missing} modified={modified}"
+
+# ── Heron.py --migrate / 마이그레이션 엔진 ─────────────────────────
+cli.migrate.dry_run_footer: "\n(dry-run — 실제 변경 없음. 적용하려면 --dry-run 없이 다시 실행.)"
+cli.migrate.header: "현재 스키마: {current}  →  목표: {target}"
+cli.migrate.dry_run_marker: "  (dry-run)"
+cli.migrate.already_current: "이미 최신 스키마입니다 — 적용할 마이그레이션 없음."
+cli.migrate.no_steps: "적용할 마이그레이션 스텝이 없습니다."
+cli.migrate.step: "  [{from_v} → {to_v}] {summary}"
+cli.migrate.change: "      · {kind}: {path} — {detail}"
+cli.migrate.no_change: "      · (변경 없음 — 이미 반영됨)"
+cli.migrate.stamped: "스탬프 기록: user/.heron/version = {target}"
+cli.migrate.backup: "백업: {path} ({count}개 파일)"
+cli.migrate.m160.summary: "Heron 마이그레이션 시스템 도입 — 스키마 스탬프(user/.heron/version) + v1.4.0 폐기 site.yaml 키 정리"
+cli.migrate.m160.removed: "v1.4.0 폐기 키 제거: {keys}"
+cli.migrate.m170.summary: "rclone 원클릭 배포 도입 — 배포 설정 견본(user/.heron/deploy.example.json) 시드"
+cli.migrate.m170.seed: "배포 설정 견본 생성 (실값 없는 스키마 플레이스홀더)"
+cli.migrate.m190.summary: "도구 다국어(언어팩) 도입 — 도구 언어 설정(user/.heron/locale) 시드 (정본 ko)"
+cli.migrate.m190.seed: "도구 언어 설정 시드 ({locale})"
+
+# ── Heron.py --check-update ────────────────────────────────────────
+cli.checkupdate.failed: "업데이트 확인 실패: {error}"
+cli.checkupdate.available: "새 버전 있음: v{current} → v{latest}"
+cli.checkupdate.howto: "업데이트: python Heron.py --update (또는 Pond 의 업데이트 버튼)"
+cli.checkupdate.uptodate: "최신입니다 (v{current})."
+
+# ── Heron.py --check-config ────────────────────────────────────────
+cli.checkconfig.ok: "site.yaml 검증 통과 — 빌드 설정으로 유효합니다."
+cli.checkconfig.review_item: "  · 살펴볼 사항: {message}"
+
+# ── Heron.py --clean / 일반 ────────────────────────────────────────
+cli.build.cleaned: "정리됨: {path}"
+
+# ── 배포 (deploy.py + Heron.py 배포 래퍼) ──────────────────────────
+cli.deploy.config_error: "배포 설정 오류:\n{error}"
+cli.deploy.failed: "배포 실패: {error}"
+cli.deploy.cfg.absent: "배포 설정이 없습니다: {path}\n{example} 를 복사해 값을 채우세요 (개인키는 넣지 말고 경로만)."
+cli.deploy.cfg.unreadable: "deploy.json 을 읽을 수 없습니다: {error}"
+cli.deploy.cfg.not_object: "deploy.json 최상위는 객체여야 합니다."
+cli.deploy.cfg.missing_keys: "필수 키 누락/빈값: {keys}\n견본: {example}"
+cli.deploy.cfg.port_not_int: "port 가 정수가 아닙니다: {port}"
+cli.deploy.cfg.key_not_found: "SSH 개인키 파일을 찾을 수 없습니다: {path}\n(deploy.json 에는 키 경로만 둡니다. 키 자체는 OS 표준 위치에.)"
+cli.deploy.cfg.known_hosts_missing: "known_hosts 파일이 없습니다: {path}\n최초 1회 `ssh <user>@<host>` 로 접속해 호스트키를 등록하세요 (rclone 의 호스트키 검증에 필요 — MITM 방어)."
+cli.deploy.mode.preview: "미리보기 (dry-run — 서버 변경 없음)"
+cli.deploy.mode.apply: "실제 동기화 (삭제 포함)"
+cli.deploy.sync_line: "rclone sync → {user}@{host}:{remote}  [{mode}]"
+cli.deploy.done: "완료."
+cli.deploy.preview_done: '미리보기 완료 — 위 "전송/삭제" 목록을 확인 후 적용하세요.'
+cli.deploy.rclone_exit: "rclone 종료 코드 {code} — 위 로그를 확인하세요 (호스트키 미등록·키 권한·경로 오타 등)."
+
+# ── 자가 업데이트 (update.py) ──────────────────────────────────────
+cli.update.unsafe_overlay: "안전하지 않은 오버레이 경로 거부: {rel}"
+cli.update.copied: "복사: {count} 개 프로그램 파일"
+cli.update.deleted: "삭제(신 릴리스에서 빠진 프로그램 파일): {count} 개"
+cli.update.backup: "백업: {path}"
+cli.update.already_latest: "이미 최신입니다 (v{current})."
+cli.update.downloading: "다운로드: {tag}"
+cli.update.download_failed: "다운로드 실패: {error}"
+cli.update.unsafe_zip: "안전하지 않은 zip 엔트리: {entry}"
+cli.update.integrity_failed: "다운로드 무결성 검증 실패 — missing={missing} modified={modified}"
+cli.update.integrity_ok: "다운로드 무결성 검증 통과 (MANIFEST sha256 일치)."
+cli.update.no_manifest: "주의: 다운로드에 MANIFEST.json 이 없어 무결성 검증을 건너뜁니다."
+cli.update.complete: "업데이트 완료: v{from_v} → v{to_v} (스키마 {schema}). Pond 를 재시작하세요 (php -S 127.0.0.1:8001 Pond.php)."
+
+# ── rclone 바이너리 확보 (rclone_bin.py) ───────────────────────────
+cli.rclone.fetch_failed: "rclone 확보 실패: {error}"
+cli.rclone.unsupported_os: "지원하지 않는 OS: {os}. rclone 자동 확보는 Windows/macOS/Linux 만 지원합니다. rclone 을 PATH 에 두거나 system/runtime/bin/<os>-<arch>/ 에 수동 배치하세요."
+cli.rclone.unsupported_arch: "지원하지 않는 CPU 아키텍처: {arch}. v1.7.0 은 amd64/arm64 만 지원합니다. rclone 을 PATH 에 두거나 system/runtime/bin/<os>-<arch>/ 에 수동 배치하세요."
+cli.rclone.no_pin: "핀이 없는 플랫폼: {platform}."
+cli.rclone.verified_skip: "rclone {ver} 확인됨 ({path}). 다운로드 생략."
+cli.rclone.version_mismatch: "기존 rclone 버전 불일치(설치={have}, 필요={need}) — 재확보."
+cli.rclone.downloading: "rclone {ver} 다운로드: {url}"
+cli.rclone.download_failed: "다운로드 실패: {error}"
+cli.rclone.sha_mismatch: "rclone 아카이브 SHA256 불일치 — 다운로드를 거부합니다 (공급망 보호). 기대={want} 실제={got}. URL={url}"
+cli.rclone.sha_ok: "SHA256 검증 통과 ({bytes} 바이트)."
+cli.rclone.extracted: "추출·배치 완료: {path}"
+cli.rclone.binary_not_found: "아카이브에서 {name} 를 찾지 못했습니다 (손상된 다운로드?)."
+cli.rclone.unsafe_zip: "안전하지 않은 zip 엔트리: {entry}"
+cli.rclone.reverify_failed: "배치 후 버전 재확인 실패 (실행={have}, 기대={need})."
+cli.rclone.ready: "rclone {ver} 준비 완료."
+cli.rclone.fallback_path: "폴백: PATH 의 rclone 사용 ({path}, 버전={ver})."
+cli.rclone.unavailable: "rclone 을 확보하지 못했습니다. 인터넷 연결이 필요하거나, rclone 을 PATH 에 두거나, system/runtime/bin/<os>-<arch>/ 에 수동 배치하세요. (원인: {why})"

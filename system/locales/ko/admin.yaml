@@ -235,6 +235,11 @@ admin.settings.locale.heading: "③ 도구 언어 / Tool language"
 admin.settings.locale.intro: "Pond 관리 화면의 표시 언어입니다. 사이트(dist/) 출력에는 영향을 주지 않고, <code class=\"k\">user/.heron/locale</code> 한 줄에 저장됩니다."
 admin.settings.locale.label: "도구 언어"
 admin.settings.locale.save: "언어 저장"
+# 언어 표시명 — 드롭다운/언어 선택자용. 각 언어의 자칭(endonym)이라 ko/en 팩에서
+# 값이 동일하다 (현재 UI 언어와 무관). 새 로케일을 추가하면 여기 이름도 추가;
+# 키가 없으면 로케일 코드(예: 'fr')가 그대로 표시된다.
+admin.locale.name.ko: "한국어 (ko)"
+admin.locale.name.en: "English (en)"
 
 # ── build.php (빌드 결과) ───────────────────────────────────────────
 admin.build.banner: "— <code class=\"k\">python Heron.py</code> (cwd = 버전 폴더)."
@@ -277,6 +282,7 @@ admin.settings.locale.err.write: "도구 언어 저장 실패 — 권한·경로
 admin.site.err.write: "site.yaml 백업/쓰기 실패 — 권한·경로 확인."
 
 # ── proc.php / lib (UI 로 표면화되는 설정 검증 에러) ────────────────
+admin.error.proc_open: "proc_open 실패 — PHP 가 자식 프로세스를 시작하지 못했습니다."
 admin.deploy_cfg.err.host_empty: "host 가 비었습니다."
 admin.deploy_cfg.err.user_empty: "user 가 비었습니다."
 admin.deploy_cfg.err.remote_empty: "remote_path 가 비었습니다."

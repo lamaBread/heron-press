@@ -28,6 +28,7 @@ from typing import Callable, List, Optional
 
 from . import rclone_bin
 from . import version as _version
+from . import i18n
 
 CONFIG_NAME = 'deploy.json'
 EXAMPLE_NAME = 'deploy.example.json'
@@ -100,44 +101,41 @@ def load_config(base) -> dict:
     """
     p = config_path(base)
     if not p.is_file():
-        raise DeployConfigError(
-            f'배포 설정이 없습니다: {p.as_posix()}\n'
-            f'{example_path(base).as_posix()} 를 복사해 값을 채우세요 '
-            '(개인키는 넣지 말고 경로만).')
+        raise DeployConfigError(i18n.t(
+            'cli.deploy.cfg.absent',
+            path=p.as_posix(), example=example_path(base).as_posix()))
     try:
         cfg = json.loads(p.read_text(encoding='utf-8'))
     except (OSError, json.JSONDecodeError) as e:
-        raise DeployConfigError(f'deploy.json 을 읽을 수 없습니다: {e}')
+        raise DeployConfigError(i18n.t('cli.deploy.cfg.unreadable', error=e))
     if not isinstance(cfg, dict):
-        raise DeployConfigError('deploy.json 최상위는 객체여야 합니다.')
+        raise DeployConfigError(i18n.t('cli.deploy.cfg.not_object'))
 
     missing = [k for k in REQUIRED_KEYS
                if not str(cfg.get(k, '')).strip()]
     if missing:
-        raise DeployConfigError(
-            '필수 키 누락/빈값: ' + ', '.join(missing)
-            + f'\n견본: {example_path(base).as_posix()}')
+        raise DeployConfigError(i18n.t(
+            'cli.deploy.cfg.missing_keys',
+            keys=', '.join(missing), example=example_path(base).as_posix()))
 
     # 포트 정규화 (기본 22).
     port = cfg.get('port', 22)
     try:
         cfg['port'] = int(port)
     except (TypeError, ValueError):
-        raise DeployConfigError(f'port 가 정수가 아닙니다: {port!r}')
+        raise DeployConfigError(i18n.t('cli.deploy.cfg.port_not_int',
+                                       port=repr(port)))
 
     key = os.path.expanduser(str(cfg['ssh_key_path']).strip())
     if not os.path.isfile(key):
-        raise DeployConfigError(
-            f'SSH 개인키 파일을 찾을 수 없습니다: {key}\n'
-            '(deploy.json 에는 키 *경로* 만 둡니다. 키 자체는 OS 표준 위치에.)')
+        raise DeployConfigError(i18n.t('cli.deploy.cfg.key_not_found',
+                                       path=key))
     cfg['ssh_key_path'] = key
 
     kh = known_hosts_path(cfg)
     if not os.path.isfile(kh):
-        raise DeployConfigError(
-            f'known_hosts 파일이 없습니다: {kh}\n'
-            "최초 1회 `ssh <user>@<host>` 로 접속해 호스트키를 등록하세요 "
-            '(rclone 의 호스트키 검증에 필요 — MITM 방어).')
+        raise DeployConfigError(i18n.t('cli.deploy.cfg.known_hosts_missing',
+                                       path=kh))
     cfg['_known_hosts'] = kh
     return cfg
 
@@ -184,8 +182,10 @@ def run(base, dry_run: bool, *,
     cfg = load_config(base)
     argv = build_argv(rclone, base, cfg, dry_run)
 
-    mode = '미리보기 (dry-run — 서버 변경 없음)' if dry_run else '실제 동기화 (삭제 포함)'
-    log(f'rclone sync → {cfg["user"]}@{cfg["host"]}:{cfg["remote_path"]}  [{mode}]')
+    mode = (i18n.t('cli.deploy.mode.preview') if dry_run
+            else i18n.t('cli.deploy.mode.apply'))
+    log(i18n.t('cli.deploy.sync_line', user=cfg['user'], host=cfg['host'],
+               remote=cfg['remote_path'], mode=mode))
 
     proc = subprocess.Popen(
         argv, cwd=str(base),
@@ -198,9 +198,8 @@ def run(base, dry_run: bool, *,
     proc.wait()
     code = proc.returncode
     if code == 0:
-        log('완료.' if not dry_run
-            else '미리보기 완료 — 위 "전송/삭제" 목록을 확인 후 적용하세요.')
+        log(i18n.t('cli.deploy.preview_done') if dry_run
+            else i18n.t('cli.deploy.done'))
     else:
-        log(f'rclone 종료 코드 {code} — 위 로그를 확인하세요 '
-            '(호스트키 미등록·키 권한·경로 오타 등).')
+        log(i18n.t('cli.deploy.rclone_exit', code=code))
     return code

@@ -29,7 +29,7 @@ function admin_proc(array $argv, ?string $stdin, ?string $cwd): array {
     ];
     $opts = ['bypass_shell' => true];
     $proc = @proc_open($argv, $desc, $pipes, $cwd, null, $opts);
-    if (!is_resource($proc)) return [-1, '', 'proc_open 실패'];
+    if (!is_resource($proc)) return [-1, '', t('admin.error.proc_open')];
 
     if ($stdin !== null && $stdin !== '') {
         fwrite($pipes[0], $stdin);
@@ -118,7 +118,7 @@ function admin_proc_stream(array $argv, ?string $cwd, callable $onLine): int {
         2 => ['pipe', 'w'],
     ];
     $proc = @proc_open($argv, $desc, $pipes, $cwd, null, ['bypass_shell' => true]);
-    if (!is_resource($proc)) { $onLine('proc_open 실패'); return -1; }
+    if (!is_resource($proc)) { $onLine(t('admin.error.proc_open')); return -1; }
     fclose($pipes[0]);
 
     stream_set_blocking($pipes[1], true);

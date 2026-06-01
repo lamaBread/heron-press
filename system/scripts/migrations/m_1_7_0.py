@@ -21,23 +21,24 @@ class Migration_1_7_0(Migration):
     to_version = '1.7.0'
     summary = ('rclone 원클릭 배포 도입 — 배포 설정 견본'
                '(user/.heron/deploy.example.json) 시드')
+    summary_key = 'cli.migrate.m170.summary'
+
+    def _change(self):
+        return Change(
+            path='user/.heron/deploy.example.json',
+            kind='create',
+            detail='배포 설정 견본 생성 (실값 없는 스키마 플레이스홀더)',
+            detail_key='cli.migrate.m170.seed',
+        )
 
     def plan(self, base):
         # 견본이 이미 있으면 변경 없음 (멱등).
         if _deploy.example_path(base).exists():
             return []
-        return [Change(
-            path='user/.heron/deploy.example.json',
-            kind='create',
-            detail='배포 설정 견본 생성 (실값 없는 스키마 플레이스홀더)',
-        )]
+        return [self._change()]
 
     def apply(self, base):
         created = _deploy.write_example(base)
         if not created:
             return []
-        return [Change(
-            path='user/.heron/deploy.example.json',
-            kind='create',
-            detail='배포 설정 견본 생성 (실값 없는 스키마 플레이스홀더)',
-        )]
+        return [self._change()]

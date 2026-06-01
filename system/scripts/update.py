@@ -40,6 +40,7 @@ from typing import Callable, Optional
 
 from . import make_manifest
 from . import version as _version
+from . import i18n
 
 # 고정 저장소 (임의 출처 차단).
 REPO = 'lamaBread/heron-press'
@@ -113,12 +114,12 @@ def overlay(src_base, dst_base, *, log: Optional[Callable[[str], None]] = None) 
     copied = 0
     for rel in sorted(new_files):
         if not _safe_rel(rel):
-            raise ValueError(f'안전하지 않은 오버레이 경로 거부: {rel}')
+            raise ValueError(i18n.t('cli.update.unsafe_overlay', rel=rel))
         s, d = src_base / rel, dst_base / rel
         d.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(s, d)
         copied += 1
-    log(f'복사: {copied} 개 프로그램 파일')
+    log(i18n.t('cli.update.copied', count=copied))
 
     deleted = 0
     for rel in sorted(set(old_files) - set(new_files)):
@@ -129,7 +130,7 @@ def overlay(src_base, dst_base, *, log: Optional[Callable[[str], None]] = None) 
             p.unlink()
             deleted += 1
     if deleted:
-        log(f'삭제(신 릴리스에서 빠진 프로그램 파일): {deleted} 개')
+        log(i18n.t('cli.update.deleted', count=deleted))
 
     # MANIFEST.json 은 파일 목록에서 자기 자신을 제외하므로 위 복사 루프에
     # 안 잡힌다. 설치본 매니페스트가 새 릴리스를 반영하도록(이후 --check 가
@@ -228,7 +229,7 @@ def _backup_program(base: Path, label: str, log: Callable) -> Path:
         stamp_dst = dest / 'user' / '.heron' / 'version'
         stamp_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(stamp, stamp_dst)
-    log(f'백업: {dest}')
+    log(i18n.t('cli.update.backup', path=dest))
     return dest
 
 
@@ -273,24 +274,25 @@ def self_update(base, *, opener: Optional[Callable] = None,
     info = check_update(base, opener=opener)
     out['from'] = info['current']
     if info['error']:
-        out['error'] = f"업데이트 확인 실패: {info['error']}"
+        out['error'] = i18n.t('cli.checkupdate.failed', error=info['error'])
         log(out['error'])
         return out
     out['to'] = info['latest']
     if not info['update_available'] and not force:
         out['ok'] = True
-        log(f"이미 최신입니다 (v{info['current']}).")
+        log(i18n.t('cli.update.already_latest', current=info['current']))
         return out
 
     url = info['zipball_url'] or ZIPBALL.format(tag=info['latest'])
     with tempfile.TemporaryDirectory(prefix='heron-update-') as tmp:
         tmp = Path(tmp)
         zip_path = tmp / 'release.zip'
-        log(f"다운로드: {info['latest']}")
+        log(i18n.t('cli.update.downloading', tag=info['latest']))
         try:
             _download_zip(url, zip_path, opener)
         except Exception as e:
-            out['error'] = f'다운로드 실패: {type(e).__name__}: {e}'
+            out['error'] = i18n.t('cli.update.download_failed',
+                                  error=f'{type(e).__name__}: {e}')
             log(out['error'])
             return out
 
@@ -299,7 +301,7 @@ def self_update(base, *, opener: Optional[Callable] = None,
         with zipfile.ZipFile(zip_path) as zf:
             for m in zf.namelist():
                 if m.startswith('/') or '..' in Path(m).parts:
-                    out['error'] = f'안전하지 않은 zip 엔트리: {m}'
+                    out['error'] = i18n.t('cli.update.unsafe_zip', entry=m)
                     log(out['error'])
                     return out
             zf.extractall(extract_dir)
@@ -309,13 +311,14 @@ def self_update(base, *, opener: Optional[Callable] = None,
         if make_manifest.manifest_path(root).is_file():
             v = make_manifest.verify(root)
             if not v['ok']:
-                out['error'] = ('다운로드 무결성 검증 실패 — missing='
-                                f"{v['missing']} modified={v['modified']}")
+                out['error'] = i18n.t('cli.update.integrity_failed',
+                                      missing=v['missing'],
+                                      modified=v['modified'])
                 log(out['error'])
                 return out
-            log('다운로드 무결성 검증 통과 (MANIFEST sha256 일치).')
+            log(i18n.t('cli.update.integrity_ok'))
         else:
-            log('주의: 다운로드에 MANIFEST.json 이 없어 무결성 검증을 건너뜁니다.')
+            log(i18n.t('cli.update.no_manifest'))
 
         new_version = make_manifest.program_version(root)
         label = f"{info['current']}-to-{new_version}-{time.strftime('%Y%m%d-%H%M%S')}"
@@ -345,7 +348,6 @@ def self_update(base, *, opener: Optional[Callable] = None,
         'error': None,
     })
 
-    log(f"업데이트 완료: v{out['from']} → v{new_version} "
-        f"(스키마 {out['migrated_to']}). "
-        "Pond 를 재시작하세요 (php -S 127.0.0.1:8001 Pond.php).")
+    log(i18n.t('cli.update.complete', from_v=out['from'], to_v=new_version,
+               schema=out['migrated_to']))
     return out

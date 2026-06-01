@@ -74,6 +74,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'system'))
 
 from scripts.builder import Builder  # noqa: E402
 from scripts.cache import CACHE_DIR_NAME  # noqa: E402
+from scripts import i18n  # noqa: E402
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
@@ -131,27 +132,27 @@ def _action_check(base: Path) -> int:
     from scripts import __version__
     from scripts import version, make_manifest
     schema = version.read_schema_version(base)
-    print(f'프로그램 버전  : {__version__}')
-    print(f'스키마 스탬프  : {schema}  (user/.heron/version)')
+    print(i18n.t('cli.check.program_version', ver=__version__))
+    print(i18n.t('cli.check.schema_stamp', schema=schema))
     cmp = version.compare(schema, __version__)
     if cmp < 0:
-        print('→ 마이그레이션 필요: python Heron.py --migrate '
-              '(미리보기: --migrate --dry-run)')
+        print(i18n.t('cli.check.need_migrate'))
     elif cmp > 0:
-        print('→ 콘텐츠가 프로그램보다 최신입니다. 프로그램 업그레이드를 권장.')
+        print(i18n.t('cli.check.content_newer'))
     else:
-        print('→ 스키마 최신.')
+        print(i18n.t('cli.check.schema_current'))
     man = make_manifest.load_manifest(base)
     if not man:
-        print('MANIFEST.json 없음 — 무결성 검증 생략.')
+        print(i18n.t('cli.check.no_manifest'))
         return 0
     v = make_manifest.verify(base)
     if v['ok']:
-        print(f"MANIFEST 무결성: OK ({len(man.get('files', {}))} 파일, "
-              f"v{v['manifest_version']}).")
+        print(i18n.t('cli.check.manifest_ok',
+                     files=len(man.get('files', {})),
+                     ver=v['manifest_version']))
     else:
-        print(f"MANIFEST 무결성: 불일치 — missing={v['missing']} "
-              f"modified={v['modified']}")
+        print(i18n.t('cli.check.manifest_mismatch',
+                     missing=v['missing'], modified=v['modified']))
     return 0
 
 
@@ -160,7 +161,7 @@ def _action_migrate(base: Path, *, dry_run: bool) -> int:
     from scripts import migrations
     migrations.run(base, target=__version__, dry_run=dry_run, log=print)
     if dry_run:
-        print('\n(dry-run — 실제 변경 없음. 적용하려면 --dry-run 없이 다시 실행.)')
+        print(i18n.t('cli.migrate.dry_run_footer'))
     return 0
 
 
@@ -168,13 +169,14 @@ def _action_check_update(base: Path) -> int:
     from scripts import update
     r = update.check_update(base)
     if r['error']:
-        print(f"업데이트 확인 실패: {r['error']}")
+        print(i18n.t('cli.checkupdate.failed', error=r['error']))
         return 1
     if r['update_available']:
-        print(f"새 버전 있음: v{r['current']} → v{r['latest']}")
-        print('업데이트: python Heron.py --update (또는 Pond 의 업데이트 버튼)')
+        print(i18n.t('cli.checkupdate.available',
+                     current=r['current'], latest=r['latest']))
+        print(i18n.t('cli.checkupdate.howto'))
     else:
-        print(f"최신입니다 (v{r['current']}).")
+        print(i18n.t('cli.checkupdate.uptodate', current=r['current']))
     return 0
 
 
@@ -190,7 +192,7 @@ def _action_fetch_rclone(base: Path) -> int:
     try:
         rclone_bin.ensure(base, log=lambda m: print(m, flush=True))
     except Exception as e:
-        print(f'rclone 확보 실패: {e}', flush=True)
+        print(i18n.t('cli.rclone.fetch_failed', error=e), flush=True)
         return 1
     return 0
 
@@ -201,10 +203,11 @@ def _action_deploy(base: Path, *, dry_run: bool) -> int:
     try:
         return deploy.run(base, dry_run, log=lambda m: print(m, flush=True))
     except deploy.DeployConfigError as e:
-        print(f'배포 설정 오류:\n{e}', flush=True)
+        print(i18n.t('cli.deploy.config_error', error=e), flush=True)
         return 1
     except Exception as e:
-        print(f'배포 실패: {type(e).__name__}: {e}', flush=True)
+        print(i18n.t('cli.deploy.failed',
+                     error=f'{type(e).__name__}: {e}'), flush=True)
         return 1
 
 
@@ -224,10 +227,10 @@ def _action_check_config(base: Path) -> int:
     raw = yaml_load(text)   # 관대한 파서 — 예외 없이 dict 반환 (의미 검증은 아래).
     b = Builder(base, enable_cache=False)
     b._apply_site_config(raw)   # 실패 시 abort()→sys.exit(1).
-    print('site.yaml 검증 통과 — 빌드 설정으로 유효합니다.')
+    print(i18n.t('cli.checkconfig.ok'))
     for e in b.report.entries:
         if e.severity == 'warning':
-            print(f'  · 살펴볼 사항: {e.message}')
+            print(i18n.t('cli.checkconfig.review_item', message=e.message))
     return 0
 
 
@@ -244,6 +247,13 @@ def main(argv=None) -> int:
 
     args = _build_arg_parser().parse_args(argv)
     base = Path(__file__).parent
+
+    # v1.9.1: 운영자 대면 CLI/배포/업데이트/마이그레이션 메시지를 도구 언어
+    # (user/.heron/locale)로 적재한다 — 이후 모든 액션(+deploy/update/rclone/
+    # migrations)이 전역 i18n.t() 로 조회. Pond 가 도구 언어를 en 으로 두면
+    # 빌드/배포/업데이트 패널 출력도 영문이 된다. (argparse --help 는 개발/CI
+    # 참조 표면이라 의도적으로 정본 한국어 유지.)
+    i18n.init_from_base(base)
 
     # v1.6.0: 버전/업그레이드 액션은 build 대신 실행되고 종료 (우선순위 순).
     if args.check:
@@ -266,14 +276,14 @@ def main(argv=None) -> int:
         for d in (base / 'dist', base / CACHE_DIR_NAME):
             if d.exists():
                 shutil.rmtree(d)
-                print(f'Cleaned: {d}')
+                print(i18n.t('cli.build.cleaned', path=d))
 
     # --clean-cache wipes only the cache; harmless no-op if --clean already did it.
     if args.clean_cache:
         cache_dir = base / CACHE_DIR_NAME
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
-            print(f'Cleaned: {cache_dir}')
+            print(i18n.t('cli.build.cleaned', path=cache_dir))
 
     Builder(base, enable_cache=not args.no_cache).build()
     return 0

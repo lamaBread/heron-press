@@ -12,7 +12,11 @@
 // 로케일 파일 규칙(파서 단순화):
 //   - 한 줄 = `키: "값"` (또는 '값'). 키는 닷(dot) 구분, 콜론/샵 없음.
 //   - 줄 시작 `#` 은 주석. 값 안 인라인 주석은 쓰지 말 것(그대로 보존됨).
-//   - escape 미지원 — 값에 큰따옴표가 있으면 작은따옴표로 감쌀 것.
+//   - escape (v1.9.1): **큰따옴표 값** 안에서 `\"` `\\` `\n` `\t` 를 해석한다.
+//     그 외 `\x` 는 백슬래시째 보존. **작은따옴표 값** 은 리터럴(해석 없음,
+//     YAML 동일). HTML 속성은 `class='k'` 처럼 작은따옴표를 써 큰따옴표 값에
+//     백슬래시 없이 담는 것을 권장. (i18n.py 와 바이트 동일 규칙 — test_i18n
+//     의 파서 패리티 테스트가 강제.)
 declare(strict_types=1);
 
 const I18N_CANONICAL = 'ko';
@@ -22,16 +26,43 @@ function i18n_locales_dir(): string {
     return dirname(__DIR__, 2) . '/locales';
 }
 
-/** 양끝 같은 따옴표면 한 겹 제거 (metayaml 의 meta_unquote 와 동일 규칙). */
+/**
+ * 양끝 같은 따옴표면 한 겹 제거. 큰따옴표 값은 추가로 escape 를 해석하고
+ * (i18n_unescape), 작은따옴표 값은 리터럴 그대로 둔다 (YAML 동일). i18n.py 의
+ * _unquote 와 바이트 동일.
+ */
 function i18n_unquote(string $s): string {
     $n = strlen($s);
     if ($n >= 2) {
         $a = $s[0]; $b = $s[$n - 1];
-        if (($a === '"' && $b === '"') || ($a === "'" && $b === "'")) {
-            return substr($s, 1, -1);
-        }
+        if ($a === '"' && $b === '"') return i18n_unescape(substr($s, 1, -1));
+        if ($a === "'" && $b === "'") return substr($s, 1, -1);
     }
     return $s;
+}
+
+/**
+ * 큰따옴표 값의 escape 해석: `\"`→`"`, `\\`→`\`, `\n`→개행, `\t`→탭.
+ * 그 외 `\x` 는 백슬래시째 보존. ASCII 만 특수 처리하므로 UTF-8 멀티바이트
+ * (한글 등)는 바이트 단위로 안전히 통과한다. (i18n.py 의 _unescape 와 동일.)
+ */
+function i18n_unescape(string $s): string {
+    $out = '';
+    $len = strlen($s);
+    for ($i = 0; $i < $len; $i++) {
+        $c = $s[$i];
+        if ($c === '\\' && $i + 1 < $len) {
+            $nx = $s[$i + 1];
+            if ($nx === 'n')  { $out .= "\n"; $i++; continue; }
+            if ($nx === 't')  { $out .= "\t"; $i++; continue; }
+            if ($nx === '"')  { $out .= '"';  $i++; continue; }
+            if ($nx === '\\') { $out .= '\\'; $i++; continue; }
+            $out .= $c;   // 알 수 없는 escape — 백슬래시 보존
+            continue;
+        }
+        $out .= $c;
+    }
+    return $out;
 }
 
 /** <locale>/*.yaml 들을 머지한 플랫 [key => string] 맵. */

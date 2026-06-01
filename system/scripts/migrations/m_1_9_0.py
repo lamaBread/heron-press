@@ -29,18 +29,24 @@ class Migration_1_9_0(Migration):
     to_version = '1.9.0'
     summary = ('도구 다국어(언어팩) 도입 — 도구 언어 설정'
                '(user/.heron/locale) 시드 (정본 ko)')
+    summary_key = 'cli.migrate.m190.summary'
 
     def _locale_file(self, base):
         return _version.heron_dir(base) / LOCALE_FILE_NAME
 
-    def plan(self, base):
-        if self._locale_file(base).exists():
-            return []
-        return [Change(
+    def _change(self):
+        return Change(
             path='user/.heron/locale',
             kind='create',
             detail=f'도구 언어 설정 시드 ({SEED_LOCALE})',
-        )]
+            detail_key='cli.migrate.m190.seed',
+            detail_params={'locale': SEED_LOCALE},
+        )
+
+    def plan(self, base):
+        if self._locale_file(base).exists():
+            return []
+        return [self._change()]
 
     def apply(self, base):
         f = self._locale_file(base)
@@ -49,8 +55,4 @@ class Migration_1_9_0(Migration):
         f.parent.mkdir(parents=True, exist_ok=True)
         # LF 고정 한 줄 (version 스탬프와 동일 규칙 — 플랫폼 무관 동일 바이트).
         f.write_bytes((SEED_LOCALE + '\n').encode('utf-8'))
-        return [Change(
-            path='user/.heron/locale',
-            kind='create',
-            detail=f'도구 언어 설정 시드 ({SEED_LOCALE})',
-        )]
+        return [self._change()]

@@ -117,8 +117,12 @@ $dv = static fn(string $k, $def = '') => h((string)($d[$k] ?? $def));
     <div class="field" style="max-width:280px">
       <label><?= t('admin.settings.locale.label') ?></label>
       <select name="locale">
-        <?php $cur = i18n_locale(); foreach (i18n_available_locales() as $loc): ?>
-          <option value="<?= h($loc) ?>" <?= $loc === $cur ? 'selected' : '' ?>><?= h($loc) ?></option>
+        <?php $cur = i18n_locale(); foreach (i18n_available_locales() as $loc):
+          // 표시명 lookup — 키가 없으면(t 가 키 문자열을 그대로 반환) 코드로 폴백.
+          $nameKey = 'admin.locale.name.' . $loc;
+          $label = t($nameKey);
+          if ($label === $nameKey) $label = $loc; ?>
+          <option value="<?= h($loc) ?>" <?= $loc === $cur ? 'selected' : '' ?>><?= h($label) ?></option>
         <?php endforeach; ?>
       </select>
     </div>

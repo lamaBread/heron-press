@@ -11,7 +11,9 @@ importlib 로 파일 경로에서 직접 로드한다 (모듈 레벨은 함수 �
 import 뿐 — `if __name__ == '__main__'` 가드라 import 만으로 빌드가
 돌지 않는다).
 """
+import contextlib
 import importlib.util
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -67,9 +69,17 @@ class ArgParserTests(unittest.TestCase):
             self.parser.parse_args(['--cle'])
 
     def test_help_exits_zero(self):
-        with self.assertRaises(SystemExit) as cm:
+        # argparse 의 print_help() 는 sys.stdout 으로 도움말 전문(한글·em-dash
+        # 포함)을 쓴다. Windows 기본 콘솔(cp949)에선 그 인코딩이 비ASCII 를
+        # 못 실어 테스트가 환경 의존적으로 죽는다. 실제 진입점(main)은 parse 전에
+        # stdout 을 UTF-8 로 reconfigure 하므로 무관 — 여기선 도움말을 UTF-8
+        # 버퍼로 받아 콘솔 인코딩과 무관하게 SystemExit(0) 만 검증한다.
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as cm, \
+                contextlib.redirect_stdout(buf):
             self.parser.parse_args(['--help'])
         self.assertEqual(cm.exception.code, 0)
+        self.assertIn('Heron.py', buf.getvalue())
 
 
 if __name__ == '__main__':

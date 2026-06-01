@@ -19,12 +19,13 @@ MIGRATIONS 는 순서 레지스트리. ``run()`` 이 기록된 스키마 버전 
 (각 마이그레이션은 콘텐츠 편집에만 집중).
 """
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, List, Optional
 
 from .. import version as _version
+from .. import i18n
 
 # 마이그레이션이 user/ 콘텐츠를 변형하기 직전, 바뀔 파일의 원본을 떠 두는 곳.
 # user/.heron/backups/migrate-<UTC>/<상대경로>. .gitignore 가 backups/ 를 제외
@@ -38,19 +39,27 @@ class Change:
 
     path   — base 기준 상대 경로 (예: 'user/site.yaml').
     kind   — 'edit' | 'create' | 'delete' | 'stamp'.
-    detail — 한 줄 사람용 설명.
+    detail — 한 줄 사람용 설명 (ko 폴백 — 반환 dict 의 안정 식별자).
+    detail_key/detail_params — set 되면 run() 이 로그 출력 시 도구 언어로
+        ``i18n.t(detail_key, **detail_params)`` 번역해 보여준다 (v1.9.1).
+        plan/apply 는 키만 채우고 번역은 로그 시점에 일어나 — 시그니처
+        불변으로 운영자 메시지를 다국어화한다.
     """
     path: str
     kind: str
     detail: str
+    detail_key: str = ''
+    detail_params: dict = field(default_factory=dict)
 
 
 class Migration:
     """마이그레이션 스텝 베이스. 구체 스텝이 from/to/summary 와 plan/apply 를
-    오버라이드한다."""
+    오버라이드한다. summary_key 를 두면 run() 이 도구 언어로 요약을 번역한다
+    (없으면 summary 한국어 폴백)."""
     from_version: str = ''
     to_version: str = ''
     summary: str = ''
+    summary_key: str = ''
 
     def plan(self, base) -> List[Change]:
         return []
@@ -102,7 +111,8 @@ def _backup_user_files(base, rels: List[str], *,
         dst = root / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(base / rel, dst)
-    log(f'백업: {root.relative_to(base).as_posix()} ({len(existing)}개 파일)')
+    log(i18n.t('cli.migrate.backup',
+               path=root.relative_to(base).as_posix(), count=len(existing)))
     return root
 
 
@@ -135,13 +145,13 @@ def run(base, *, target: str, dry_run: bool = False,
     all_changes: List[Change] = []
 
     chain = plan_chain(current, target)
-    log(f'현재 스키마: {current}  →  목표: {target}'
-        + ('  (dry-run)' if dry_run else ''))
+    log(i18n.t('cli.migrate.header', current=current, target=target)
+        + (i18n.t('cli.migrate.dry_run_marker') if dry_run else ''))
     if not chain:
         if _version.compare(current, target) == 0:
-            log('이미 최신 스키마입니다 — 적용할 마이그레이션 없음.')
+            log(i18n.t('cli.migrate.already_current'))
         else:
-            log('적용할 마이그레이션 스텝이 없습니다.')
+            log(i18n.t('cli.migrate.no_steps'))
 
     # 실제 적용 전, 바뀔(edit/delete) 사용자 파일의 원본을 백업한다. plan() 은
     # 읽기 전용이라 먼저 돌려 "무엇이 바뀔지" 안전하게 알아낸다. 바뀔 게 없으면
@@ -158,12 +168,17 @@ def run(base, *, target: str, dry_run: bool = False,
         backup = root.relative_to(base).as_posix() if root else None
 
     for m in chain:
-        log(f'  [{m.from_version} → {m.to_version}] {m.summary}')
+        summary = i18n.t(m.summary_key) if m.summary_key else m.summary
+        log(i18n.t('cli.migrate.step', from_v=m.from_version,
+                   to_v=m.to_version, summary=summary))
         changes = m.plan(base) if dry_run else m.apply(base)
         for c in changes:
-            log(f'      · {c.kind}: {c.path} — {c.detail}')
+            detail = (i18n.t(c.detail_key, **(c.detail_params or {}))
+                      if c.detail_key else c.detail)
+            log(i18n.t('cli.migrate.change', kind=c.kind, path=c.path,
+                       detail=detail))
         if not changes:
-            log('      · (변경 없음 — 이미 반영됨)')
+            log(i18n.t('cli.migrate.no_change'))
         all_changes.extend(changes)
         steps_meta.append({
             'from': m.from_version, 'to': m.to_version,
@@ -174,7 +189,7 @@ def run(base, *, target: str, dry_run: bool = False,
     if not dry_run and _version.compare(current, target) < 0:
         _version.write_schema_version(base, target)
         stamped = True
-        log(f'스탬프 기록: user/.heron/version = {target}')
+        log(i18n.t('cli.migrate.stamped', target=target))
 
     return {
         'from': current, 'to': target, 'dry_run': dry_run,
