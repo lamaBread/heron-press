@@ -2,8 +2,8 @@
   "files": {
     "Heron.py": "8669a4103550cd1488cafa92788898fa5fe21990ee37707b07747440500c3ed9",
     "Pond.php": "79c235cbdb72e670ba49264b7cb4657581930a8b14589d941fb1c2f5a5cc3d9e",
-    "README.ko.md": "30d55c33ddce1471b75294813fd3848a05d649d315083d3dd372f877e51429f6",
-    "README.md": "d49f31091adfb29db6aead525f1ae5032b6b351ed97bacbfd2145d85b5f3b20e",
+    "README.ko.md": "5206b5314be32b42d4a8ed27713a9167c35c646579805471d1b1860b00dd5160",
+    "README.md": "be39bd4c569a88d4dbe11b3684b083be53f5c319146c0bf33778989a5dd8dddf",
     "system/admin/lib/articles.php": "6f6bbdae372e008c35f78e83b4141b82a7b850d2b7a6b263ee5f1bcaa5e69858",
     "system/admin/lib/fs.php": "37808cd71e83cdf9c3da5c19feaa44d0a3c7be1eeafa8a8833f643be8625fef4",
     "system/admin/lib/metayaml.php": "333c01c0a03136d291dd9e1ed57743d78944dd4c66e3a32ae5f11da0b567d225",
@@ -15,7 +15,7 @@
     "system/admin/views/deploy_run.php": "caf3afe3d9f22a082b65e165e23e96c84d37c666bf9deb1b5711b15b18f14b22",
     "system/admin/views/edit.php": "3ccbfa8c258c455fc141e824e77807ed869f11d5f4a6f4bc0b9fbd97ad60ef75",
     "system/admin/views/layout.php": "4efd6e99f1af25cf68d8a3a8c30ae810155e07f91c9ba12718e8a4e2ab975f23",
-    "system/admin/views/list.php": "6358ddfb1d7f8c2ac6f7a2673625f810bb88c681746de5c175f53714e1067acb",
+    "system/admin/views/list.php": "e687d34713b1bee3ff64433b10e5d85ae3097d9ba0550d67a928cb1371374abd",
     "system/admin/views/new.php": "a4b920164329a30ac1ee389ffb2bac5ff93ddbbdc2a163d2cb437eadaf7c9fe3",
     "system/admin/views/update.php": "ec10ed0e6888f6020e27e4f9a58eaa8bf6371adc4ad1562fa714c283a3322532",
     "system/runtime/imgslidebox.js": "6da74a272b0e618eed59d7491bac7a3122475ce6a0eb0f6cf5d079a26fc8bc06",
@@ -23,7 +23,7 @@
     "system/runtime/search.php": "e221d387f32639bbe059dd7f7f54eb4a41ffafdcea24a5e5667b64d446da35c0",
     "system/runtime/search_bm25.php": "c85efae4c19d7910970bad00b1c4590a893016da50e352cedd41fc516d552320",
     "system/runtime/search_tokenize.php": "a00c999e478d6af71bdeab39ff859d3a902ee0bf69ded18d45640666b02c6221",
-    "system/scripts/__init__.py": "064e6340625398e7b7448620c860431eddf8de146d80974063eeca4f3caccea6",
+    "system/scripts/__init__.py": "8e9d7925a11406bcb96ebe588626b86737d0c647bddb50dedcfdab8de56788a2",
     "system/scripts/builder.py": "f21d3c6ac95bf2bf42b4b82f24dac147649c3f9335bb743af034e6251443595f",
     "system/scripts/cache.py": "4fa2479409e40c2cc3e56aae42565ac8a499e702c6b6ebb6f432e4755f353f85",
     "system/scripts/deploy.py": "a52ffc31e7853c9b8d80cc91f6bd432ba3e762a0c27b0ec5c468e812b224ce33",
@@ -43,7 +43,7 @@
     "system/scripts/seo.py": "69923e9fc8b2a9da4b53814258e55f6654c23d1ce1f95bd249b0d70a5dcc8c8e",
     "system/scripts/sitemap.py": "8d4bf14396ef5d2e631c10369eb4eda0d31ebe699562eb9e278f600234a8bbb4",
     "system/scripts/slugs.py": "dfe2ea6b4f6fa8ebf635f18753bcaf31b693e70a405af656c2daaeeabcd70c0f",
-    "system/scripts/update.py": "e991a109635fb27afd642cd92d69f11c47c7c5e3354f6af78ebe26217d6f0693",
+    "system/scripts/update.py": "8f0d2875b8691e4b05fe5714235af5bb375372ba179af79cf4e0bd7f0669dbb9",
     "system/scripts/version.py": "c20040936dc778ee32107ebfd52e395ccf4dba86546f63cc4a53f2fcb174cd53",
     "system/scripts/yaml_parser.py": "14df05f138a84bdd6efc1dc193bc0ca120e21c6ee00479c6e2b16cfe10d47bd2",
     "system/tests/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -67,11 +67,11 @@
     "system/tests/test_seo.py": "05ab937792ffdcf6619525d266e0c5a04378ee520ccfa07863ce4c12745dc408",
     "system/tests/test_sitemap.py": "30ee3b792e8e92bb4ba9ad13975f03ebaf243b2c7dfea92f8541acc213e55308",
     "system/tests/test_slugs.py": "adbeb3f5cba78991216a8675ebc4d7e2c499bd7392c4b978ab92b71927db5195",
-    "system/tests/test_update.py": "fa5a05139a7b3bc73cd8d1e04aa6960f9f1393446a7bffb349734f6665bcf3e2",
+    "system/tests/test_update.py": "d011b6379a8d22f3ac80ac4bfe2ca4a98ac2f1435c7cc7c8e327c89490ad82c6",
     "system/tests/test_v130_speed.py": "8e0ea19d4b3e56d9a5b9a684c2d5ad6356529519874c6a68ffa3f5a6517c38b0",
     "system/tests/test_v140.py": "19768e0ba161a74cbec5e30a70d156c0f2cdb4b73cbcec5f22466d69c4781a66",
     "system/tests/test_version.py": "b9e25216744822a79438ac69d3ef7a786e3e2694dd52a2fc2909acb66eb96910",
     "system/tests/test_yaml_parser.py": "5e6fbfd12d67e3e12a5b3e2fad6e95474363191d6bd9e2f91bb0691d9232d8d3"
   },
-  "version": "1.7.1"
+  "version": "1.7.2"
 }

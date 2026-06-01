@@ -240,6 +240,12 @@ class TestSelfUpdateMocked(unittest.TestCase):
         label_dirs = list(backups.glob('*-to-*'))
         self.assertEqual(len(label_dirs), 1)
         self.assertTrue((label_dirs[0] / 'user' / '.heron' / 'version').is_file())
+        # 업데이트 후 Pond 배너 캐시가 새 버전 상태로 갱신됐는가 — 갱신하지
+        # 않으면 self_update 시작의 check_update 가 적은 update_available=True 가
+        # 남아 업데이트 후에도 "새 버전 있음" 배너가 계속 뜬다 (v1.7.2 회귀 방지).
+        cache = update.read_cache(self.dst)
+        self.assertFalse(cache['update_available'])
+        self.assertEqual(cache['current'], '1.7.0')
 
     def test_no_update_when_current(self):
         _make_program_tree(self.dst, '1.6.0')

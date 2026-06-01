@@ -331,6 +331,20 @@ def self_update(base, *, opener: Optional[Callable] = None,
     out['ok'] = out['migrate_ok']
     out['to'] = new_version
     out['restart'] = True
+
+    # Pond 배너 캐시를 새 버전 상태로 갱신한다. 이 함수 시작의 check_update 가
+    # 적어 둔 캐시는 update_available=True 라, 갱신하지 않으면 업데이트를 마친
+    # 뒤(Pond 재시작 후에도) list.php 가 stale 캐시를 읽어 "새 버전 있음" 배너를
+    # 계속 띄운다. 프로그램 표면은 이미 새 버전으로 교체됐으므로 available=False.
+    _write_cache(base, {
+        'current': new_version,
+        'latest': info['latest'],
+        'update_available': False,
+        'zipball_url': None,
+        'checked_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
+        'error': None,
+    })
+
     log(f"업데이트 완료: v{out['from']} → v{new_version} "
         f"(스키마 {out['migrated_to']}). "
         "Pond 를 재시작하세요 (php -S 127.0.0.1:8001 Pond.php).")

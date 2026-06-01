@@ -21,7 +21,7 @@ if (!empty($ui['error'])):
   <div class="flash err">업데이트 확인 실패 — <?= h((string)$ui['error']) ?></div>
 <?php elseif (!empty($ui['update_available'])): ?>
   <div class="flash" style="background:#eef4ff;border:1px solid #c5d6f5;color:#234">
-    <strong>새 버전 v<?= h((string)($ui['latest'] ?? '?')) ?> 있음</strong>
+    <strong>새 버전 v<?= h(ltrim((string)($ui['latest'] ?? '?'), 'vV')) ?> 있음</strong>
     (현재 v<?= h((string)($ui['current'] ?? '?')) ?>).
     <form method="post" action="<?= h($self) ?>?a=update" style="display:inline;margin-left:8px"
           onsubmit="return confirm('GitHub 에서 최신 릴리스를 받아 프로그램(system/·Heron.py·Pond.php)을 교체하고 마이그레이션을 실행합니다. user/ 콘텐츠는 보존되고 직전 스냅샷이 user/.heron/backups/ 에 백업됩니다. 완료 후 Pond 재시작이 필요합니다. 계속할까요?')">
