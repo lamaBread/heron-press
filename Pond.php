@@ -67,7 +67,7 @@ function require_post_abs(string $id): string {
     return $abs;
 }
 
-$action = $_GET['a'] ?? 'list';
+$action = $_GET['a'] ?? 'home';
 
 // ── ajax: slug 제안 ───────────────────────────────────────────────
 if ($action === 'slug') {
@@ -307,6 +307,56 @@ if ($action === 'deploy') {
     exit;
 }
 
+// ── 설정 (v1.8.0) — 배포(deploy.json) 폼 + 사이트(site.yaml) 원문 편집 ─────
+if ($action === 'settings') {
+    $deployCfg = admin_deploy_config();
+    $deployExample = admin_deploy_example_exists();
+    // deploy.json 부재 시 견본(example) 값으로 폼을 채워 최초 작성을 돕는다.
+    $deploySeed = [];
+    if ($deployCfg === null && $deployExample) {
+        $j = json_decode((string)@file_get_contents(admin_deploy_example_path()), true);
+        if (is_array($j)) $deploySeed = $j;
+    }
+    // site.yaml: 검증 실패로 되돌아온 편집 버퍼가 있으면 그것을 보여 편집을
+    // 보존한다 (없으면 디스크 원문). 플래시는 한 번 쓰고 즉시 소거.
+    $siteYaml = $_SESSION['site_buffer']
+        ?? (string)@file_get_contents(admin_site_yaml_path());
+    $siteErr = (string)($_SESSION['site_err'] ?? '');
+    $deployErrs = $_SESSION['flash_deploy_errs'] ?? [];
+    unset($_SESSION['site_buffer'], $_SESSION['site_err'], $_SESSION['flash_deploy_errs']);
+    $deploySaved = !empty($_GET['deploy_saved']);
+    $siteSaved = !empty($_GET['site_saved']);
+    require __DIR__ . '/system/admin/views/settings.php';
+    exit;
+}
+
+// ── 배포 설정 저장 (v1.8.0) — 검증 후 deploy.json 기록 (직전본 백업) ──────
+if ($action === 'settings_deploy') {
+    want_post(); check_csrf();
+    [$ok, $errs] = admin_save_deploy_config($_POST);
+    if (!$ok) { $_SESSION['flash_deploy_errs'] = $errs; redirect('?a=settings'); }
+    redirect('?a=settings&deploy_saved=1');
+}
+
+// ── 사이트 설정 저장 (v1.8.0) — 빌드와 동일 검증 통과해야 commit ──────────
+if ($action === 'settings_site') {
+    want_post(); check_csrf();
+    $candidate = str_replace("\r\n", "\n", (string)($_POST['site'] ?? ''));
+    [$valid, $msg] = admin_validate_site_yaml($candidate);
+    if (!$valid) {
+        $_SESSION['site_buffer'] = $candidate;   // 편집 보존 — 디스크는 불변.
+        $_SESSION['site_err'] = $msg;
+        redirect('?a=settings');
+    }
+    $path = admin_site_yaml_path();
+    if (!admin_backup_file($path, 'site') || !admin_atomic_write($path, $candidate)) {
+        $_SESSION['site_buffer'] = $candidate;
+        $_SESSION['site_err'] = 'site.yaml 백업/쓰기 실패 — 권한·경로 확인.';
+        redirect('?a=settings');
+    }
+    redirect('?a=settings&site_saved=1');
+}
+
 // ── 업데이트 확인 (v1.6.0) — GitHub 최신 버전 조회, 캐시 갱신 후 목록 복귀 ─
 if ($action === 'checkupdate') {
     want_post(); check_csrf();
@@ -351,7 +401,19 @@ if ($action === 'edit') {
     exit;
 }
 
-// ── 목록 (기본) ──────────────────────────────────────────────────
+// ── 홈 / 시스템 개요 (v1.8.0, 기본) — 브랜드 클릭 시 도착하는 메인 페이지 ──
+if ($action === 'home') {
+    $scan = admin_scan();
+    $ver = admin_program_version();
+    $postCount = count($scan['posts']);
+    $catCount = count(array_filter($scan['categories'], static fn($c) => $c !== ''));
+    $hasDeploy = is_file(admin_deploy_config_path());
+    $hasSiteYaml = is_file(admin_site_yaml_path());
+    require __DIR__ . '/system/admin/views/home.php';
+    exit;
+}
+
+// ── 목록 ─────────────────────────────────────────────────────────
 $scan = admin_scan();
 $trash = admin_scan_trash();
 $flashErrs = $_SESSION['flash_errs'] ?? [];

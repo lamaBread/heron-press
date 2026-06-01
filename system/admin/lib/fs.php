@@ -99,10 +99,52 @@ function admin_trash_dir(): string {
     return admin_articles_dir() . DIRECTORY_SEPARATOR . '.trash';
 }
 
+/** user/.heron 디렉터리 절대경로 (설정·캐시·백업 보관소). */
+function admin_heron_dir(): string {
+    return admin_base_dir() . DIRECTORY_SEPARATOR . 'user'
+        . DIRECTORY_SEPARATOR . '.heron';
+}
+
 /** user/.heron/update.json 경로 (v1.6.0 업데이트 체크 캐시). */
 function admin_update_cache_path(): string {
+    return admin_heron_dir() . DIRECTORY_SEPARATOR . 'update.json';
+}
+
+/** user/site.yaml 경로 (v1.8.0 설정창이 편집하는 사이트 전역 설정). */
+function admin_site_yaml_path(): string {
     return admin_base_dir() . DIRECTORY_SEPARATOR . 'user'
-        . DIRECTORY_SEPARATOR . '.heron' . DIRECTORY_SEPARATOR . 'update.json';
+        . DIRECTORY_SEPARATOR . 'site.yaml';
+}
+
+/**
+ * 덮어쓰기 전 안전 백업 (v1.8.0 설정 저장 게이트용). $absPath 를
+ * user/.heron/backups/settings/<Ymd-His>__<tag>__<basename> 으로 복사한다.
+ * 마이그레이션 백업(user/.heron/backups/)과 같은 보관소·타임스탬프 관례.
+ * 원본이 없으면(최초 생성) 백업 없이 true. 반환: 백업 성공 여부.
+ */
+function admin_backup_file(string $absPath, string $tag): bool {
+    if (!is_file($absPath)) return true;   // 최초 생성 — 백업할 원본 없음.
+    $dir = admin_heron_dir() . DIRECTORY_SEPARATOR . 'backups'
+        . DIRECTORY_SEPARATOR . 'settings';
+    if (!is_dir($dir) && !@mkdir($dir, 0777, true) && !is_dir($dir)) return false;
+    $dest = $dir . DIRECTORY_SEPARATOR . date('Ymd-His') . '__' . $tag
+        . '__' . basename($absPath);
+    return @copy($absPath, $dest);
+}
+
+/**
+ * 프로그램 버전 문자열 (단일 진실원 = system/scripts/__init__.py __version__).
+ * 홈/설명 화면 표시용. 못 읽으면 빈 문자열. update.json 캐시(네트워크 기준)와
+ * 달리 현재 설치본 자체의 버전을 직접 읽는다.
+ */
+function admin_program_version(): string {
+    $p = admin_base_dir() . DIRECTORY_SEPARATOR . 'system'
+        . DIRECTORY_SEPARATOR . 'scripts' . DIRECTORY_SEPARATOR . '__init__.py';
+    $src = (string)@file_get_contents($p);
+    if ($src !== '' && preg_match('/__version__\s*=\s*[\'"]([^\'"]+)[\'"]/', $src, $m)) {
+        return $m[1];
+    }
+    return '';
 }
 
 /** 업데이트 체크 캐시 읽기 — 배너용 (없거나 깨지면 []). */

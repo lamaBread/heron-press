@@ -904,6 +904,15 @@ class Builder:
         if not site_yaml.exists():
             abort(f'site.yaml not found at {site_yaml}')
         raw = yaml_load(site_yaml.read_text(encoding='utf-8'))
+        self._apply_site_config(raw)
+        self._post_config_checks()
+
+    def _apply_site_config(self, raw):
+        """site.yaml 파싱 결과(raw dict) → self.site (SiteConfig). 설정 단위
+        검증(abort 포함)만 수행하고 디스크 I/O·parity·Pillow 같은 부수효과는
+        없다 — 빌드(_load_config)와 Pond 의 설정 검증(Heron.py --check-config)이
+        공유하는 순수 파싱·검증 경로. raw 가 None/빈 파일이면 전부 기본값."""
+        raw = raw or {}
 
         def get(key, default=None):
             return raw.get(key, default)
@@ -965,6 +974,10 @@ class Builder:
                      f"로 이전되었습니다. site.yaml 에서 제거하고 Articles/meta.yaml "
                      f"의 해당 필드를 사용하세요.")
 
+    def _post_config_checks(self):
+        """_load_config 전용 — 스키마 버전 경고 + 토크나이저 parity 검증 +
+        Pillow 가용성 경고. site.yaml 값 검증과 무관한 부수효과들이라
+        _apply_site_config 와 분리한다 (Pond 의 --check-config 는 건너뛴다)."""
         # v1.6.0: 스키마 버전 미스매치 경고 (읽기 전용 — 빌드는 user/ 를 절대
         # 쓰지 않는다, 설계원칙 5). user/.heron/version 이 프로그램 __version__
         # 보다 낮으면 마이그레이션을 권한다. 부재 = 베이스라인으로 간주.

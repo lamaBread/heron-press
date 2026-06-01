@@ -48,6 +48,9 @@ Version / upgrade actions (v1.6.0 — build 대신 실행되고 종료):
     python Heron.py --deploy --dry-run   # 미리보기: 보낼/지울 목록. 서버 변경 0.
     python Heron.py --deploy             # 실제 증분 동기화 (삭제 포함).
 
+설정 검증 (v1.8.0 — Pond 설정창의 저장 게이트):
+    python Heron.py --check-config < site.yaml   # stdin 후보를 빌드와 동일 검증
+
 이 액션들은 보통 Pond.php 가 내부적으로 호출한다 (사용자 UX = 터미널 0줄).
 Heron.py 직접 실행은 전문 사용자/CI 경로.
 
@@ -115,6 +118,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--deploy', action='store_true',
         help='dist/ 를 서버에 증분 동기화하고 종료 (--dry-run 으로 미리보기).')
+    # v1.8.0: 후보 site.yaml(stdin)을 빌드와 동일 경로로 검증 (Pond 설정 저장 게이트).
+    parser.add_argument(
+        '--check-config', action='store_true',
+        help='stdin 의 site.yaml 후보를 빌드와 동일하게 파싱·검증하고 종료 '
+             '(0=유효). 디스크 site.yaml 은 건드리지 않음 — Pond 설정 저장 게이트.')
     return parser
 
 
@@ -200,6 +208,29 @@ def _action_deploy(base: Path, *, dry_run: bool) -> int:
         return 1
 
 
+def _action_check_config(base: Path) -> int:
+    """stdin 의 site.yaml 후보를 빌드와 동일한 경로로 파싱·검증 (v1.8.0).
+
+    Pond 가 편집 중인 site.yaml 버퍼를 stdin 으로 흘려보내면 디스크의
+    site.yaml 을 건드리지 않고 검증만 한다 — 통과(exit 0)해야 Pond 가
+    저장(commit)한다. 빌드와 같은 Builder._apply_site_config(abort 검증)를
+    재사용하므로 '검증은 통과했는데 빌드는 실패' 가 생기지 않는다
+    (parity/Pillow 등 부수효과는 _post_config_checks 로 분리돼 제외). 검증
+    실패 시 _apply_site_config 안의 abort() 가 [ABORT] 를 stderr 에 내고
+    sys.exit(1) 하므로 여기서 별도 처리 없이 그 종료코드가 그대로 전파된다.
+    """
+    from scripts.yaml_parser import yaml_load
+    text = sys.stdin.read()
+    raw = yaml_load(text)   # 관대한 파서 — 예외 없이 dict 반환 (의미 검증은 아래).
+    b = Builder(base, enable_cache=False)
+    b._apply_site_config(raw)   # 실패 시 abort()→sys.exit(1).
+    print('site.yaml 검증 통과 — 빌드 설정으로 유효합니다.')
+    for e in b.report.entries:
+        if e.severity == 'warning':
+            print(f'  · 살펴볼 사항: {e.message}')
+    return 0
+
+
 def main(argv=None) -> int:
     # 콘솔/파이프 인코딩을 UTF-8 로 고정 — Windows 기본 cp949 에서 한글/em-dash
     # 출력이 깨지거나 UnicodeEncodeError 로 죽는 것을 막는다. Pond 는 출력 파이프
@@ -227,6 +258,8 @@ def main(argv=None) -> int:
         return _action_fetch_rclone(base)
     if args.deploy:
         return _action_deploy(base, dry_run=args.dry_run)
+    if args.check_config:
+        return _action_check_config(base)
 
     # --clean wipes .build_cache/ as well as dist/ (a full rebuild).
     if args.clean:

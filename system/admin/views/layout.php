@@ -5,6 +5,8 @@ declare(strict_types=1);
 function admin_head(string $title): void {
     global $CSRF;
     $self = $_SERVER['SCRIPT_NAME'];
+    $act = $_GET['a'] ?? 'home';            // 활성 nav 강조용 현재 액션.
+    $navOn = static fn(string $a): string => $act === $a ? ' class="on"' : '';
     ?><!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -19,8 +21,12 @@ function admin_head(string $title): void {
   a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
   header.bar{display:flex;align-items:center;gap:18px;padding:10px 18px;
        background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
-  header.bar .brand{font-weight:700}
+  header.bar a.brand{font-weight:700;color:#1a1a1e;text-decoration:none;
+       display:inline-flex;align-items:baseline;gap:6px}
+  header.bar a.brand:hover{color:var(--accent)}
+  header.bar a.brand .ver{font-weight:400;font-size:11px;color:var(--mut)}
   header.bar nav{display:flex;gap:14px}
+  header.bar nav a.on{font-weight:700;color:#1a1a1e}
   header.bar form.bld{margin-left:auto;display:flex;gap:8px;align-items:center}
   main{padding:20px;max-width:1280px;margin:0 auto}
   button,.btn{font:inherit;padding:6px 12px;border:1px solid var(--bd);
@@ -56,11 +62,15 @@ function admin_head(string $title): void {
 </head>
 <body>
 <header class="bar">
-  <span class="brand">Pond admin</span>
+  <a class="brand" href="<?= h($self) ?>?a=home" title="Heron + Pond 시스템 개요 (홈)">Pond admin<?php
+    $ver = admin_program_version();
+    if ($ver !== '') echo '<span class="ver">Heron v' . h($ver) . '</span>';
+  ?></a>
   <nav>
-    <a href="<?= h($self) ?>?a=list">목록</a>
-    <a href="<?= h($self) ?>?a=new">+ 새 글</a>
-    <a href="<?= h($self) ?>?a=deploy" title="빌드된 dist/ 를 서버로 증분 동기화">배포</a>
+    <a<?= $navOn('list') ?> href="<?= h($self) ?>?a=list">목록</a>
+    <a<?= $navOn('new') ?> href="<?= h($self) ?>?a=new">+ 새 글</a>
+    <a<?= $navOn('deploy') ?> href="<?= h($self) ?>?a=deploy" title="빌드된 dist/ 를 서버로 증분 동기화">배포</a>
+    <a<?= $navOn('settings') ?> href="<?= h($self) ?>?a=settings" title="배포 대상 + 사이트 전역 설정 편집">설정</a>
   </nav>
   <form method="post" action="<?= h($self) ?>?a=checkupdate" style="display:inline"
         title="GitHub 에서 새 버전이 있는지 확인합니다">

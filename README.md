@@ -1,4 +1,4 @@
-# Heron v1.7.2 — User Guide
+# Heron v1.8.0 — User Guide
 
 **Heron** is a lightweight, **PHP-targeted static site generator**: keep **one folder per article** for its body and attachments, and `python Heron.py` builds the whole site once.
 
@@ -59,7 +59,7 @@ python Heron.py --no-cache     # disable the incremental cache
 On success the output looks like:
 
 ```
-Build start - Heron v1.7.2 (...)
+Build start - Heron v1.8.0 (...)
 [ 1/16] Load settings (site.yaml / tokenizer parity)
 [ 2/16] Scan article folders (user/articles/)
    …  (each step has an [ n/16] header; heavy steps show a \r live counter)
@@ -792,7 +792,8 @@ The `rsync` above is the manual path. From v1.7.0, **[Deploy] in Pond's top bar*
 
 | Version | Date | Summary |
 |---|---|---|
-| **v1.7.2** | 2026-06-01 | **"Update available" banner won't clear after self-update — hotfix.** `update.py::self_update` writes `update_available=true` into the `user/.heron/update.json` cache via the `check_update` at its start, but **never refreshes that cache** after download → overlay → migration — so even after the update finished and Pond was restarted, the "new version available" banner kept showing (a stale on-disk `update.json`, not a browser cache). It now refreshes the cache to the new-version state (`current`=new version, `update_available=false`) right after a successful overlay. Also fixes the banner rendering a doubled 'v' (`vv1.7.2`) by stripping the leading 'v' from the latest tag in `list.php` (`ltrim`). Regression guard: the sole integration test `test_full_flow` now asserts the post-update cache (`update_available=false`, `current`=new version). No user/ schema change → no new migration step; stamp 1.7.1 → 1.7.2. dist byte-identical to v1.7.0 (57 files); 490 unit tests + 6/6 diagnostics. |
+| **v1.8.0** | 2026-06-01 | **Settings screen + system-overview home in Pond.** Pond gains **Settings** (`?a=settings`) — ① a structured form for `user/.heron/deploy.json` (prefilled from `deploy.example.json` when absent; `ssh_key_path` existence is *not* validated — it may live on another machine or not exist yet, so blocking would be a footgun; if truly missing, rclone fails clearly at deploy time), and ② a **raw editor for `user/site.yaml`** (comments preserved) — on save it must pass **the same validation the build runs**, via a new `Heron.py --check-config`, before it commits, backing up the prior copy to `user/.heron/backups/settings/`. `--check-config` feeds the candidate over stdin through the build's own `Builder._apply_site_config` (abort-on-error), so a "validated but build fails" gap is structurally impossible (`_load_config` was split 3 ways, behavior-preserving, isolating the parity/Pillow side-effects into `_post_config_checks`). The **"Pond admin" brand is now a link to a system-overview home** (`?a=home`, the default landing) visualizing the full write → build → `dist/` → deploy → serve pipeline; the article list moved to `?a=list` in the nav (active-nav highlighting + a version badge) (§ 17-3 · § 17-8). No user/ schema change → no new migration step; stamp 1.7.2 → 1.8.0. dist byte-identical to v1.7.0 (57 files, verified by a direct worktree rebuild); 490 unit tests + 6/6 diagnostics. |
+| v1.7.2 | 2026-06-01 | "Update available" banner won't clear after self-update — hotfix: `self_update` wrote `update_available=true` into the `update.json` cache at its start but never refreshed it after overlay/migration, so the banner persisted across restart; it now refreshes the cache to the new-version state right after a successful overlay (`update.py::self_update`), and `list.php` strips the doubled 'v' (`vv`) from the latest tag. No schema change; stamp 1.7.1 → 1.7.2. dist byte-identical to v1.7.0 (57 files). |
 | v1.7.1 | 2026-06-01 | Self-update backup crash hotfix — the backup step copied the schema stamp (`user/.heron/version`) without creating the destination's parent directory, dying with `FileNotFoundError` (`update.py::_backup_program`); `test_full_flow` now writes a baseline stamp to cover that branch. No schema change; stamp 1.7.0 → 1.7.1. dist byte-identical to v1.7.0 (57 files). |
 | v1.7.0 | 2026-06-01 | rclone one-click dist deploy (§ 13-1 · § 17-7) — **[Deploy]** in Pond **incrementally syncs** the built `dist/` to the server via rclone (SFTP) — only changed files sent + server orphans deleted, behind a **two-stage dry-run gate** guarding `sync`'s remote deletion. A pinned rclone (**v1.74.2**) is fetched on demand, archive SHA256-verified against platform source pins, and placed under `system/runtime/bin/<os>-<arch>/` (machine-specific → `make_manifest` excludes it from the program surface, paired with .gitignore → no leak into commits, MANIFEST, or dist); auth is an **SSH key file** (path only) with forced `known_hosts` verification. Config lives in the gitignored `user/.heron/deploy.json` (template `deploy.example.json` committed + seeded by an `m_1_7_0` migration). Builder unchanged → dist byte-identical to v1.6.2 (57 files); stamp 1.6.2 → 1.7.0; 464 → 490 unit tests + 6/6 diagnostics. |
 | v1.6.2 | 2026-06-01 | Bilingual README parity — English brought to the Korean's depth (dropped the lighter-summary disclaimer, restored § 4-7 · § 18, expanded § 3·10·11·12·13·15·17); Korean side compressed the changelog and aligned the 13 design principles. Docs-only (no code change); stamp 1.6.1 → 1.6.2; dist byte-identical (57 files). |
@@ -877,13 +878,15 @@ Local single-user only. Layered guards:
 
 ### 17-3. Features
 
-- **List** (`/`) — the article tree. Each article: edit · move category (dropdown) · public/private toggle · delete. `.trash` contents shown too.
+- **Home** (`/`, v1.8.0) — a system overview visualizing the full Heron+Pond flow (write → build → `dist/` → deploy → serve). The default landing reached by clicking the top-left **Pond admin** brand (with the installed-version badge). Shows article/category counts · `deploy.json`/`site.yaml` status + shortcuts to the main screens.
+- **List** (`?a=list`) — the article tree. Each article: edit · move category (dropdown) · public/private toggle · delete. `.trash` contents shown too.
 - **New** (`?a=new`) — pick a category + folder name (Korean OK) → `slug_one.py` suggests a slug with the **same** rules as the build (a non-ASCII name warns about hex). Creates the folder + `content.md` (or `.html`) + `meta.yaml` (with the canonical header comment).
 - **Edit** (`?a=edit&id=…`) — **split view**: left = body (`content.md`/`.html`, no frontmatter — body↔meta separation principle), right = meta form + collapsible **raw `meta.yaml`** + live preview. The core fields (title · slug · date · updated · tags · `seo.description` · noindex) are *helpers* — editing them patches the raw YAML. **Saving is raw-`meta.yaml`-based** (comments/advanced keys/`styles` preserved); the server guarantees only the one header comment line. That is, raw is the source of truth.
 - **Move/hide/delete** — folder rename (slug stays → **URL permanent**, design principle 1) / `_` prefix toggle / move to `user/articles/.trash/` (`.`-prefixed → auto-excluded from build, files remain so it is recoverable; there is intentionally no permanent-delete UI — recover by moving out of `.trash` in a file explorer).
 - **One-click build** — the top button runs `python Heron.py` (`--clean` checkable) with the version folder as cwd and shows the output. This is the step that reflects changes onto the site (`dist/`).
 - **Check / one-click update** (v1.6.0) — the header **Check for update** queries GitHub's latest tag, and if a new version exists the list banner's **Update now** downloads → verifies → overlays → migrates, then asks for a restart (§ 17-6).
 - **Deploy** (v1.7.0) — **Deploy** in the header/nav incrementally syncs the built `dist/` to the server via rclone (SFTP). Two stages — ① preview (dry-run) lists what would be sent/deleted → ② apply — with the progress log streamed live (§ 17-7).
+- **Settings** (v1.8.0) — **Settings** in the header/nav edits ① the deploy target (`deploy.json`) form + ② the site-wide config (`site.yaml`) as raw text on one screen. On save, `site.yaml` is only committed if it passes the same validation the build runs (§ 17-8).
 
 ### 17-4. Preview = body fidelity (single parser)
 
@@ -954,6 +957,20 @@ python Heron.py --deploy --dry-run    # preview: send/delete list. Zero server c
 python Heron.py --deploy              # the real incremental sync (deletes included).
 ```
 
+### 17-8. Settings — deploy target + site-wide config (v1.8.0)
+
+**Settings** (`?a=settings`) in the header/nav edits both config layers on one screen. Same **thin-trigger** philosophy as build/deploy — Pond takes the form/raw text, validates and saves; meaning is interpreted by the Python builder.
+
+**① Deploy (`user/.heron/deploy.json`) — structured form.** Flat JSON, so a form fits. When `deploy.json` is absent, the fields are prefilled from the template (`deploy.example.json`) to help the first write ([§ 17-7](#17-7-deploy-rclone-v170)). `host` · `user` · `port` · `remote_path` · `ssh_key_path` are required; `known_hosts_path` is optional (omitted → `~/.ssh/known_hosts`). The **private key itself is never stored — only its path**, and the key path's existence is *not* validated: it may be on another machine or not yet created, so blocking would be a footgun (if it is truly missing, rclone fails clearly at deploy time). The prior copy is backed up to `user/.heron/backups/settings/` before saving.
+
+**② Site (`user/site.yaml`) — raw editor + build-identical validation.** `site.yaml` is richly-commented YAML, so a form re-dump would destroy the inline docs (the subset parser cannot round-trip). So you edit it **as raw text** (like `meta.yaml`), preserving comments and order, and on save it goes through **the same validation the build runs**, via a new `Heron.py --check-config` — it is only committed if it passes; on failure the on-disk `site.yaml` is left untouched, the builder's `[ABORT]`/warnings are shown, and your edits remain in the editor. The prior copy is backed up to `backups/settings/`. `--check-config` feeds the candidate over stdin through the build's own `Builder._apply_site_config`, so a "validated but build fails" gap is **structurally impossible** (the parity/Pillow side-effects are isolated into `_post_config_checks` and skipped by `--check-config`). Saving applies the same CRLF→LF normalization as article saves.
+
+```bash
+python Heron.py --check-config        # validate a site.yaml candidate on stdin exactly as the build does (Pond's save gate).
+```
+
+From v1.8.0 the top-left **Pond admin** brand links to a **system-overview home** (`?a=home`) — the default landing that visualizes the whole Heron+Pond flow ([§ 17-3](#17-3-features)). The article list is split out as **List** (`?a=list`) in the nav.
+
 ---
 
 ## 18. Further update proposals
@@ -992,4 +1009,4 @@ At the time of writing there may be more candidates that *were discussed but dro
 
 ---
 
-*Heron v1.7.2 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [§ 16](#16-changelog).*
+*Heron v1.8.0 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [§ 16](#16-changelog).*

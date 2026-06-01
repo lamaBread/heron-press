@@ -152,9 +152,19 @@ function admin_deploy_stream(bool $dryRun, callable $onLine): int {
     return admin_proc_stream($argv, admin_base_dir(), $onLine);
 }
 
+/** user/.heron/deploy.json 절대경로. */
+function admin_deploy_config_path(): string {
+    return admin_heron_dir() . DIRECTORY_SEPARATOR . 'deploy.json';
+}
+
+/** user/.heron/deploy.example.json 절대경로. */
+function admin_deploy_example_path(): string {
+    return admin_heron_dir() . DIRECTORY_SEPARATOR . 'deploy.example.json';
+}
+
 /** user/.heron/deploy.json 을 표시용으로 읽는다 (없거나 깨지면 null). */
 function admin_deploy_config(): ?array {
-    $p = admin_base_dir() . '/user/.heron/deploy.json';
+    $p = admin_deploy_config_path();
     if (!is_file($p)) return null;
     $j = json_decode((string)@file_get_contents($p), true);
     return is_array($j) ? $j : null;
@@ -162,5 +172,67 @@ function admin_deploy_config(): ?array {
 
 /** 배포 설정 견본(deploy.example.json) 존재 여부. */
 function admin_deploy_example_exists(): bool {
-    return is_file(admin_base_dir() . '/user/.heron/deploy.example.json');
+    return is_file(admin_deploy_example_path());
+}
+
+/**
+ * 배포 설정(deploy.json) 저장 (v1.8.0 설정창). 들어온 값을 정규화·검증한
+ * 뒤 pretty JSON 으로 원자적 저장. known_hosts_path 는 빈 값이면 생략한다
+ * (deploy.run 이 ~/.ssh/known_hosts 로 폴백). 반환: [ok:bool, errs:string[]].
+ * 개인키 자체는 받지 않는다 — 저장소 밖 OS 표준 위치의 *경로*만 보관.
+ */
+function admin_save_deploy_config(array $in): array {
+    $host = trim((string)($in['host'] ?? ''));
+    $user = trim((string)($in['user'] ?? ''));
+    $portRaw = trim((string)($in['port'] ?? '22'));
+    $remote = trim((string)($in['remote_path'] ?? ''));
+    $key = trim((string)($in['ssh_key_path'] ?? ''));
+    $known = trim((string)($in['known_hosts_path'] ?? ''));
+
+    $errs = [];
+    if ($host === '') $errs[] = 'host 가 비었습니다.';
+    if ($user === '') $errs[] = 'user 가 비었습니다.';
+    if ($remote === '') $errs[] = 'remote_path 가 비었습니다.';
+    if ($key === '') $errs[] = 'ssh_key_path 가 비었습니다 (개인키 경로).';
+    if (!preg_match('/^\d{1,5}$/', $portRaw) || (int)$portRaw < 1 || (int)$portRaw > 65535)
+        $errs[] = 'port 는 1~65535 정수여야 합니다.';
+    // ssh_key_path 의 실제 존재는 검증하지 않는다 — 다른 머신/아직 미생성
+    // 경로일 수 있어 차단하면 footgun. 키가 정말 없으면 배포(rclone) 시점에
+    // 명확히 실패하므로 여기선 형식·필수값만 본다.
+    if ($errs) return [false, $errs];
+
+    $cfg = [
+        'host' => $host,
+        'user' => $user,
+        'port' => (int)$portRaw,
+        'remote_path' => $remote,
+        'ssh_key_path' => $key,
+    ];
+    if ($known !== '') $cfg['known_hosts_path'] = $known;
+
+    $path = admin_deploy_config_path();
+    if (!admin_backup_file($path, 'deploy'))
+        return [false, ['기존 deploy.json 백업 실패 — 저장 중단.']];
+    $json = json_encode($cfg,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if (!admin_atomic_write($path, $json . "\n"))
+        return [false, ['deploy.json 쓰기 실패.']];
+    return [true, []];
+}
+
+/**
+ * 후보 site.yaml 텍스트를 빌드와 동일한 경로로 검증 (v1.8.0).
+ * Heron.py --check-config 에 stdin 으로 후보를 흘려 보내 디스크 site.yaml 을
+ * 건드리지 않고 파싱·abort 검증만 돌린다 — Pond 저장 게이트. 빌드와 같은
+ * Builder._apply_site_config 을 재사용하므로 '검증 통과 → 빌드 실패' 불일치가
+ * 없다. 반환: [ok:bool, message:string] (실패 시 [ABORT]/stderr 를 그대로).
+ */
+function admin_validate_site_yaml(string $candidate): array {
+    $argv = array_merge(
+        admin_python(),
+        [admin_base_dir() . DIRECTORY_SEPARATOR . 'Heron.py', '--check-config']
+    );
+    [$code, $out, $err] = admin_proc($argv, $candidate, admin_base_dir());
+    $msg = trim($out . "\n" . $err);
+    return [$code === 0, $msg];
 }
