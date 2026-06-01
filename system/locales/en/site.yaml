@@ -1,0 +1,24 @@
+# Locale pack (en) — Surface 1: visitor-facing site chrome.
+# Format: flat dotted keys -> quoted strings. {name} = build-time placeholder.
+# Baked into dist/ at build time per site.yaml `lang`. ko is canonical/fallback.
+# (Owned by Agent B — site.* search/footer/pagination, etc.)
+
+site.search.placeholder: "Search"
+site.search.label: "Search"
+site.search.scoped_label: "Search in {cat}"
+site.search.scope_all: "Search all"
+site.search.result_count: "{n} results"
+site.search.hint_empty: "Type a search term."
+site.search.no_results: "No results found."
+
+site.footer.rights: "All rights reserved."
+
+site.pagination.prev_aria: "Previous page"
+site.pagination.next_aria: "Next page"
+
+site.home.recent: "Recent posts"
+
+site.category.no_articles: "No articles found"
+
+site.error_404.heading: "Not Found"
+site.error_404.message: "The document has been moved or deleted."

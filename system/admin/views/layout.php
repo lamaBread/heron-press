@@ -8,11 +8,11 @@ function admin_head(string $title): void {
     $act = $_GET['a'] ?? 'home';            // 활성 nav 강조용 현재 액션.
     $navOn = static fn(string $a): string => $act === $a ? ' class="on"' : '';
     ?><!DOCTYPE html>
-<html lang="ko">
+<html lang="<?= h(i18n_locale()) ?>">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><?= h($title) ?> · Pond admin</title>
+<title><?= h($title) ?> · <?= h(t('admin.layout.title_suffix')) ?></title>
 <style>
   :root{--bd:#dcdce0;--mut:#6b6b72;--accent:#2b6cb0;--bg:#fafafb}
   *{box-sizing:border-box}
@@ -62,27 +62,27 @@ function admin_head(string $title): void {
 </head>
 <body>
 <header class="bar">
-  <a class="brand" href="<?= h($self) ?>?a=home" title="Heron + Pond 시스템 개요 (홈)">Pond admin<?php
+  <a class="brand" href="<?= h($self) ?>?a=home" title="<?= h(t('admin.layout.brand.title')) ?>">Pond admin<?php
     $ver = admin_program_version();
     if ($ver !== '') echo '<span class="ver">Heron v' . h($ver) . '</span>';
   ?></a>
   <nav>
-    <a<?= $navOn('list') ?> href="<?= h($self) ?>?a=list">목록</a>
-    <a<?= $navOn('new') ?> href="<?= h($self) ?>?a=new">+ 새 글</a>
-    <a<?= $navOn('deploy') ?> href="<?= h($self) ?>?a=deploy" title="빌드된 dist/ 를 서버로 증분 동기화">배포</a>
-    <a<?= $navOn('settings') ?> href="<?= h($self) ?>?a=settings" title="배포 대상 + 사이트 전역 설정 편집">설정</a>
+    <a<?= $navOn('list') ?> href="<?= h($self) ?>?a=list"><?= h(t('admin.nav.list')) ?></a>
+    <a<?= $navOn('new') ?> href="<?= h($self) ?>?a=new"><?= h(t('admin.nav.new')) ?></a>
+    <a<?= $navOn('deploy') ?> href="<?= h($self) ?>?a=deploy" title="<?= h(t('admin.layout.nav.deploy.title')) ?>"><?= h(t('admin.nav.deploy')) ?></a>
+    <a<?= $navOn('settings') ?> href="<?= h($self) ?>?a=settings" title="<?= h(t('admin.layout.nav.settings.title')) ?>"><?= h(t('admin.nav.settings')) ?></a>
   </nav>
   <form method="post" action="<?= h($self) ?>?a=checkupdate" style="display:inline"
-        title="GitHub 에서 새 버전이 있는지 확인합니다">
+        title="<?= h(t('admin.layout.checkupdate.title')) ?>">
     <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
-    <button type="submit">업데이트 확인</button>
+    <button type="submit"><?= h(t('admin.nav.check_update')) ?></button>
   </form>
   <form class="bld" method="post" action="<?= h($self) ?>?a=build"
-        onsubmit="return confirm('python Heron.py 를 실행해 dist/ 를 다시 만듭니다. 계속할까요?')">
+        onsubmit="return confirm('<?= h(t('admin.layout.build.confirm')) ?>')">
     <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
     <label class="muted" style="font-size:12px">
       <input type="checkbox" name="clean" value="1"> --clean</label>
-    <button class="primary" type="submit">빌드</button>
+    <button class="primary" type="submit"><?= h(t('admin.nav.build')) ?></button>
   </form>
 </header>
 <main>
@@ -91,7 +91,8 @@ function admin_head(string $title): void {
 
 function admin_flash_errs(array $errs): void {
     if (!$errs) return;
-    echo '<div class="flash err"><strong>처리 실패</strong><ul style="margin:6px 0 0">';
+    echo '<div class="flash err"><strong>' . h(t('admin.layout.flash_errs.title'))
+        . '</strong><ul style="margin:6px 0 0">';
     foreach ($errs as $e) echo '<li>' . h($e) . '</li>';
     echo '</ul></div>';
 }
@@ -100,8 +101,7 @@ function admin_foot(): void {
     ?>
 </main>
 <footer style="padding:14px 20px;color:#6b6b72;font-size:12px;border-top:1px solid #dcdce0;margin-top:30px">
-  로컬 전용 도구 · 변경은 <code class="k">Articles/</code> 소스에만 반영됨 ·
-  사이트(dist/)에 적용하려면 상단 <strong>빌드</strong> · 절대 공개 서버에 두지 말 것
+  <?= t('admin.layout.footer') ?>
 </footer>
 </body>
 </html>

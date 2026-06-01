@@ -34,6 +34,11 @@ require_once __DIR__ . '/system/admin/lib/fs.php';
 require_once __DIR__ . '/system/admin/lib/proc.php';
 require_once __DIR__ . '/system/admin/lib/metayaml.php';
 require_once __DIR__ . '/system/admin/lib/articles.php';
+require_once __DIR__ . '/system/admin/lib/i18n.php';
+
+// 도구 언어(user/.heron/locale, 없으면 ko)로 admin UI 문자열을 적재한다.
+// 이후 모든 뷰/라우트에서 t('admin.…') 가 쓰인다. (Surface 2)
+i18n_init(i18n_read_tool_locale(__DIR__));
 
 session_start();
 if (empty($_SESSION['csrf'])) {
@@ -62,7 +67,7 @@ function require_post_abs(string $id): string {
     $abs = admin_abs($id);
     if ($abs === null || !is_dir($abs) || !admin_is_inside_articles($abs)
         || !admin_is_post_dir($abs)) {
-        http_response_code(404); exit('글을 찾을 수 없습니다: ' . h($id));
+        http_response_code(404); exit(t('admin.error.post_not_found', ['id' => h($id)]));
     }
     return $abs;
 }
@@ -178,17 +183,17 @@ if ($action === 'create') {
         explode(',', (string)($_POST['tags'] ?? '')))));
 
     $errs = [];
-    if ($cat === null) $errs[] = '카테고리 경로가 올바르지 않습니다.';
+    if ($cat === null) $errs[] = t('admin.create.err.category');
     if ($folder === '' || strpbrk($folder, "/\\:*?\"<>|") !== false
-        || $folder[0] === '.') $errs[] = '폴더명이 비었거나 금지 문자를 포함합니다.';
-    if ($slug === '') $errs[] = 'slug 가 비었습니다.';
+        || $folder[0] === '.') $errs[] = t('admin.create.err.folder');
+    if ($slug === '') $errs[] = t('admin.create.err.slug_empty');
     if (!preg_match('/^[a-z0-9][a-z0-9\-]*$/', $slug))
-        $errs[] = 'slug 는 소문자/숫자/하이픈만 (slug_one 제안값 권장).';
+        $errs[] = t('admin.create.err.slug_format');
     if (in_array($slug, ['assets', 'search'], true))
-        $errs[] = "예약 slug 입니다: {$slug} (Builder.RESERVED_SLUGS: assets/search).";
-    if ($title === '') $errs[] = '제목이 비었습니다.';
+        $errs[] = t('admin.create.err.slug_reserved', ['slug' => $slug]);
+    if ($title === '') $errs[] = t('admin.create.err.title_empty');
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date))
-        $errs[] = 'date 는 YYYY-MM-DD 형식.';
+        $errs[] = t('admin.create.err.date_format');
 
     // slug 중복 검사 (전체 글 스캔).
     if (!$errs) {
@@ -196,7 +201,7 @@ if ($action === 'create') {
             $mp = admin_abs($pp['id']) . DIRECTORY_SEPARATOR . 'meta.yaml';
             if (is_file($mp)
                 && meta_read_core((string)@file_get_contents($mp))['slug'] === $slug) {
-                $errs[] = "slug 중복: '{$slug}' 는 이미 {$pp['id']} 가 사용 중.";
+                $errs[] = t('admin.create.err.slug_dup', ['slug' => $slug, 'id' => $pp['id']]);
                 break;
             }
         }
@@ -204,7 +209,7 @@ if ($action === 'create') {
     $newRel = ($cat === '' ? '' : $cat . '/') . $folder;
     $newAbs = admin_abs($newRel);
     if (!$errs && ($newAbs === null || file_exists($newAbs)))
-        $errs[] = '대상 폴더가 이미 존재하거나 경로가 올바르지 않습니다.';
+        $errs[] = t('admin.create.err.dest_exists');
 
     if ($errs) {
         $_SESSION['flash_errs'] = $errs;
@@ -226,12 +231,12 @@ if ($action === 'move') {
     $id = (string)($_POST['id'] ?? '');
     $abs = require_post_abs($id);
     $target = admin_safe_rel((string)($_POST['target'] ?? ''));
-    if ($target === null) { http_response_code(400); exit('대상 경로 오류'); }
+    if ($target === null) { http_response_code(400); exit(t('admin.error.target_path')); }
     $name = basename(str_replace('\\', '/', $id));
     $destRel = ($target === '' ? '' : $target . '/') . $name;
     $destAbs = admin_abs($destRel);
     if ($destAbs === null || file_exists($destAbs)) {
-        $_SESSION['flash_errs'] = ['이동 대상이 이미 존재하거나 경로 오류: ' . $destRel];
+        $_SESSION['flash_errs'] = [t('admin.move.err.dest_exists', ['dest' => $destRel])];
         redirect('?a=list');
     }
     @mkdir(dirname($destAbs), 0777, true);
@@ -248,13 +253,13 @@ if ($action === 'visibility') {
     $parent = trim(dirname(str_replace('\\', '/', $id)), '.');
     $newName = $name[0] === '_' ? ltrim($name, '_') : '_' . $name;
     if ($newName === '' || $newName === '_') {
-        $_SESSION['flash_errs'] = ['폴더명 토글 결과가 비어 중단.'];
+        $_SESSION['flash_errs'] = [t('admin.visibility.err.empty')];
         redirect('?a=list');
     }
     $destRel = ($parent === '' ? '' : $parent . '/') . $newName;
     $destAbs = admin_abs($destRel);
     if ($destAbs === null || file_exists($destAbs)) {
-        $_SESSION['flash_errs'] = ['토글 대상이 이미 존재: ' . $destRel];
+        $_SESSION['flash_errs'] = [t('admin.visibility.err.dest_exists', ['dest' => $destRel])];
         redirect('?a=list');
     }
     @rename($abs, $destAbs);
@@ -280,7 +285,9 @@ if ($action === 'build') {
     want_post(); check_csrf();
     $clean = !empty($_POST['clean']);
     [$code, $out, $err] = admin_run_build($clean);
-    $title = '빌드 ' . ($code === 0 ? '성공' : "실패 (exit {$code})");
+    $title = t('admin.build.title', ['result' => $code === 0
+        ? t('admin.build.title.ok')
+        : t('admin.build.title.fail', ['code' => $code])]);
     $bodyOut = trim($out . "\n" . $err);
     require __DIR__ . '/system/admin/views/build.php';
     exit;
@@ -351,10 +358,27 @@ if ($action === 'settings_site') {
     $path = admin_site_yaml_path();
     if (!admin_backup_file($path, 'site') || !admin_atomic_write($path, $candidate)) {
         $_SESSION['site_buffer'] = $candidate;
-        $_SESSION['site_err'] = 'site.yaml 백업/쓰기 실패 — 권한·경로 확인.';
+        $_SESSION['site_err'] = t('admin.site.err.write');
         redirect('?a=settings');
     }
     redirect('?a=settings&site_saved=1');
+}
+
+// ── 도구 언어 저장 (v1.9.0) — user/.heron/locale 한 줄에 로케일 기록 ──────
+if ($action === 'settings_locale') {
+    want_post(); check_csrf();
+    $locale = trim((string)($_POST['locale'] ?? ''));
+    // 존재하는 로케일 폴더만 허용 (임의 값 차단).
+    if (!in_array($locale, i18n_available_locales(), true)) {
+        $_SESSION['flash_errs'] = [t('admin.settings.locale.err.invalid')];
+        redirect('?a=settings');
+    }
+    $path = __DIR__ . '/user/.heron/locale';
+    if (!admin_atomic_write($path, $locale . "\n")) {
+        $_SESSION['flash_errs'] = [t('admin.settings.locale.err.write')];
+        redirect('?a=settings');
+    }
+    redirect('?a=settings&locale_saved=1');
 }
 
 // ── 업데이트 확인 (v1.6.0) — GitHub 최신 버전 조회, 캐시 갱신 후 목록 복귀 ─
@@ -368,7 +392,9 @@ if ($action === 'checkupdate') {
 if ($action === 'update') {
     want_post(); check_csrf();
     [$code, $out, $err] = admin_run_heron(['--update']);
-    $title = '업데이트 ' . ($code === 0 ? '완료' : "실패 (exit {$code})");
+    $title = t('admin.update.title', ['result' => $code === 0
+        ? t('admin.update.title.ok')
+        : t('admin.update.title.fail', ['code' => $code])]);
     $bodyOut = trim($out . "\n" . $err);
     require __DIR__ . '/system/admin/views/update.php';
     exit;

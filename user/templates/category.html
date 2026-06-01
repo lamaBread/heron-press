@@ -21,14 +21,14 @@
     <nav>
         <form class='nav-search' action='/search.php' method='get' role='search'>
             <input type='hidden' name='cat' value='{{NAV_SEARCH_CAT}}'>
-            <input type='search' name='q' placeholder='검색' aria-label='Search'>
+            <input type='search' name='q' placeholder='{{SEARCH_PLACEHOLDER}}' aria-label='Search'>
         </form>
         <div id='nav-tracker'>{{NAV_TRACKER}}</div>
         {{NAV_LINKS}}
     </nav>
     {{SUBCATEGORY_SECTIONS}}
     <footer>
-        <p>Copyright&copy; {{COPYRIGHT_YEAR}}. {{COPYRIGHT_HOLDER}}. All rights reserved.</p>
+        <p>Copyright&copy; {{COPYRIGHT_YEAR}}. {{COPYRIGHT_HOLDER}}. {{FOOTER_RIGHTS}}</p>
     </footer>
     <script src="/assets/pagination.js"></script>
 </body>

@@ -241,5 +241,52 @@ class TestRunChain(unittest.TestCase):
         self.assertFalse(self._backups_root().exists())
 
 
+class TestM190(unittest.TestCase):
+    """v1.9.0 — 도구 언어 시드. 부재 시 ko 생성, 멱등, 사용자 선택 불침해."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        (self.tmp / 'user').mkdir()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _locale(self):
+        return self.tmp / 'user' / '.heron' / 'locale'
+
+    def _migration(self):
+        from scripts.migrations.m_1_9_0 import Migration_1_9_0
+        return Migration_1_9_0()
+
+    def test_seeds_ko_when_absent(self):
+        m = self._migration()
+        planned = m.plan(self.tmp)
+        self.assertEqual(len(planned), 1)
+        self.assertEqual(planned[0].kind, 'create')
+        applied = m.apply(self.tmp)
+        self.assertEqual(len(applied), 1)
+        self.assertEqual(self._locale().read_bytes(), b'ko\n')
+
+    def test_idempotent_second_apply_noop(self):
+        m = self._migration()
+        m.apply(self.tmp)
+        self.assertEqual(m.apply(self.tmp), [])      # 두 번째는 변경 없음
+        self.assertEqual(m.plan(self.tmp), [])       # plan 도 no-op 보고
+
+    def test_does_not_overwrite_user_choice(self):
+        # 사용자가 이미 en 을 골랐으면 시드가 덮어쓰지 않는다.
+        self._locale().parent.mkdir(parents=True, exist_ok=True)
+        self._locale().write_bytes(b'en\n')
+        m = self._migration()
+        self.assertEqual(m.apply(self.tmp), [])
+        self.assertEqual(self._locale().read_bytes(), b'en\n')
+
+    def test_in_registry_and_chain(self):
+        # 레지스트리에 등록돼 1.8.0 → 1.9.0 체인에 잡힌다.
+        chain = migrations.plan_chain('1.8.0', '1.9.0')
+        self.assertIn(('1.8.0', '1.9.0'),
+                      [(m.from_version, m.to_version) for m in chain])
+
+
 if __name__ == '__main__':
     unittest.main()

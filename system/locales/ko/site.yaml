@@ -1,0 +1,24 @@
+# 로케일 팩 (ko, 정본) — Surface 1: 방문자가 보는 사이트 chrome.
+# 형식: 플랫 닷키 → 인용 문자열. {name} 은 빌드 시 치환되는 자리표시자.
+# 이 조각은 빌드 시점에 site.yaml 의 lang 로 dist/ 에 구워진다.
+# (Agent B 소유 — site.* / 검색·푸터·페이지네이션 등.)
+
+site.search.placeholder: "검색"
+site.search.label: "검색"
+site.search.scoped_label: "{cat} 카테고리에서 검색"
+site.search.scope_all: "전체에서 검색"
+site.search.result_count: "검색결과: {n}건"
+site.search.hint_empty: "검색어를 입력하세요."
+site.search.no_results: "검색 결과가 없습니다."
+
+site.footer.rights: "All rights reserved."
+
+site.pagination.prev_aria: "Previous page"
+site.pagination.next_aria: "Next page"
+
+site.home.recent: "Recent posts"
+
+site.category.no_articles: "No articles found"
+
+site.error_404.heading: "Not Found"
+site.error_404.message: "문서가 이동되었거나 삭제되었습니다."

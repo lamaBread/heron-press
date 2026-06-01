@@ -1,0 +1,17 @@
+# 로케일 팩 (ko, 정본) — Surface 3: 빌드/CLI 메시지 (운영자 대상).
+# 형식: 플랫 닷키 → 인용 문자열. {name} 은 .format/strtr 치환 자리표시자.
+# 도구 언어(user/.heron/locale)로 런타임 lookup. (Agent B 소유 — build.*)
+
+build.warn.pillow_missing: "이미지 최적화가 켜져 있지만 Pillow 가 설치되지 않았습니다. raster 이미지를 만나면 빌드가 중단됩니다. pip install Pillow 로 설치하거나 site.yaml 의 images.enabled 를 false 로 두세요."
+build.abort.pillow_raster: "이미지 최적화가 켜져 있는데 Pillow 가 없습니다. raster 이미지를 만났습니다: {file}\n       pip install Pillow 로 설치하거나 site.yaml 의 images.enabled 를 false 로 두세요."
+
+build.warn.legacy_home_key: "site.yaml: '{key}' 는 v0.4.6 부터 Articles/meta.yaml 로 이전되었습니다. site.yaml 에서 제거하고 Articles/meta.yaml 의 해당 필드를 사용하세요."
+build.warn.schema_lower: "스키마 스탬프(user/.heron/version={schema}) 가 프로그램 버전(v{version}) 보다 낮습니다. `python Heron.py --migrate` (미리보기 --migrate --dry-run) 또는 Pond 의 업데이트 기능으로 마이그레이션하세요."
+build.warn.schema_higher: "스키마 스탬프(user/.heron/version={schema}) 가 프로그램 버전(v{version}) 보다 높습니다 — 더 낮은 버전의 프로그램으로 새 콘텐츠를 빌드 중입니다. 프로그램 업그레이드를 권장."
+
+build.warn.adsense_exclude_orphan: "google_adsense.exclude_urls 의 \"{url}\" 가 빌드 결과 어느 페이지 URL 과도 매칭되지 않습니다 — 오타 또는 삭제된 글일 가능성 (광고 차단 없음)."
+build.warn.empty_category: "이 카테고리에 글이 하나도 없습니다 (빈 카테고리)."
+build.issue.empty_slug: "카테고리 폴더명이 빈 slug 로 변환됩니다: {folder} — 카테고리가 빌드되지 않을 수 있습니다."
+build.warn.non_ascii_slug: "URL slug 에 비ASCII 문자 포함: '{folder}' → '{slug}'. 빌드는 정상 진행되었으나, URL 가독성/공유성을 위해 폴더명을 ASCII (영문/숫자/하이픈) 로 바꾸는 것을 권장합니다."
+build.warn.excluded_asset_ref: "본문이 빌드에서 제외된 자산을 참조: {ref}"
+build.warn.unfilled_placeholder: "템플릿에 채우지 못한 placeholder 가 발견되어 빈 문자열로 strip 되었습니다: {{{{{name}}}}}."

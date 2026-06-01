@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 // ════════════════════════════════════════════════════════════════
-// search.php — Heron 검색 엔드포인트  (v0.6.0)
+// search.php — Heron 검색 엔드포인트  (v0.6.0, v1.9.0 i18n)
 // ════════════════════════════════════════════════════════════════
 //
 // 빌드 시 build.py 가 dist/ 로 복사하면서 다음을 처리 (sentinel 패턴은
@@ -15,14 +15,20 @@ declare(strict_types=1);
 //   (c) PHP 주석 "INLINE_SEARCH_INDEX" 와 직후 placeholder [] 자리에 빌드
 //       시점 정적 인덱스 (PHP 배열 리터럴) 를 인라인. 결정적 직렬화
 //       (scripts/search.py 의 php_array_literal) 로 같은 입력 → 같은 PHP 텍스트.
-//   (d) HTML 컨텍스트의 변수 placeholder (LANG, PAGE_TITLE, MAIN_TITLE,
-//       NAV_LINKS, COPYRIGHT_YEAR, COPYRIGHT_HOLDER) 들을 실제 값으로 치환.
-//       빌더의 `_render_template` 가 두 겹 중괄호 패턴을 찾아 단순 문자열
-//       교체 — 이 헤더 주석에선 일부러 중괄호를 빼고 적어 placeholder 가
-//       주석 안에서도 치환되어 자기 결과를 인용하는 메타-광경을 피한다
-//       (v0.6.1).
+//   (d) PHP 주석 "INLINE_SEARCH_I18N" 자리에 사이트 언어 (site.yaml 의 lang)
+//       로 결정된 검색 UI 문자열 테이블 (PHP 변수 대입들) 을 인라인. 정적
+//       텍스트만 인라인하고 동적 값 ($count / $cat_name_html) 은 PHP 측에서
+//       이어 붙인다 — site.search.scoped_label 의 {cat} / result_count 의 {n}
+//       자리를 빌드 시 pre/post 두 조각으로 쪼개 주입한다. ko 기본값이면
+//       v1.8.0 의 search.php 와 동일한 한국어 문구가 그대로 구워진다.
+//   (e) HTML 컨텍스트의 변수 placeholder (LANG, PAGE_TITLE, MAIN_TITLE,
+//       NAV_LINKS, COPYRIGHT_YEAR, COPYRIGHT_HOLDER, SEARCH_PLACEHOLDER,
+//       FOOTER_RIGHTS) 들을 실제 값으로 치환. 빌더의 `_render_template` 가
+//       두 겹 중괄호 패턴을 찾아 단순 문자열 교체 — 이 헤더 주석에선 일부러
+//       중괄호를 빼고 적어 placeholder 가 주석 안에서도 치환되어 자기 결과를
+//       인용하는 메타-광경을 피한다 (v0.6.1).
 //
-// 위 (a)·(b)·(c) 는 PHP 주석 / 빈 배열 자리에 인라인되므로, 이 템플릿
+// 위 (a)·(b)·(c)·(d) 는 PHP 주석 / 빈 배열 자리에 인라인되므로, 이 템플릿
 // 파일 자체도 `php -l` 통과 + IDE 의 PHP 정적 분석 통과한다.
 //
 // v0.6.0 변경 요약:
@@ -43,6 +49,22 @@ declare(strict_types=1);
 
 // ── 인라인 BM25 점수 + 스니펫 + 하이라이트 ──────────────────────
 /* INLINE: SEARCH_BM25 */
+
+// ── 인라인 검색 UI 문자열 테이블 (사이트 언어) ──────────────────
+//
+// 빌드 시 사이트 언어로 결정된 정적 문자열들이 아래 sentinel 자리에
+// 대입문으로 인라인된다. 동적 값 (검색 개수 / 카테고리명) 은 아래 PHP
+// 로직이 이 변수들에 이어 붙인다. 미주입 (이 템플릿 단독 `php -l`) 시엔
+// 빈 문자열 기본값이라 정적 분석이 통과한다.
+$L_search_label = '';
+$L_scope_all = '';
+$L_scoped_label_pre = '';
+$L_scoped_label_post = '';
+$L_result_count_pre = '';
+$L_result_count_post = '';
+$L_hint_empty = '';
+$L_no_results = '';
+/* INLINE: SEARCH_I18N */
 
 // ── 인라인 정적 인덱스 ──────────────────────────────────────────
 //
@@ -76,22 +98,23 @@ $cat_attr = htmlspecialchars($cat, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $cat_name = $cat !== '' ? ($CATEGORIES[$cat] ?? $cat) : '';
 $cat_name_html = htmlspecialchars($cat_name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
+// 검색 UI 라벨 — 정적 조각 ($L_*) + 동적 값 ($cat_name_html / $count) 조합.
+$scoped_label_html = $L_scoped_label_pre . $cat_name_html . $L_scoped_label_post;
 if ($q === '') {
-    $result_label = $cat !== ''
-        ? ($cat_name_html . ' 카테고리에서 검색')
-        : '검색';
+    $result_label = $cat !== '' ? $scoped_label_html : $L_search_label;
     $scope_html = '';
 } else {
     $count = count($hits);
+    $count_label = $L_result_count_pre . $count . $L_result_count_post;
     if ($cat !== '') {
-        $result_label = '검색결과: ' . $count . '건';
+        $result_label = $count_label;
         $all_url = '/search.php?q=' . rawurlencode($q);
-        $scope_html = '<span class="search-scope">— ' . $cat_name_html
-            . ' 카테고리에서 검색 (<a href="' . htmlspecialchars($all_url, ENT_QUOTES, 'UTF-8')
-            . '">전체에서 검색</a>)</span>';
+        $scope_html = '<span class="search-scope">— ' . $scoped_label_html
+            . ' (<a href="' . htmlspecialchars($all_url, ENT_QUOTES, 'UTF-8')
+            . '">' . $L_scope_all . '</a>)</span>';
     } else {
-        $result_label = '검색결과: ' . $count . '건';
-        $scope_html = '<span class="search-scope">— 전체에서 검색</span>';
+        $result_label = $count_label;
+        $scope_html = '<span class="search-scope">— ' . $L_scope_all . '</span>';
     }
 }
 ?>
@@ -116,7 +139,7 @@ if ($q === '') {
 <?php if ($cat !== ''): ?>
             <input type='hidden' name='cat' value="<?= $cat_attr ?>">
 <?php endif ?>
-            <input type='search' name='q' value="<?= $q_attr ?>" placeholder='검색' aria-label='Search'>
+            <input type='search' name='q' value="<?= $q_attr ?>" placeholder='{{SEARCH_PLACEHOLDER}}' aria-label='Search'>
         </form>
         <div id='nav-tracker'><a href='/'>Home</a><a href='/search.php'> / Search</a></div>
         {{NAV_LINKS}}
@@ -126,9 +149,9 @@ if ($q === '') {
     </div>
     <section>
 <?php if ($q === ''): ?>
-        <p class='search-hint'>검색어를 입력하세요.</p>
+        <p class='search-hint'><?= htmlspecialchars($L_hint_empty, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></p>
 <?php elseif (empty($hits)): ?>
-        <p class='search-hint'>검색 결과가 없습니다.</p>
+        <p class='search-hint'><?= htmlspecialchars($L_no_results, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></p>
 <?php else: ?>
 <?php foreach ($hits as $h): $doc = $h['doc']; ?>
         <div class='listup_module_div search-result'>
@@ -144,7 +167,7 @@ if ($q === '') {
 <?php endif ?>
     </section>
     <footer>
-        <p>Copyright&copy; {{COPYRIGHT_YEAR}}. {{COPYRIGHT_HOLDER}}. All rights reserved.</p>
+        <p>Copyright&copy; {{COPYRIGHT_YEAR}}. {{COPYRIGHT_HOLDER}}. {{FOOTER_RIGHTS}}</p>
     </footer>
 </body>
 </html>

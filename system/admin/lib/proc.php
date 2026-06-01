@@ -190,12 +190,12 @@ function admin_save_deploy_config(array $in): array {
     $known = trim((string)($in['known_hosts_path'] ?? ''));
 
     $errs = [];
-    if ($host === '') $errs[] = 'host 가 비었습니다.';
-    if ($user === '') $errs[] = 'user 가 비었습니다.';
-    if ($remote === '') $errs[] = 'remote_path 가 비었습니다.';
-    if ($key === '') $errs[] = 'ssh_key_path 가 비었습니다 (개인키 경로).';
+    if ($host === '') $errs[] = t('admin.deploy_cfg.err.host_empty');
+    if ($user === '') $errs[] = t('admin.deploy_cfg.err.user_empty');
+    if ($remote === '') $errs[] = t('admin.deploy_cfg.err.remote_empty');
+    if ($key === '') $errs[] = t('admin.deploy_cfg.err.key_empty');
     if (!preg_match('/^\d{1,5}$/', $portRaw) || (int)$portRaw < 1 || (int)$portRaw > 65535)
-        $errs[] = 'port 는 1~65535 정수여야 합니다.';
+        $errs[] = t('admin.deploy_cfg.err.port_range');
     // ssh_key_path 의 실제 존재는 검증하지 않는다 — 다른 머신/아직 미생성
     // 경로일 수 있어 차단하면 footgun. 키가 정말 없으면 배포(rclone) 시점에
     // 명확히 실패하므로 여기선 형식·필수값만 본다.
@@ -212,11 +212,11 @@ function admin_save_deploy_config(array $in): array {
 
     $path = admin_deploy_config_path();
     if (!admin_backup_file($path, 'deploy'))
-        return [false, ['기존 deploy.json 백업 실패 — 저장 중단.']];
+        return [false, [t('admin.deploy_cfg.err.backup')]];
     $json = json_encode($cfg,
         JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if (!admin_atomic_write($path, $json . "\n"))
-        return [false, ['deploy.json 쓰기 실패.']];
+        return [false, [t('admin.deploy_cfg.err.write')]];
     return [true, []];
 }
 

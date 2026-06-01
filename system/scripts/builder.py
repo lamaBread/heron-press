@@ -492,6 +492,7 @@ from .search import (
 from .sitemap import build_sitemap
 from .feed import build_feed_document, render_atom, render_rss
 from .report import BuildReport, abort
+from . import i18n
 from .cache import (
     BuildCache,
     issue_payload,
@@ -521,26 +522,34 @@ def _pagination_section_attrs(group_key: str, per_page: int) -> str:
     return f'class="paginated" data-pagination-group="{safe}" data-per-page="{per_page}"'
 
 
-def _pagination_nav_html(group_key: str, total_items: int, per_page: int) -> str:
+def _pagination_nav_html(group_key: str, total_items: int, per_page: int,
+                         tr=None) -> str:
     """페이지 컨트롤 HTML.
 
     items 가 per_page 이하면 빈 문자열 (컨트롤 자체 미출력).
+
+    v1.9.0 i18n: prev/next aria-label 은 사이트 언어 (tr). tr 미전달 시
+    canonical(ko) 폴백 — ko 값이 'Previous page'/'Next page' 라 byte-동일.
     """
     if per_page <= 0:
         per_page = 1
     pages = (total_items + per_page - 1) // per_page
     if pages <= 1:
         return ''
+    if tr is None:
+        tr = i18n.load(i18n.CANONICAL)
     safe = escape_html(group_key)
+    prev_aria = escape_html(tr.t('site.pagination.prev_aria'))
+    next_aria = escape_html(tr.t('site.pagination.next_aria'))
     return (
         f'<nav class="pagination-nav" data-pagination-group="{safe}" '
         f'data-total-pages="{pages}" aria-label="pagination">'
         f'<button type="button" class="pagi-btn pagi-prev" '
-        f'aria-label="Previous page" disabled>‹</button>'
+        f'aria-label="{prev_aria}" disabled>‹</button>'
         f'<span class="pagi-info"><span class="pagi-current">1</span>'
         f' / <span class="pagi-total">{pages}</span></span>'
         f'<button type="button" class="pagi-btn pagi-next" '
-        f'aria-label="Next page">›</button>'
+        f'aria-label="{next_aria}">›</button>'
         f'</nav>'
     )
 
@@ -613,7 +622,8 @@ _UNFILLED_PLACEHOLDER_RE = re.compile(r'\{\{([A-Z_][A-Z0-9_]*)\}\}')
 
 
 def _render_template(template: str, vars: dict, *,
-                     content_vars=None, warn_context=None, report=None) -> str:
+                     content_vars=None, warn_context=None, report=None,
+                     tr=None) -> str:
     """Substitute `{{KEY}}` placeholders with `vars[KEY]`.
 
     v0.6.4: 치환 후 남은 `{{XXX}}` 패턴을 빈 문자열로 strip + (warn_context 가
@@ -653,11 +663,14 @@ def _render_template(template: str, vars: dict, *,
     # None 이면 (이론상 없음) leftover 경고만 생략 — strip 은 그대로 수행.
     if leftovers and warn_context is not None and report is not None:
         scope, target, location = warn_context
+        # v1.9.0 i18n: 메시지는 도구 언어 (tr). 호출자가 tr=self.tool_tr 로
+        # 전달 (warn_context 를 주는 호출자는 모두 self 가 있어 전달 가능).
+        # 폴백으로 canonical(ko) 를 로드해 미전달 시에도 byte-동일.
+        _tr = tr if tr is not None else i18n.load(i18n.CANONICAL)
         for name in leftovers:
             report.warning(
                 scope, target,
-                f"템플릿에 채우지 못한 placeholder 가 발견되어 빈 문자열로 "
-                f"strip 되었습니다: {{{{{name}}}}}.",
+                _tr.t('build.warn.unfilled_placeholder', name=name),
                 location,
             )
     for name in leftovers:
@@ -746,6 +759,21 @@ class Builder:
         # 여러 번 불러도 issue/warning 이 누적되지 않는다. 두 Builder 가
         # 상태를 공유하지 않아 동시 빌드(멀티스레드/프로세스)가 가능하다.
         self.report: BuildReport = BuildReport()
+
+        # v1.9.0 i18n: 두 독립된 로케일 선택자 (system/scripts/i18n.py 참조).
+        #   - tool_tr  — 운영자가 보는 빌드/CLI 메시지 (Surface 3). 도구 언어
+        #     = user/.heron/locale 한 줄 (부재 시 ko). __init__ 시점에 고정
+        #     되므로 Pond 의 --check-config 처럼 _load_config 를 거치지 않는
+        #     순수 검증 경로 (_apply_site_config / _parse_image_config 의
+        #     abort) 에서도 항상 사용 가능하다.
+        #   - site_tr  — dist/ 에 빌드 시점에 구워지는 방문자 chrome
+        #     (Surface 1). 사이트 언어 = site.yaml 의 lang. lang 은
+        #     _load_config 이후에야 알 수 있으므로 여기선 ko 로 두고
+        #     _load_config 끝에서 self.site.lang 으로 재로딩한다 (결정적).
+        self.tool_tr: i18n.Translator = i18n.load(
+            i18n.read_tool_locale(base_dir)
+        )
+        self.site_tr: i18n.Translator = i18n.load(i18n.CANONICAL)
 
         self.site: Optional[SiteConfig] = None
         self.articles: list = []
@@ -905,6 +933,10 @@ class Builder:
             abort(f'site.yaml not found at {site_yaml}')
         raw = yaml_load(site_yaml.read_text(encoding='utf-8'))
         self._apply_site_config(raw)
+        # v1.9.0 i18n: 사이트 언어 chrome 번역기 — site.yaml 의 lang 으로
+        # 재로딩 (Surface 1). 이후 _render_articles / _build_* 가 self.site_tr
+        # 로 검색/푸터/페이지네이션 등 방문자 텍스트를 구워 넣는다.
+        self.site_tr = i18n.load(self.site.lang)
         self._post_config_checks()
 
     def _apply_site_config(self, raw):
@@ -970,9 +1002,8 @@ class Builder:
         # 못한 채 무시될 수 있으므로 한 번 경고 — 마이그레이션 가이드 역할.
         for legacy_key in ('home_per_page', 'home_excludes_categories', 'home_sort'):
             if legacy_key in raw:
-                self._warning('site', '', f"site.yaml: '{legacy_key}' 는 v0.4.6 부터 Articles/meta.yaml "
-                     f"로 이전되었습니다. site.yaml 에서 제거하고 Articles/meta.yaml "
-                     f"의 해당 필드를 사용하세요.")
+                self._warning('site', '', self.tool_tr.t(
+                    'build.warn.legacy_home_key', key=legacy_key))
 
     def _post_config_checks(self):
         """_load_config 전용 — 스키마 버전 경고 + 토크나이저 parity 검증 +
@@ -985,14 +1016,13 @@ class Builder:
         _schema = _schema_version.read_schema_version(self.base)
         _cmp = _schema_version.compare(_schema, _SITE_VERSION)
         if _cmp < 0:
-            self._warning('site', '', f"스키마 스탬프(user/.heron/version={_schema}) 가 "
-                 f"프로그램 버전(v{_SITE_VERSION}) 보다 낮습니다. "
-                 f"`python Heron.py --migrate` (미리보기 --migrate --dry-run) "
-                 f"또는 Pond 의 업데이트 기능으로 마이그레이션하세요.")
+            self._warning('site', '', self.tool_tr.t(
+                'build.warn.schema_lower',
+                schema=_schema, version=_SITE_VERSION))
         elif _cmp > 0:
-            self._warning('site', '', f"스키마 스탬프(user/.heron/version={_schema}) 가 "
-                 f"프로그램 버전(v{_SITE_VERSION}) 보다 높습니다 — 더 낮은 버전의 "
-                 f"프로그램으로 새 콘텐츠를 빌드 중입니다. 프로그램 업그레이드를 권장.")
+            self._warning('site', '', self.tool_tr.t(
+                'build.warn.schema_higher',
+                schema=_schema, version=_SITE_VERSION))
 
         # 토크나이저 패리티 검증 (PHP 없으면 워닝만)
         # v0.5.5: 패리티 검증 실패는 시스템 결함 (Py/PHP 토크나이저 동등성
@@ -1016,10 +1046,7 @@ class Builder:
         # 워닝 — 이미지가 한 장도 없는 사이트는 빌드가 통과해야 하므로 _sync_assets
         # 단계에서 실제 raster 이미지를 만났을 때 die 한다).
         if self.site.images.enabled and not _HAS_PIL:
-            self._warning('site', '', '이미지 최적화가 켜져 있지만 Pillow 가 설치되지 않았습니다. '
-                 'raster 이미지를 만나면 빌드가 중단됩니다. '
-                 "pip install Pillow 로 설치하거나 site.yaml 의 "
-                 "images.enabled 를 false 로 두세요.")
+            self._warning('site', '', self.tool_tr.t('build.warn.pillow_missing'))
 
     def _parse_image_config(self, raw) -> ImageConfig:
         """site.yaml 의 `images:` 블록을 ImageConfig 로 파싱 (v0.5.1).
@@ -1449,9 +1476,7 @@ class Builder:
         for url in orphans:
             self._warning(
                 'site', '',
-                f'google_adsense.exclude_urls 의 "{url}" 가 빌드 결과 '
-                f'어느 페이지 URL 과도 매칭되지 않습니다 — 오타 또는 '
-                f'삭제된 글일 가능성 (광고 차단 없음).',
+                self.tool_tr.t('build.warn.adsense_exclude_orphan', url=url),
             )
 
     # ── [3] Frontmatter parse ────────────────────────────────
@@ -1717,7 +1742,7 @@ class Builder:
             if not all_articles:
                 self._warning(
                     'category', '/'.join(cat.path),
-                    '이 카테고리에 글이 하나도 없습니다 (빈 카테고리).',
+                    self.tool_tr.t('build.warn.empty_category'),
                     self.articles_dir.joinpath(*cat.path),
                 )
 
@@ -1745,16 +1770,16 @@ class Builder:
                 # 자연스럽게 누락). 작성자가 폴더명을 보완해야 함.
                 self._issue(
                     'category', '/'.join(full_path_for_warn),
-                    f'카테고리 폴더명이 빈 slug 로 변환됩니다: {folder_name!r} '
-                    f'— 카테고리가 빌드되지 않을 수 있습니다.',
+                    self.tool_tr.t(
+                        'build.issue.empty_slug', folder=repr(folder_name)),
                     self.articles_dir.joinpath(*full_path_for_warn),
                 )
             if has_non_ascii(folder_name) and folder_name not in warned_folders:
                 self._warning(
                     'category', '/'.join(full_path_for_warn),
-                    f"URL slug 에 비ASCII 문자 포함: '{folder_name}' → '{s}'. "
-                    f"빌드는 정상 진행되었으나, URL 가독성/공유성을 위해 "
-                    f"폴더명을 ASCII (영문/숫자/하이픈) 로 바꾸는 것을 권장합니다.",
+                    self.tool_tr.t(
+                        'build.warn.non_ascii_slug',
+                        folder=folder_name, slug=s),
                     self.articles_dir.joinpath(*full_path_for_warn),
                 )
                 warned_folders.add(folder_name)
@@ -2493,7 +2518,8 @@ class Builder:
                     if '/_' in ref or ref.startswith('_'):
                         self._warning(
                             'article', m.slug,
-                            f'본문이 빌드에서 제외된 자산을 참조: {ref}',
+                            self.tool_tr.t(
+                                'build.warn.excluded_asset_ref', ref=ref),
                             article.source_dir,
                         )
 
@@ -2615,6 +2641,8 @@ class Builder:
                 'BODY': body_html,
                 'COPYRIGHT_YEAR': self._copyright_year(),
                 'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
+                'FOOTER_RIGHTS': escape_html(
+                    self.site_tr.t('site.footer.rights')),
             }
             page_html = _render_template(
                 tpl_local, vars_,
@@ -2622,6 +2650,7 @@ class Builder:
                 warn_context=('article', m.slug,
                               article.source_dir / 'meta.yaml'),
                 report=self.report,
+                tr=self.tool_tr,
             )
 
             ext = 'php' if has_live_php(page_html) else 'html'
@@ -2748,10 +2777,8 @@ class Builder:
         img_done = 0
         if raster_jobs:
             if not _HAS_PIL:
-                abort(f"이미지 최적화가 켜져 있는데 Pillow 가 없습니다. "
-                      f"raster 이미지를 만났습니다: {raster_jobs[0][2]}\n"
-                      f"       pip install Pillow 로 설치하거나 "
-                      f"site.yaml 의 images.enabled 를 false 로 두세요.")
+                abort(self.tool_tr.t(
+                    'build.abort.pillow_raster', file=raster_jobs[0][2]))
             # 워커가 race 없이 쓸 수 있도록 dst 부모 디렉터리를 미리 만든다.
             for _i, slug, src_file, dst_file, url, rel in raster_jobs:
                 dst_file.parent.mkdir(parents=True, exist_ok=True)
@@ -2852,10 +2879,8 @@ class Builder:
         v0.5.2: 옛 `/src/{slug}/...` → `/{slug}/...` 로 변경.
         """
         if not _HAS_PIL:
-            abort(f"이미지 최적화가 켜져 있는데 Pillow 가 없습니다. "
-                  f"raster 이미지를 만났습니다: {src_file}\n"
-                  f"       pip install Pillow 로 설치하거나 "
-                  f"site.yaml 의 images.enabled 를 false 로 두세요.")
+            abort(self.tool_tr.t(
+                'build.abort.pillow_raster', file=src_file))
 
         variants, err = optimize_image(
             src=src_file,
@@ -3027,7 +3052,8 @@ class Builder:
             # v0.4.6: per_page 를 넘는 항목은 SSR 단계에서 inline style 로
             # 미리 숨겨 FOUC 를 방지.
             inner = self._listup_items_html(articles, per_page, layout=layout)
-            nav_html = _pagination_nav_html(group_key, len(articles), per_page)
+            nav_html = _pagination_nav_html(group_key, len(articles), per_page,
+                                            tr=self.site_tr)
 
         if more_url:
             # v1.0.1: 소분류명 글씨 자체에 스타일 없는 a 태그를 건다 (우측
@@ -3149,7 +3175,9 @@ class Builder:
 
         subcategory_sections = '\n'.join(sections) if sections else (
             f"<div class='gap'><p>{escape_html(cat.folder_name)}</p></div>\n"
-            f"<section><p>No articles found</p></section>"
+            f"<section><p>"
+            f"{escape_html(self.site_tr.t('site.category.no_articles'))}"
+            f"</p></section>"
         )
 
         # breadcrumb: 글 페이지와 동일한 단일 공유 소스(_crumb_parts_for).
@@ -3224,16 +3252,21 @@ class Builder:
             'NAV_TRACKER': nav_tracker,
             'NAV_LINKS': nav_links,
             'NAV_SEARCH_CAT': escape_html(search_cat),
+            'SEARCH_PLACEHOLDER': escape_html(
+                self.site_tr.t('site.search.placeholder')),
             'SUBCATEGORY_SECTIONS': subcategory_sections,
             'PAGE_STYLES': self._category_styles_html(cat),
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
+            'FOOTER_RIGHTS': escape_html(
+                self.site_tr.t('site.footer.rights')),
         }
         page_html = _render_template(
             tpl_local, vars_,
             content_vars={'SUBCATEGORY_SECTIONS'},
             warn_context=('category', '/'.join(cat.slug_path), cat_meta_file),
             report=self.report,
+            tr=self.tool_tr,
         )
 
         out_dir = self.dist.joinpath(*cat.slug_path)
@@ -3318,6 +3351,7 @@ class Builder:
         page_title = full_title
         pagination_nav = _pagination_nav_html(
             'home-recent', len(home_articles), per_page,
+            tr=self.site_tr,
         )
 
         section_class = 'paginated listup-gallery' if home_layout == 'gallery' else 'paginated'
@@ -3343,6 +3377,9 @@ class Builder:
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
+            'SEARCH_PLACEHOLDER': escape_html(
+                self.site_tr.t('site.search.placeholder')),
+            'HOME_RECENT': escape_html(self.site_tr.t('site.home.recent')),
             'HOME_SECTION_CLASS': section_class,
             'HOME_PER_PAGE': str(per_page),
             'ARTICLE_LIST': article_items,
@@ -3350,12 +3387,15 @@ class Builder:
             'PAGE_STYLES': page_styles,
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
+            'FOOTER_RIGHTS': escape_html(
+                self.site_tr.t('site.footer.rights')),
         }
         page_html = _render_template(
             tpl_local, vars_,
             content_vars={'ARTICLE_LIST'},
             warn_context=('home', '', home_meta_file),
             report=self.report,
+            tr=self.tool_tr,
         )
         self.dist.mkdir(parents=True, exist_ok=True)
         (self.dist / 'index.html').write_text(page_html, encoding='utf-8')
@@ -3474,8 +3514,14 @@ class Builder:
             'PAGE_TITLE': escape_html(page_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
+            'ERROR_404_HEADING': escape_html(
+                self.site_tr.t('site.error_404.heading')),
+            'ERROR_404_MESSAGE': escape_html(
+                self.site_tr.t('site.error_404.message')),
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
+            'FOOTER_RIGHTS': escape_html(
+                self.site_tr.t('site.footer.rights')),
         }
         page_html = _render_template(tpl, vars_, report=self.report)
         self.dist.mkdir(parents=True, exist_ok=True)
@@ -3634,6 +3680,12 @@ class Builder:
             index_literal,
         )
 
+        # v1.9.0 i18n: 검색 UI 문자열 테이블을 사이트 언어로 인라인. 정적
+        # 텍스트만 PHP 변수에 대입하고, {cat}/{n} 같은 동적 자리는 PHP 측이
+        # 이어 붙이도록 pre/post 두 조각으로 쪼갠다 (search.php 헤더 (d) 참조).
+        tpl = tpl.replace('/* INLINE: SEARCH_I18N */',
+                          self._search_i18n_php())
+
         # v0.5.4: search <title> 폴백 체인. 404 와 동일 — DEFAULT_SEARCH_TITLE
         # 상수 + site.default_title_prefix/suffix. v1.4.0: site.yaml search_title
         # 키 폐기 (404 와 같은 사유 — 'Search' 외의 표현이 필요할 일이 없음).
@@ -3648,11 +3700,61 @@ class Builder:
             'PAGE_TITLE': escape_html(search_title),
             'MAIN_TITLE': escape_html(self.site.main_title),
             'NAV_LINKS': self._nav_links_html(),
+            'SEARCH_PLACEHOLDER': escape_html(
+                self.site_tr.t('site.search.placeholder')),
             'COPYRIGHT_YEAR': self._copyright_year(),
             'COPYRIGHT_HOLDER': escape_html(self.site.copyright_holder),
+            'FOOTER_RIGHTS': escape_html(
+                self.site_tr.t('site.footer.rights')),
         }
         page = _render_template(tpl, vars_, report=self.report)
         (self.dist / 'search.php').write_text(page, encoding='utf-8')
+
+    @staticmethod
+    def _php_squote(s: str) -> str:
+        """PHP 단일 인용 문자열 리터럴 본문 escape (`\\` 와 `'` 만).
+
+        PHP single-quote 문자열은 `\\'` 와 `\\\\` 두 시퀀스만 해석하므로
+        백슬래시·작은따옴표만 escape 하면 임의 유니코드도 안전하다 (UTF-8
+        바이트는 그대로). 결정적 — 같은 입력 → 같은 출력.
+        """
+        return s.replace('\\', '\\\\').replace("'", "\\'")
+
+    def _search_i18n_php(self) -> str:
+        """search.php 의 검색 UI 문자열 테이블 (PHP 대입문들) 을 생성.
+
+        사이트 언어(self.site_tr)로 정적 텍스트를 뽑되, 동적 자리표시자가
+        있는 두 키는 빌드 시점에 쪼갠다:
+          - site.search.scoped_label ({cat})   → pre/post
+          - site.search.result_count ({n})     → pre/post
+        PHP 측 로직이 `$pre . <동적값> . $post` 로 이어 붙인다. ko 기본값이면
+        분할 결과가 v1.8.0 의 하드코딩 한국어와 byte-동일하게 재조립된다.
+        """
+        def split(template: str, token: str):
+            """`{token}` 기준 (pre, post). 토큰 부재 시 (whole, '')."""
+            marker = '{' + token + '}'
+            if marker in template:
+                pre, post = template.split(marker, 1)
+                return pre, post
+            return template, ''
+
+        scoped_pre, scoped_post = split(
+            self.site_tr.t('site.search.scoped_label'), 'cat')
+        count_pre, count_post = split(
+            self.site_tr.t('site.search.result_count'), 'n')
+
+        q = self._php_squote
+        lines = [
+            f"$L_search_label = '{q(self.site_tr.t('site.search.label'))}';",
+            f"$L_scope_all = '{q(self.site_tr.t('site.search.scope_all'))}';",
+            f"$L_scoped_label_pre = '{q(scoped_pre)}';",
+            f"$L_scoped_label_post = '{q(scoped_post)}';",
+            f"$L_result_count_pre = '{q(count_pre)}';",
+            f"$L_result_count_post = '{q(count_post)}';",
+            f"$L_hint_empty = '{q(self.site_tr.t('site.search.hint_empty'))}';",
+            f"$L_no_results = '{q(self.site_tr.t('site.search.no_results'))}';",
+        ]
+        return '\n'.join(lines)
 
     _PHP_OPEN_RE = re.compile(r'^\s*<\?php\s*\n')
     _PHP_CLOSE_RE = re.compile(r'\?>\s*$')

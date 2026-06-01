@@ -68,7 +68,8 @@ def _build_registry() -> List[Migration]:
     """
     from .m_1_6_0 import Migration_1_6_0
     from .m_1_7_0 import Migration_1_7_0
-    steps = [Migration_1_6_0(), Migration_1_7_0()]
+    from .m_1_9_0 import Migration_1_9_0
+    steps = [Migration_1_6_0(), Migration_1_7_0(), Migration_1_9_0()]
     steps.sort(key=lambda m: _version.parse_version(m.to_version) or ())
     return steps
 

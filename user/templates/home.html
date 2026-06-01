@@ -20,20 +20,20 @@
     </header>
     <nav>
         <form class='nav-search' action='/search.php' method='get' role='search'>
-            <input type='search' name='q' placeholder='검색' aria-label='Search'>
+            <input type='search' name='q' placeholder='{{SEARCH_PLACEHOLDER}}' aria-label='Search'>
         </form>
         <div id='nav-tracker'><a href='/'>Home</a></div>
         {{NAV_LINKS}}
     </nav>
     <div class="gap">
-        <p>Recent posts</p>
+        <p>{{HOME_RECENT}}</p>
     </div>
     <section class="{{HOME_SECTION_CLASS}}" data-pagination-group="home-recent" data-per-page="{{HOME_PER_PAGE}}">
         {{ARTICLE_LIST}}
     </section>
     {{PAGINATION_NAV}}
     <footer>
-        <p>Copyright&copy; {{COPYRIGHT_YEAR}}. {{COPYRIGHT_HOLDER}}. All rights reserved.</p>
+        <p>Copyright&copy; {{COPYRIGHT_YEAR}}. {{COPYRIGHT_HOLDER}}. {{FOOTER_RIGHTS}}</p>
     </footer>
     <script src="/assets/pagination.js"></script>
 </body>

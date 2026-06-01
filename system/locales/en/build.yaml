@@ -1,0 +1,17 @@
+# Locale pack (en) — Surface 3: build/CLI messages (operator-facing).
+# Format: flat dotted keys -> quoted strings. {name} = .format/strtr placeholder.
+# Runtime lookup by tool language (user/.heron/locale). (Owned by Agent B — build.*)
+
+build.warn.pillow_missing: "Image optimization is on but Pillow is not installed. The build will abort when it hits a raster image. Install it with `pip install Pillow`, or set images.enabled to false in site.yaml."
+build.abort.pillow_raster: "Image optimization is on but Pillow is missing. Hit a raster image: {file}\n       Install it with `pip install Pillow`, or set images.enabled to false in site.yaml."
+
+build.warn.legacy_home_key: "site.yaml: '{key}' moved to Articles/meta.yaml as of v0.4.6. Remove it from site.yaml and use the corresponding field in Articles/meta.yaml."
+build.warn.schema_lower: "Schema stamp (user/.heron/version={schema}) is older than the program version (v{version}). Migrate with `python Heron.py --migrate` (preview with --migrate --dry-run) or via Pond's update feature."
+build.warn.schema_higher: "Schema stamp (user/.heron/version={schema}) is newer than the program version (v{version}) — you are building new content with an older program. Upgrading the program is recommended."
+
+build.warn.adsense_exclude_orphan: "google_adsense.exclude_urls entry \"{url}\" does not match any page URL in the build output — possibly a typo or a deleted article (no ads were blocked)."
+build.warn.empty_category: "This category has no articles (empty category)."
+build.issue.empty_slug: "Category folder name converts to an empty slug: {folder} — the category may not be built."
+build.warn.non_ascii_slug: "URL slug contains non-ASCII characters: '{folder}' -> '{slug}'. The build proceeded normally, but for URL readability/shareability consider renaming the folder to ASCII (letters/digits/hyphens)."
+build.warn.excluded_asset_ref: "Body references an asset excluded from the build: {ref}"
+build.warn.unfilled_placeholder: "An unfilled placeholder was found in the template and stripped to an empty string: {{{{{name}}}}}."
