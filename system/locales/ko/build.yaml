@@ -99,3 +99,42 @@ build.report.md_progress_h2: "## 빌드 진행"
 build.report.md_steptime_h2: "## 단계별 시간"
 build.report.md_steptime_thead: "| 단계 | 설명 | 시간(s) |"
 build.report.md_footer: "_이 문서는 매 빌드마다 자동 생성·갱신됩니다 (build.py 가 있는 폴더). dist/ 산출물에는 포함되지 않습니다._"
+
+# ── 글/카테고리 단위 콘텐츠-결함 issue/warning 본문 (v1.9.4) ─────────
+# builder 의 self._issue()/self._warning() 본문. {received} 는 .format 의 !r
+# 변환으로 repr() 출력 (원래 f-string {x!r} 보존). 콘텐츠 결함이 있을 때만 노출.
+build.issue.both_content: "content.md 와 content.html 이 둘 다 존재합니다 (한 글에 하나만 두세요)."
+build.issue.styles_not_relative: "meta.yaml: styles 의 CSS 파일 경로는 페이지 폴더 안의 상대 경로여야 합니다 (받은 값: {received!r}) — 이 항목 무시."
+build.issue.styles_missing: "meta.yaml: styles 에 명시한 CSS 파일이 페이지 폴더에 없습니다: {received!r} — link 출력 안 함."
+build.issue.template_not_str: "meta.yaml: 'template' 은 문자열이어야 합니다 (받은 값: {received!r}) — 기본 템플릿으로 폴백."
+build.issue.template_empty: "meta.yaml: 'template' 이 빈 문자열입니다 — 기본 템플릿으로 폴백."
+build.issue.template_bad_rel: "meta.yaml: 'template' 의 페이지 폴더 상대 경로가 유효하지 않습니다 ({received!r}) — 기본 템플릿으로 폴백."
+build.issue.template_bad_path: "meta.yaml: 'template' 의 경로가 유효하지 않습니다 ({received!r}) — 기본 템플릿으로 폴백."
+build.issue.template_file_missing: "meta.yaml: 'template' 에 명시한 파일이 {origin}에 없습니다: {received!r} — 기본 {default} 로 폴백."
+build.issue.int_field: "meta.yaml: '{field}' 는 정수여야 합니다 (받은 값: {received!r}) — {default} 으로 폴백."
+build.issue.meta_parse_article: "meta.yaml 파싱 오류 — 글이 빌드에서 제외됨: {error}"
+build.issue.required_empty: "meta.yaml 의 필수 필드가 비어있습니다 — 글이 빌드에서 제외됨: {fields}"
+build.issue.seo_not_mapping: "meta.yaml: 'seo' 는 매핑이어야 합니다 (받은 값: {received!r}) — 빈 seo 로 폴백."
+build.issue.tags_not_list: "meta.yaml: 'tags' 는 리스트여야 합니다 (받은 값: {received!r}) — 빈 리스트로 폴백."
+build.issue.slug_regex: "slug 정규식 불일치: {received!r} — 글이 빌드에서 제외됨."
+build.issue.slug_reserved: "slug 예약어: {received!r} — 시스템 경로 ({path}) 와 충돌. 글이 빌드에서 제외됨."
+build.issue.slug_dup: "slug 중복: {received!r} — 뒤늦게 발견된 쪽의 글이 빌드에서 제외됨 (먼저 발견된 글: {other})."
+build.issue.date_format: "date 형식 오류: {received!r} (YYYY-MM-DD 형식 필요) — 글이 빌드에서 제외됨."
+build.issue.updated_format: "updated 형식 오류: {received!r} — updated 를 무시하고 진행."
+build.issue.updated_before_date: "updated ({updated}) 가 date ({date}) 보다 앞섭니다 — 그대로 진행하지만 의도 확인 권장."
+build.issue.slug_cat_conflict: "slug 충돌 (글 ↔ 카테고리): {received!r} — 카테고리 폴더 Articles/{cat_path} 와 같은 slug 라 글이 빌드에서 제외됨."
+build.issue.meta_parse_category: "meta.yaml 파싱 오류 — 기본 CategoryMeta 로 폴백: {error}"
+build.issue.excludes_not_list: "meta.yaml: 'excludes_categories' 는 리스트여야 합니다 (받은 값: {received!r}) — 빈 리스트로 폴백."
+build.issue.seo_desc_missing_page: "meta.yaml: 'seo.description' 필드가 없습니다 — 외부 노출용 한 줄 설명을 작성해주세요. (description / og:description / twitter:description 메타 태그가 누락됩니다.)"
+build.issue.seo_desc_empty_page: "meta.yaml: 'seo.description' 이 빈 문자열입니다 — 외부 노출용 한 줄 설명을 작성해주세요. (description 메타 태그가 누락됩니다.)"
+build.issue.content_missing: "content 파일을 찾을 수 없어 글을 빌드하지 않습니다."
+build.issue.seo_desc_missing_article: "meta.yaml: 'seo.description' 필드가 없습니다 — 외부 노출용 한 줄 설명을 작성해주세요. (description / og:description / twitter:description / 피드 summary 가 모두 누락됩니다.)"
+build.issue.seo_desc_empty_article: "meta.yaml: 'seo.description' 이 빈 문자열입니다 — 외부 노출용 한 줄 설명을 작성해주세요. (description 메타 태그 / 피드 summary 가 누락됩니다.)"
+build.issue.broken_link: "본문 내부 링크 깨짐: {received!r} (dist 에 대상 페이지/파일이 없음)."
+
+# template_file_missing 의 {origin} 라벨 (페이지 폴더 vs templates/).
+build.label.origin_page_folder: "페이지 폴더"
+build.label.origin_templates: "templates/"
+
+# 이미지 인코딩 실패 (images.optimize_image → builder._warning, 전역 i18n.t()).
+build.warn.image_optimize_failed: "이미지 최적화 실패 ({name}): {error}"

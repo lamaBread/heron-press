@@ -1221,8 +1221,7 @@ class Builder:
                 # 어느 쪽을 우선할지 결정 불가 → 글을 건너뛰고 리포트 기록.
                 self._issue(
                     'article', '/'.join(category_path + [article_folder]),
-                    'content.md 와 content.html 이 둘 다 존재합니다 '
-                    '(한 글에 하나만 두세요).',
+                    self.tool_tr.t('build.issue.both_content'),
                     root_path,
                 )
                 continue
@@ -1259,8 +1258,8 @@ class Builder:
                     or '..' in rel_norm.split('/')):
                 self._issue(
                     scope, target,
-                    f"meta.yaml: styles 의 CSS 파일 경로는 페이지 폴더 안의 "
-                    f"상대 경로여야 합니다 (받은 값: {rel!r}) — 이 항목 무시.",
+                    self.tool_tr.t(
+                        'build.issue.styles_not_relative', received=rel),
                     meta_file,
                 )
                 continue
@@ -1268,8 +1267,7 @@ class Builder:
             if not css_path.is_file():
                 self._issue(
                     scope, target,
-                    f"meta.yaml: styles 에 명시한 CSS 파일이 페이지 폴더에 "
-                    f"없습니다: {rel!r} — link 출력 안 함.",
+                    self.tool_tr.t('build.issue.styles_missing', received=rel),
                     meta_file,
                 )
                 continue
@@ -1295,8 +1293,8 @@ class Builder:
         if not isinstance(raw_template, str):
             self._issue(
                 scope, target,
-                f"meta.yaml: 'template' 은 문자열이어야 합니다 "
-                f"(받은 값: {raw_template!r}) — 기본 템플릿으로 폴백.",
+                self.tool_tr.t(
+                    'build.issue.template_not_str', received=raw_template),
                 meta_file,
             )
             return (None, None)
@@ -1304,8 +1302,7 @@ class Builder:
         if not ref:
             self._issue(
                 scope, target,
-                "meta.yaml: 'template' 이 빈 문자열입니다 — "
-                "기본 템플릿으로 폴백.",
+                self.tool_tr.t('build.issue.template_empty'),
                 meta_file,
             )
             return (None, None)
@@ -1317,8 +1314,7 @@ class Builder:
                     or '..' in inner.split('/')):
                 self._issue(
                     scope, target,
-                    f"meta.yaml: 'template' 의 페이지 폴더 상대 경로가 "
-                    f"유효하지 않습니다 ({ref!r}) — 기본 템플릿으로 폴백.",
+                    self.tool_tr.t('build.issue.template_bad_rel', received=ref),
                     meta_file,
                 )
                 return (None, None)
@@ -1326,8 +1322,7 @@ class Builder:
         if norm.startswith('/') or '..' in norm.split('/'):
             self._issue(
                 scope, target,
-                f"meta.yaml: 'template' 의 경로가 유효하지 않습니다 "
-                f"({ref!r}) — 기본 템플릿으로 폴백.",
+                self.tool_tr.t('build.issue.template_bad_path', received=ref),
                 meta_file,
             )
             return (None, None)
@@ -1350,15 +1345,16 @@ class Builder:
         if norm.startswith('./'):
             inner = norm[2:]
             tpl_path = source_dir / inner
-            origin_label = '페이지 폴더'
+            origin_label = self.tool_tr.t('build.label.origin_page_folder')
         else:
             tpl_path = self.templates_dir / norm
-            origin_label = 'templates/'
+            origin_label = self.tool_tr.t('build.label.origin_templates')
         if not tpl_path.is_file():
             self._issue(
                 scope, target,
-                f"meta.yaml: 'template' 에 명시한 파일이 {origin_label}에 "
-                f"없습니다: {meta_template!r} — 기본 {default_name} 로 폴백.",
+                self.tool_tr.t('build.issue.template_file_missing',
+                               origin=origin_label, received=meta_template,
+                               default=default_name),
                 meta_file,
             )
             return _load_template(self.templates_dir, default_name)
@@ -1379,8 +1375,8 @@ class Builder:
         except (TypeError, ValueError):
             self._issue(
                 scope, target,
-                f"meta.yaml: '{field}' 는 정수여야 합니다 "
-                f"(받은 값: {raw_value!r}) — {default} 으로 폴백.",
+                self.tool_tr.t('build.issue.int_field', field=field,
+                               received=raw_value, default=default),
                 meta_file,
             )
             return default
@@ -1502,7 +1498,7 @@ class Builder:
             except Exception as e:
                 self._issue(
                     'article', article_target,
-                    f'meta.yaml 파싱 오류 — 글이 빌드에서 제외됨: {e}',
+                    self.tool_tr.t('build.issue.meta_parse_article', error=e),
                     meta_file,
                 )
                 continue
@@ -1523,8 +1519,8 @@ class Builder:
             if missing:
                 self._issue(
                     'article', article_target,
-                    f"meta.yaml 의 필수 필드가 비어있습니다 "
-                    f"— 글이 빌드에서 제외됨: {', '.join(missing)}",
+                    self.tool_tr.t('build.issue.required_empty',
+                                   fields=', '.join(missing)),
                     meta_file,
                 )
                 continue
@@ -1541,8 +1537,8 @@ class Builder:
             if not isinstance(seo_raw, dict):
                 self._issue(
                     'article', slug,
-                    f"meta.yaml: 'seo' 는 매핑이어야 합니다 "
-                    f"(받은 값: {seo_raw!r}) — 빈 seo 로 폴백.",
+                    self.tool_tr.t('build.issue.seo_not_mapping',
+                                   received=seo_raw),
                     meta_file,
                 )
                 seo_raw = {}
@@ -1572,8 +1568,8 @@ class Builder:
             else:
                 self._issue(
                     'article', slug,
-                    f"meta.yaml: 'tags' 는 리스트여야 합니다 "
-                    f"(받은 값: {tags_raw!r}) — 빈 리스트로 폴백.",
+                    self.tool_tr.t('build.issue.tags_not_list',
+                                   received=tags_raw),
                     meta_file,
                 )
                 tags = []
@@ -1647,18 +1643,20 @@ class Builder:
             if not self.SLUG_RE.match(m.slug):
                 self._issue(
                     'article', m.slug,
-                    f'slug 정규식 불일치: {m.slug!r} — 글이 빌드에서 제외됨.',
+                    self.tool_tr.t('build.issue.slug_regex', received=m.slug),
                     meta_path,
                 )
                 keep_this = False
 
             # v1.4.0: site.yaml reserved_slugs → Builder.RESERVED_SLUGS 상수.
             if m.slug in self.RESERVED_SLUGS:
+                reserved_path = (
+                    '/' + m.slug + '/' if m.slug == 'assets' else '/search.php'
+                )
                 self._issue(
                     'article', m.slug,
-                    f'slug 예약어: {m.slug!r} — 시스템 경로 '
-                    f'({"/" + m.slug + "/" if m.slug == "assets" else "/search.php"}) '
-                    f'와 충돌. 글이 빌드에서 제외됨.',
+                    self.tool_tr.t('build.issue.slug_reserved',
+                                   received=m.slug, path=reserved_path),
                     meta_path,
                 )
                 keep_this = False
@@ -1667,8 +1665,8 @@ class Builder:
                 other = seen_slugs[m.slug]
                 self._issue(
                     'article', m.slug,
-                    f"slug 중복: {m.slug!r} — 뒤늦게 발견된 쪽의 글이 "
-                    f"빌드에서 제외됨 (먼저 발견된 글: {other}).",
+                    self.tool_tr.t('build.issue.slug_dup', received=m.slug,
+                                   other=other),
                     meta_path,
                 )
                 keep_this = False
@@ -1678,8 +1676,7 @@ class Builder:
             if not self.DATE_RE.match(m.date):
                 self._issue(
                     'article', m.slug,
-                    f'date 형식 오류: {m.date!r} (YYYY-MM-DD 형식 필요) '
-                    f'— 글이 빌드에서 제외됨.',
+                    self.tool_tr.t('build.issue.date_format', received=m.date),
                     meta_path,
                 )
                 keep_this = False
@@ -1688,16 +1685,16 @@ class Builder:
                 if not self.DATE_RE.match(m.updated):
                     self._issue(
                         'article', m.slug,
-                        f'updated 형식 오류: {m.updated!r} — updated 를 '
-                        f'무시하고 진행.',
+                        self.tool_tr.t('build.issue.updated_format',
+                                       received=m.updated),
                         meta_path,
                     )
                     m.updated = None
                 elif m.updated < m.date:
                     self._issue(
                         'article', m.slug,
-                        f'updated ({m.updated}) 가 date ({m.date}) 보다 '
-                        f'앞섭니다 — 그대로 진행하지만 의도 확인 권장.',
+                        self.tool_tr.t('build.issue.updated_before_date',
+                                       updated=m.updated, date=m.date),
                         meta_path,
                     )
 
@@ -1727,9 +1724,9 @@ class Builder:
                 cat = cat_slugs[article.meta.slug]
                 self._issue(
                     'article', article.meta.slug,
-                    f"slug 충돌 (글 ↔ 카테고리): {article.meta.slug!r} — "
-                    f"카테고리 폴더 Articles/{'/'.join(cat.path)} 와 같은 "
-                    f"slug 라 글이 빌드에서 제외됨.",
+                    self.tool_tr.t('build.issue.slug_cat_conflict',
+                                   received=article.meta.slug,
+                                   cat_path='/'.join(cat.path)),
                     article.source_dir / 'meta.yaml',
                 )
                 continue
@@ -1862,7 +1859,7 @@ class Builder:
         except Exception as e:
             self._issue(
                 scope, target,
-                f'meta.yaml 파싱 오류 — 기본 CategoryMeta 로 폴백: {e}',
+                self.tool_tr.t('build.issue.meta_parse_category', error=e),
                 meta_file,
             )
             return CategoryMeta()
@@ -1902,8 +1899,8 @@ class Builder:
         else:
             self._issue(
                 scope, target,
-                f"meta.yaml: 'excludes_categories' 는 리스트여야 합니다 "
-                f"(받은 값: {excludes_raw!r}) — 빈 리스트로 폴백.",
+                self.tool_tr.t('build.issue.excludes_not_list',
+                               received=excludes_raw),
                 meta_file,
             )
             excludes = []
@@ -1917,8 +1914,8 @@ class Builder:
         if not isinstance(seo_raw, dict):
             self._issue(
                 scope, target,
-                f"meta.yaml: 'seo' 는 매핑이어야 합니다 "
-                f"(받은 값: {seo_raw!r}) — 빈 seo 로 폴백.",
+                self.tool_tr.t('build.issue.seo_not_mapping',
+                               received=seo_raw),
                 meta_file,
             )
             seo_raw = {}
@@ -2087,18 +2084,13 @@ class Builder:
         if desc_val is None:
             self._issue(
                 page_kind, slug,
-                "meta.yaml: 'seo.description' 필드가 없습니다 "
-                "— 외부 노출용 한 줄 설명을 작성해주세요. "
-                "(description / og:description / twitter:description 메타 "
-                "태그가 누락됩니다.)",
+                self.tool_tr.t('build.issue.seo_desc_missing_page'),
                 location,
             )
         elif desc_val == '':
             self._issue(
                 page_kind, slug,
-                "meta.yaml: 'seo.description' 이 빈 문자열입니다 "
-                "— 외부 노출용 한 줄 설명을 작성해주세요. "
-                "(description 메타 태그가 누락됩니다.)",
+                self.tool_tr.t('build.issue.seo_desc_empty_page'),
                 location,
             )
 
@@ -2363,7 +2355,7 @@ class Builder:
             if not content_path or not content_path.exists():
                 self._issue(
                     'article', m.slug,
-                    'content 파일을 찾을 수 없어 글을 빌드하지 않습니다.',
+                    self.tool_tr.t('build.issue.content_missing'),
                     article.source_dir,
                 )
                 continue
@@ -2457,19 +2449,14 @@ class Builder:
             elif desc_val is None:
                 self._issue(
                     'article', m.slug,
-                    "meta.yaml: 'seo.description' 필드가 없습니다 "
-                    "— 외부 노출용 한 줄 설명을 작성해주세요. "
-                    "(description / og:description / twitter:description / "
-                    "피드 summary 가 모두 누락됩니다.)",
+                    self.tool_tr.t('build.issue.seo_desc_missing_article'),
                     article.source_dir / 'meta.yaml',
                 )
                 summary = ''
             elif desc_val == '':
                 self._issue(
                     'article', m.slug,
-                    "meta.yaml: 'seo.description' 이 빈 문자열입니다 "
-                    "— 외부 노출용 한 줄 설명을 작성해주세요. "
-                    "(description 메타 태그 / 피드 summary 가 누락됩니다.)",
+                    self.tool_tr.t('build.issue.seo_desc_empty_article'),
                     article.source_dir / 'meta.yaml',
                 )
                 summary = ''
@@ -3928,8 +3915,7 @@ class Builder:
                     broken_total += 1
                     self._issue(
                         'article', art.meta.slug,
-                        f'본문 내부 링크 깨짐: {href!r} '
-                        f'(dist 에 대상 페이지/파일이 없음).',
+                        self.tool_tr.t('build.issue.broken_link', received=href),
                         p,
                     )
         if broken_total:

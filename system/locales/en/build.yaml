@@ -100,3 +100,43 @@ build.report.md_progress_h2: "## Build progress"
 build.report.md_steptime_h2: "## Per-step timing"
 build.report.md_steptime_thead: "| Step | Description | Time(s) |"
 build.report.md_footer: "_This document is auto-generated and refreshed on every build (in the folder containing build.py). It is not included in the dist/ output._"
+
+# ── Per-article/category content-defect issue/warning bodies (v1.9.4) ──
+# Bodies of builder's self._issue()/self._warning(). {received} renders via
+# .format's !r conversion = repr() (preserves the original f-string {x!r}).
+# Shown only when content has a defect.
+build.issue.both_content: "Both content.md and content.html exist (keep only one per article)."
+build.issue.styles_not_relative: "meta.yaml: styles CSS file paths must be relative to the page folder (got: {received!r}) — ignoring this entry."
+build.issue.styles_missing: "meta.yaml: CSS file listed in styles not found in the page folder: {received!r} — no link emitted."
+build.issue.template_not_str: "meta.yaml: 'template' must be a string (got: {received!r}) — falling back to the default template."
+build.issue.template_empty: "meta.yaml: 'template' is an empty string — falling back to the default template."
+build.issue.template_bad_rel: "meta.yaml: 'template' has an invalid page-folder relative path ({received!r}) — falling back to the default template."
+build.issue.template_bad_path: "meta.yaml: 'template' has an invalid path ({received!r}) — falling back to the default template."
+build.issue.template_file_missing: "meta.yaml: file specified in 'template' not found in {origin}: {received!r} — falling back to default {default}."
+build.issue.int_field: "meta.yaml: '{field}' must be an integer (got: {received!r}) — falling back to {default}."
+build.issue.meta_parse_article: "meta.yaml parse error — article excluded from the build: {error}"
+build.issue.required_empty: "meta.yaml: required fields are empty — article excluded from the build: {fields}"
+build.issue.seo_not_mapping: "meta.yaml: 'seo' must be a mapping (got: {received!r}) — falling back to empty seo."
+build.issue.tags_not_list: "meta.yaml: 'tags' must be a list (got: {received!r}) — falling back to an empty list."
+build.issue.slug_regex: "slug regex mismatch: {received!r} — article excluded from the build."
+build.issue.slug_reserved: "reserved slug: {received!r} — conflicts with system path ({path}). Article excluded from the build."
+build.issue.slug_dup: "duplicate slug: {received!r} — the later-found article is excluded from the build (first found: {other})."
+build.issue.date_format: "date format error: {received!r} (YYYY-MM-DD required) — article excluded from the build."
+build.issue.updated_format: "updated format error: {received!r} — ignoring updated and continuing."
+build.issue.updated_before_date: "updated ({updated}) is earlier than date ({date}) — continuing as-is, but please confirm this is intended."
+build.issue.slug_cat_conflict: "slug conflict (article ↔ category): {received!r} — same slug as category folder Articles/{cat_path}, so the article is excluded from the build."
+build.issue.meta_parse_category: "meta.yaml parse error — falling back to default CategoryMeta: {error}"
+build.issue.excludes_not_list: "meta.yaml: 'excludes_categories' must be a list (got: {received!r}) — falling back to an empty list."
+build.issue.seo_desc_missing_page: "meta.yaml: 'seo.description' field is missing — please write a one-line description for external display. (The description / og:description / twitter:description meta tags will be omitted.)"
+build.issue.seo_desc_empty_page: "meta.yaml: 'seo.description' is an empty string — please write a one-line description for external display. (The description meta tag will be omitted.)"
+build.issue.content_missing: "content file not found — the article will not be built."
+build.issue.seo_desc_missing_article: "meta.yaml: 'seo.description' field is missing — please write a one-line description for external display. (The description / og:description / twitter:description meta tags and feed summary will all be omitted.)"
+build.issue.seo_desc_empty_article: "meta.yaml: 'seo.description' is an empty string — please write a one-line description for external display. (The description meta tag and feed summary will be omitted.)"
+build.issue.broken_link: "broken internal link in body: {received!r} (target page/file not in dist)."
+
+# {origin} label for template_file_missing (the page folder vs templates/).
+build.label.origin_page_folder: "the page folder"
+build.label.origin_templates: "templates/"
+
+# Image encoding failure (images.optimize_image → builder._warning, global i18n.t()).
+build.warn.image_optimize_failed: "Image optimization failed ({name}): {error}"

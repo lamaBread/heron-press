@@ -199,6 +199,74 @@ class CanonicalInvarianceTests(unittest.TestCase):
         self.assertEqual(en.t('build.parity.php_unavailable'),
                          'PHP not available — skipping tokenizer parity test.')
 
+    def test_build_issue_canonical_values(self):
+        # v1.9.4: 글/카테고리 단위 _issue/_warning 본문 신규 키의 ko 정본 —
+        # 옛 하드코딩 f-string 과 byte-동일 (도구=ko 의 콘텐츠-결함 출력 불변).
+        tr = i18n.load('ko')
+        self.assertEqual(
+            tr.t('build.issue.both_content'),
+            'content.md 와 content.html 이 둘 다 존재합니다 (한 글에 하나만 두세요).')
+        # {received!r}: 문자열은 repr() 로 따옴표가 붙어야 한다 (옛 {x!r} 보존).
+        self.assertEqual(
+            tr.t('build.issue.slug_regex', received='1bad'),
+            "slug 정규식 불일치: '1bad' — 글이 빌드에서 제외됨.")
+        # {received!r}: 리스트도 repr() — 따옴표 없이 [...] (seo_raw!r 보존).
+        self.assertEqual(
+            tr.t('build.issue.seo_not_mapping', received=['x']),
+            "meta.yaml: 'seo' 는 매핑이어야 합니다 (받은 값: ['x']) — 빈 seo 로 폴백.")
+        # 다중 파라미터 (repr + path), 그리고 plain {updated}/{date}.
+        self.assertEqual(
+            tr.t('build.issue.slug_reserved', received='search',
+                 path='/search.php'),
+            "slug 예약어: 'search' — 시스템 경로 (/search.php) 와 충돌. "
+            '글이 빌드에서 제외됨.')
+        self.assertEqual(
+            tr.t('build.issue.updated_before_date',
+                 updated='2026-01-01', date='2026-02-01'),
+            'updated (2026-01-01) 가 date (2026-02-01) 보다 앞섭니다 — '
+            '그대로 진행하지만 의도 확인 권장.')
+        # {origin} 는 별도 label 키 — page_folder 라벨이 합성돼야 한다.
+        self.assertEqual(
+            tr.t('build.issue.template_file_missing',
+                 origin=tr.t('build.label.origin_page_folder'),
+                 received='x.html', default='article.html'),
+            "meta.yaml: 'template' 에 명시한 파일이 페이지 폴더에 없습니다: "
+            "'x.html' — 기본 article.html 로 폴백.")
+        self.assertEqual(tr.t('build.label.origin_templates'), 'templates/')
+        self.assertEqual(
+            tr.t('build.issue.content_missing'),
+            'content 파일을 찾을 수 없어 글을 빌드하지 않습니다.')
+        self.assertEqual(
+            tr.t('build.issue.seo_desc_missing_article'),
+            "meta.yaml: 'seo.description' 필드가 없습니다 — 외부 노출용 한 줄 "
+            '설명을 작성해주세요. (description / og:description / '
+            'twitter:description / 피드 summary 가 모두 누락됩니다.)')
+        # 이미지 인코딩 실패 warn (images.py → 전역 i18n.t()).
+        self.assertEqual(
+            tr.t('build.warn.image_optimize_failed', name='a.png', error='boom'),
+            '이미지 최적화 실패 (a.png): boom')
+
+    def test_build_issue_en_translated(self):
+        # v1.9.4: 신규 build.issue.* / label / warn 키가 en 으로 번역됐는지
+        # (ko 폴백이 아닌지) 표본 확인.
+        en = i18n.load('en')
+        self.assertEqual(
+            en.t('build.issue.both_content'),
+            'Both content.md and content.html exist (keep only one per article).')
+        self.assertEqual(
+            en.t('build.issue.slug_regex', received='1bad'),
+            "slug regex mismatch: '1bad' — article excluded from the build.")
+        self.assertEqual(en.t('build.label.origin_page_folder'), 'the page folder')
+        self.assertEqual(
+            en.t('build.issue.template_file_missing',
+                 origin=en.t('build.label.origin_page_folder'),
+                 received='x.html', default='article.html'),
+            "meta.yaml: file specified in 'template' not found in the page "
+            "folder: 'x.html' — falling back to default article.html.")
+        self.assertEqual(
+            en.t('build.warn.image_optimize_failed', name='a.png', error='boom'),
+            'Image optimization failed (a.png): boom')
+
 
 class EscapeDecodingTests(unittest.TestCase):
     """v1.9.1 — 큰따옴표 값 escape 해석 (\\" \\\\ \\n \\t), 작은따옴표는 리터럴."""

@@ -51,6 +51,8 @@ from pathlib import Path
 from typing import Optional
 import re
 
+from . import i18n  # v1.9.4: 인코딩 실패 메시지를 도구 언어로 (전역 t()).
+
 try:
     from PIL import Image
     _HAS_PIL = True
@@ -215,7 +217,8 @@ def optimize_image(
     except Exception as e:
         # 인코딩 실패는 die 가 아닌 None — 호출 측에서 원본 복사로 폴백.
         # 워닝 메시지는 호출자가 BuildReport 로 라우팅한다 (v0.6.x 통합 리포트).
-        return None, f'이미지 최적화 실패 ({src.name}): {e}'
+        return None, i18n.t(
+            'build.warn.image_optimize_failed', name=src.name, error=e)
 
 
 # ════════════════════════════════════════════════════════════════
