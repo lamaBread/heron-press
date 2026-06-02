@@ -26,8 +26,8 @@ $loopback = in_array($remote, ['127.0.0.1', '::1', ''], true);
 if ($sapi !== 'cli-server' || !$loopback) {
     http_response_code(403);
     header('Content-Type: text/plain; charset=utf-8');
-    exit("403 — Pond 는 로컬 PHP 내장 서버(php -S 127.0.0.1:8001 "
-        . "Pond.php)에서만 동작합니다. (sapi={$sapi})");
+    exit("403 — Pond runs only on the local PHP built-in server "
+        . "(php -S 127.0.0.1:8001 Pond.php). (sapi={$sapi})");
 }
 
 require_once __DIR__ . '/system/admin/lib/fs.php';
