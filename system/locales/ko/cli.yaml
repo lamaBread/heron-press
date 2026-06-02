@@ -18,6 +18,21 @@ cli.help.update: "최신 릴리스를 받아 오버레이 후 마이그레이션
 cli.help.fetch_rclone: "rclone 바이너리를 선확보(다운로드+SHA256 검증)하고 종료. 멱등."
 cli.help.deploy: "dist/ 를 서버에 증분 동기화하고 종료 (--dry-run 으로 미리보기)."
 cli.help.check_config: "stdin 의 site.yaml 후보를 빌드와 동일하게 파싱·검증하고 종료 (0=유효). 디스크 site.yaml 은 건드리지 않음 — Pond 설정 저장 게이트."
+cli.help.check_locale: "로케일 팩을 정본(en) 키 집합과 대조하고 종료. 인자 없으면 전체, --check-locale ja 면 하나. missing/extra/잔존 백슬래시 키를 보고 (0=결함 없음)."
+cli.help.new_locale: "system/locales/ 아래에 새 로케일 CODE 를 스캐폴딩(정본 팩 그대로 복사)하고 종료. 복사본을 번역한 뒤 --check-locale CODE 로 점검."
+
+# ── Heron.py --check-locale / --new-locale (locale_tools) ──────────
+cli.locale.check_header: "로케일 점검: {code}"
+cli.locale.missing: "  누락 {count}: {keys}"
+cli.locale.extra: "  잉여 {count}: {keys}"
+cli.locale.stray_backslash: "  잔존 백슬래시 {count}: {keys}"
+cli.locale.untranslated: "  미번역 (en 과 동일): {count}"
+cli.locale.ok: "{code}: OK ({total} keys)"
+cli.locale.invalid_code: "잘못된 로케일 코드: {code} ([A-Za-z][A-Za-z0-9-]* 형식이어야 함)"
+cli.locale.scaffold_exists: "이미 존재하는 로케일이라 덮어쓰지 않습니다: {code}"
+cli.locale.scaffold_copied: "복사 {count} 개 파일: {code}"
+cli.locale.endonym_injected: "endonym 키 admin.locale.name.{code} 를 모든 팩에 주입했습니다."
+cli.locale.scaffold_done: "로케일 {code} 스캐폴딩 완료. *.yaml 값을 번역(실제 endonym 도 설정)한 뒤 실행: python Heron.py --check-locale {code}"
 
 # ── Heron.py --check (버전/MANIFEST 상태) ──────────────────────────
 cli.check.program_version: "프로그램 버전  : {ver}"

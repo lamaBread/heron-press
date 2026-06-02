@@ -123,6 +123,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--check-config', action='store_true',
         help=i18n.t('cli.help.check_config'))
+    # v1.9.7: 로케일 팩 점검(키 패리티/잔존 백슬래시) + 새 로케일 스캐폴딩.
+    parser.add_argument(
+        '--check-locale', nargs='?', const='*', metavar='CODE',
+        help=i18n.t('cli.help.check_locale'))
+    parser.add_argument(
+        '--new-locale', metavar='CODE',
+        help=i18n.t('cli.help.new_locale'))
     return parser
 
 
@@ -233,6 +240,19 @@ def _action_check_config(base: Path) -> int:
     return 0
 
 
+def _action_check_locale(base: Path, code) -> int:
+    """로케일 팩 점검 — 센티넬 '*'(=전부)를 None 으로 옮겨 locale_tools.check 호출."""
+    from scripts import locale_tools
+    return locale_tools.check(None if code == '*' else code,
+                              log=lambda m: print(m, flush=True))
+
+
+def _action_new_locale(base: Path, code) -> int:
+    """CANONICAL 복사로 새 로케일 폴더를 스캐폴딩."""
+    from scripts import locale_tools
+    return locale_tools.scaffold(code, log=lambda m: print(m, flush=True))
+
+
 def main(argv=None) -> int:
     # 콘솔/파이프 인코딩을 UTF-8 로 고정 — Windows 기본 cp949 에서 한글/em-dash
     # 출력이 깨지거나 UnicodeEncodeError 로 죽는 것을 막는다. Pond 는 출력 파이프
@@ -272,6 +292,10 @@ def main(argv=None) -> int:
         return _action_deploy(base, dry_run=args.dry_run)
     if args.check_config:
         return _action_check_config(base)
+    if args.check_locale is not None:
+        return _action_check_locale(base, args.check_locale)
+    if args.new_locale is not None:
+        return _action_new_locale(base, args.new_locale)
 
     # --clean wipes .build_cache/ as well as dist/ (a full rebuild).
     if args.clean:

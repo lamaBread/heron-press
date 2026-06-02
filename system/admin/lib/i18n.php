@@ -2,9 +2,9 @@
 // 로케일 문자열 lookup — Pond admin UI (Surface 2) 전용 (v1.9.0 i18n 신설).
 //
 // 팩: system/locales/<locale>/*.yaml (플랫 닷키 → 인용 문자열). 한 로케일
-// 폴더의 모든 *.yaml 조각을 머지한다. ko 가 정본 겸 폴백; 키가 없으면 키
-// 문자열을 그대로 돌려 절대 빈칸이 안 되게 한다. 도구 언어는
-// user/.heron/locale 한 줄로 정해진다 (없으면 ko).
+// 폴더의 모든 *.yaml 조각을 머지한다. en 이 기본 겸 폴백(키 패리티 기준;
+// ko 는 완전 번역으로 동봉); 키가 없으면 키 문자열을 그대로 돌려 절대 빈칸이
+// 안 되게 한다. 도구 언어는 user/.heron/locale 한 줄로 정해진다 (없으면 en).
 //
 // 빌드/CLI(Surface 3)·사이트 chrome(Surface 1)은 Python 측 system/scripts/
 // i18n.py 가 담당한다 — 같은 로케일 포맷을 공유한다.
@@ -19,7 +19,8 @@
 //     의 파서 패리티 테스트가 강제.)
 declare(strict_types=1);
 
-const I18N_CANONICAL = 'ko';
+// 기본 도구 언어 + 폴백 + 키 패리티 기준 (v1.9.7: ko→en). i18n.py 의 CANONICAL 과 동일.
+const I18N_CANONICAL = 'en';
 
 /** system/locales 절대 경로 (이 파일: system/admin/lib/i18n.php). */
 function i18n_locales_dir(): string {
@@ -96,7 +97,7 @@ function i18n_init(string $locale): void {
     ];
 }
 
-/** 현재 적재된 도구 언어 코드 (예: 'ko'). 미초기화면 ko. */
+/** 현재 적재된 도구 언어 코드 (예: 'en'). 미초기화면 en. */
 function i18n_locale(): string {
     return (string)($GLOBALS['__i18n']['locale'] ?? I18N_CANONICAL);
 }
@@ -116,7 +117,7 @@ function t(string $key, array $vars = []): string {
     return $s;
 }
 
-/** user/.heron/locale 한 줄. 부재/공백이면 'ko'. $base = 버전 폴더 루트. */
+/** user/.heron/locale 한 줄. 부재/공백이면 'en'. $base = 버전 폴더 루트. */
 function i18n_read_tool_locale(string $base): string {
     $f = $base . '/user/.heron/locale';
     if (!is_file($f)) return I18N_CANONICAL;

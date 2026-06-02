@@ -22,6 +22,11 @@ class ReportTests(unittest.TestCase):
         # 고정해 이 클래스의 한국어 단언이 실행 순서와 무관히 성립하게 한다.
         i18n.init('ko')
 
+    def tearDown(self):
+        # v1.9.7: 기본값이 en 이므로 한국어 단언용으로 바꾼 전역을 복원 —
+        # 이후 테스트가 en 기본을 보게 한다.
+        i18n.init(i18n.CANONICAL)
+
     def test_empty_renders_no_issue_message(self):
         r = BuildReport()
         buf = io.StringIO()

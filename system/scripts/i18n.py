@@ -3,8 +3,9 @@
 로케일 팩은 ``system/locales/<locale>/*.yaml`` 에 **플랫 닷(dot) 키 → 인용
 문자열** 형태로 둔다 (예: ``site.search.placeholder: "검색"``). 한 로케일
 폴더의 모든 ``*.yaml`` 조각을 머지한다 (조각 분리는 표면별 동시 작업 충돌을
-피하기 위한 것 — admin/site/build/cli). ``ko`` 가 정본 겸 모든 로케일의 폴백
-이며, 키가 없으면 키 문자열 자체를 돌려 출력이 절대 빈칸이 되지 않게 한다.
+피하기 위한 것 — admin/site/build/cli). ``en`` 이 기본 도구 언어 겸 모든
+로케일의 폴백(키 패리티 기준)이고 (``ko`` 는 완전 번역으로 동봉), 키가 없으면
+키 문자열 자체를 돌려 출력이 절대 빈칸이 되지 않게 한다.
 
 로케일 파일 규칙 (v1.9.1 — PHP i18n.php 와 **바이트 동일** 파서):
   - 한 줄 = ``키: "값"`` (또는 ``'값'``). 키는 닷 구분, 콜론/샵 없음.
@@ -38,7 +39,9 @@ from .version import heron_dir
 
 # system/locales — 이 파일(system/scripts/i18n.py) 기준 부모의 부모/locales.
 LOCALES_DIR = Path(__file__).resolve().parent.parent / 'locales'
-CANONICAL = 'ko'
+# 기본 도구 언어 + 폴백 + 키 패리티 기준 (v1.9.7: ko→en). ``ko`` 는 완전 번역
+# 으로 동봉되며, 로케일 파일(user/.heron/locale) 부재 시 이 값이 기본값.
+CANONICAL = 'en'
 TOOL_LOCALE_FILE = 'locale'
 
 # PHP i18n_load_pack 과 동일한 키:값 분리 정규식 (키에 콜론/샵 불가).
@@ -82,13 +85,15 @@ def _unquote(s: str) -> str:
     return s
 
 
-def _load_pack(locale: str) -> dict:
+def _load_pack(locale: str, locales_dir=None) -> dict:
     """``<locales>/<locale>/*.yaml`` 들을 머지한 플랫 {key: str} 맵.
 
     PHP i18n_load_pack 과 동일한 줄단위 규칙으로 파싱한다 (전용 파서).
+    ``locales_dir`` 미지정 시 모듈 기본 ``LOCALES_DIR`` — locale 점검/스캐폴딩
+    도구(locale_tools)가 임시 디렉터리를 넘겨 격리 테스트할 수 있게 매개화 (v1.9.7).
     """
     out: dict = {}
-    d = LOCALES_DIR / locale
+    d = (locales_dir or LOCALES_DIR) / locale
     if d.is_dir():
         for f in sorted(d.glob('*.yaml')):
             try:
@@ -144,8 +149,8 @@ def load(locale: str = CANONICAL) -> Translator:
 # ── 모듈 전역 번역기 (CLI/운영자 메시지용; PHP 전역 t() 미러) ──────────
 #
 # Heron.py main() 이 시작에서 init() 으로 도구 언어를 한 번 적재하면, 이후
-# deploy/update/rclone/migrations 가 i18n.t() 로 조회한다. init 전 기본은 ko —
-# 직접 호출(테스트)도 ko 폴백으로 안전. 빌더는 두 로케일을 동시에 쓰므로 이
+# deploy/update/rclone/migrations 가 i18n.t() 로 조회한다. init 전 기본은 en —
+# 직접 호출(테스트)도 en 폴백으로 안전. 빌더는 두 로케일을 동시에 쓰므로 이
 # 전역이 아니라 Translator 인스턴스(site_tr/tool_tr)를 따로 쓴다.
 _ACTIVE: Translator = Translator(CANONICAL)
 

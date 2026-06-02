@@ -24,7 +24,7 @@ default_author: Your Name
 default_og_image: /assets/default-og.png
 
 # Default <html lang> for every page / BCP 47 code (e.g. ko / en / ja)
-lang: ko
+lang: en
 
 # Default <title> prefix — `{prefix}{title}{suffix}` / arbitrary string
 default_title_prefix: ""

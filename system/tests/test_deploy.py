@@ -92,7 +92,7 @@ class TestLoadConfig(_Base):
         self._write_cfg(ssh_key_path=str(self.tmp / 'nope' / 'id'))
         with self.assertRaises(deploy.DeployConfigError) as cm:
             deploy.load_config(self.tmp)
-        self.assertIn('개인키', str(cm.exception))
+        self.assertIn('private key', str(cm.exception))   # v1.9.7: 기본값 en
 
     def test_missing_known_hosts(self):
         self._write_cfg(known_hosts_path=str(self.tmp / 'nope' / 'known_hosts'))

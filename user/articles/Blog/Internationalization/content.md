@@ -1,6 +1,6 @@
-The site default language is Korean (`lang: ko` in `site.yaml`), but this
-article sets `lang: en` in its `meta.yaml`. Open the page source and the
-`<html lang>` attribute reads `en` for this page only.
+The site default language is English (`lang: en` in `site.yaml`), but this
+article sets `lang: ko` in its `meta.yaml`. Open the page source and the
+`<html lang>` attribute reads `ko` for this page only.
 
 ===Why per-article language matters===
 

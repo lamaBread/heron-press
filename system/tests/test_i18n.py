@@ -24,53 +24,53 @@ from scripts import i18n  # noqa: E402
 
 
 class FallbackChainTests(unittest.TestCase):
-    """(a) 폴백 체인: locale → ko → 키 문자열."""
+    """(a) 폴백 체인: locale → en(CANONICAL) → 키 문자열."""
 
     def test_missing_key_returns_key_string(self):
-        tr = i18n.load('ko')
+        tr = i18n.load(i18n.CANONICAL)
         self.assertEqual(
             tr.t('site.does.not.exist'), 'site.does.not.exist'
         )
 
-    def test_unknown_locale_falls_back_to_ko(self):
-        # 존재하지 않는 로케일 → 팩이 비어 있고 모든 키가 ko 로 폴백.
-        ko = i18n.load('ko')
+    def test_unknown_locale_falls_back_to_canonical(self):
+        # 존재하지 않는 로케일 → 팩이 비어 있고 모든 키가 CANONICAL(en) 로 폴백.
+        canon = i18n.load(i18n.CANONICAL)
         xx = i18n.load('xx-nonexistent')
         self.assertEqual(xx.locale, 'xx-nonexistent')
         for key in ('site.search.placeholder', 'site.footer.rights',
                     'build.warn.pillow_missing'):
-            self.assertEqual(xx.t(key), ko.t(key))
+            self.assertEqual(xx.t(key), canon.t(key))
 
-    def test_non_ko_locale_falls_back_to_ko_for_undefined_key(self):
-        # ko 에는 있으나 어떤 로케일 팩에도 *추가로* 없을 임의 키를 시뮬레이션:
-        # 없는 로케일(xx) 의 admin 전용 키도 ko 값으로 폴백해야 한다.
-        ko = i18n.load('ko')
+    def test_non_canonical_locale_falls_back_to_canonical_for_undefined_key(self):
+        # CANONICAL(en) 에는 있으나 어떤 로케일 팩에도 *추가로* 없을 임의 키를
+        # 시뮬레이션: 없는 로케일(xx) 의 admin 전용 키도 en 값으로 폴백해야 한다.
+        canon = i18n.load(i18n.CANONICAL)
         xx = i18n.load('xx-nonexistent')
-        # admin.* 키 하나를 표본으로 — ko 팩에 존재하면 폴백이 그 값을 반환.
+        # admin.* 키 하나를 표본으로 — CANONICAL 팩에 존재하면 폴백이 그 값을 반환.
         sample = 'admin.nav.list'
-        if ko.t(sample) != sample:  # ko 에 실제로 정의돼 있을 때만 의미 있음
-            self.assertEqual(xx.t(sample), ko.t(sample))
+        if canon.t(sample) != sample:  # CANONICAL 에 정의돼 있을 때만 의미 있음
+            self.assertEqual(xx.t(sample), canon.t(sample))
 
 
 class KeyParityTests(unittest.TestCase):
     """(b) system/locales/ 전체 트리의 키 패리티 (admin/site/build 포함)."""
 
-    def test_every_locale_matches_ko_key_set(self):
-        ko_keys = set(i18n._load_pack('ko'))
-        self.assertTrue(ko_keys, 'ko 정본 팩이 비어 있습니다.')
+    def test_every_locale_matches_canonical_key_set(self):
+        ref_keys = set(i18n._load_pack(i18n.CANONICAL))
+        self.assertTrue(ref_keys, f'{i18n.CANONICAL} 기준 팩이 비어 있습니다.')
         for locale in i18n.available_locales():
             if locale == i18n.CANONICAL:
                 continue
             keys = set(i18n._load_pack(locale))
-            missing = ko_keys - keys
-            extra = keys - ko_keys
+            missing = ref_keys - keys
+            extra = keys - ref_keys
             self.assertEqual(
                 missing, set(),
                 f"로케일 '{locale}' 에 누락된 키: {sorted(missing)}",
             )
             self.assertEqual(
                 extra, set(),
-                f"로케일 '{locale}' 에 ko 에 없는 키: {sorted(extra)}",
+                f"로케일 '{locale}' 에 {i18n.CANONICAL} 에 없는 키: {sorted(extra)}",
             )
 
 
@@ -102,7 +102,8 @@ class PlaceholderTests(unittest.TestCase):
 
 
 class CanonicalInvarianceTests(unittest.TestCase):
-    """(d) ko 정본이 옛 하드코딩 한국어와 byte-동일 (회귀 가드)."""
+    """(d) ko 팩 값이 옛 하드코딩 한국어와 byte-동일 (회귀 가드). v1.9.7 부터
+    CANONICAL=en 이지만, ko 는 완전 번역으로 동봉되며 그 원본 값은 이 가드로 고정."""
 
     def test_site_canonical_values(self):
         tr = i18n.load('ko')
@@ -321,7 +322,7 @@ class CliPackTests(unittest.TestCase):
             i18n.init('ko')
             self.assertEqual(i18n.t('cli.deploy.done'), '완료.')
         finally:
-            i18n.init('ko')   # 다른 테스트 오염 방지 — ko 로 복원.
+            i18n.init(i18n.CANONICAL)   # 다른 테스트 오염 방지 — 기본값(en)으로 복원.
 
 
 class LocaleNameParityTests(unittest.TestCase):

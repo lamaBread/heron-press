@@ -549,6 +549,10 @@ class BuildReportPhpBuiltTests(unittest.TestCase):
         # 거치므로 ko(정본)로 고정 — 실행 순서 무관히 한국어 단언이 성립.
         i18n.init('ko')
 
+    def tearDown(self):
+        # v1.9.7: 기본값이 en 이므로 한국어 단언용으로 바꾼 전역을 복원.
+        i18n.init(i18n.CANONICAL)
+
     def test_note_php_built_dedupes(self):
         r = BuildReport()
         r.note_php_built('a')

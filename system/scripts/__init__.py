@@ -22,4 +22,4 @@ never reaches dist output; its only consumers (cache global_hash, the build
 console, and build-report.md) all live outside dist.
 """
 
-__version__ = '1.9.6'
+__version__ = '1.9.7'

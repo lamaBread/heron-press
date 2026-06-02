@@ -102,7 +102,7 @@ class ArgParserTests(unittest.TestCase):
             self.assertIn('full rebuild', flat)                # --clean help
             self.assertIn('unit tests', flat)                  # epilog '# unit tests'
         finally:
-            i18n.init('ko')   # 전역 오염 방지 — 다른 테스트에 영향 없도록 복원
+            i18n.init(i18n.CANONICAL)   # 전역 오염 방지 — 기본값(en)으로 복원
 
 
 if __name__ == '__main__':

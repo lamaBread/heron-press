@@ -982,7 +982,7 @@ class Builder:
             # v0.4.6: home_* 류 (home_per_page / home_excludes_categories /
             # home_sort) 는 Articles/meta.yaml 로 이전됨 — 더 이상 site.yaml
             # 에서 읽지 않는다. 옛 site.yaml 에 잔존하더라도 조용히 무시.
-            lang=str(get('lang') or 'ko'),
+            lang=str(get('lang') or 'en'),
             category_per_page=int(get('category_per_page') or 20),
             category_preview_per_page=int(get('category_preview_per_page') or 5),
             # v0.5.1: 이미지 자동 최적화 설정.

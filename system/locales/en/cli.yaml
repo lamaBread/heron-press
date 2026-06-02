@@ -19,6 +19,21 @@ cli.help.update: "Download the latest release, overlay it, migrate, then exit."
 cli.help.fetch_rclone: "Pre-fetch the rclone binary (download + SHA256 verify), then exit. Idempotent."
 cli.help.deploy: "Incrementally sync dist/ to the server, then exit (preview with --dry-run)."
 cli.help.check_config: "Parse/validate a candidate site.yaml from stdin exactly as the build does, then exit (0=valid). Does not touch the on-disk site.yaml — Pond's settings save gate."
+cli.help.check_locale: "Check locale packs against the canonical (en) key set, then exit. Bare = all locales; --check-locale ja = one. Reports missing/extra/stray-backslash keys (0=clean)."
+cli.help.new_locale: "Scaffold a new locale CODE under system/locales/ (verbatim copy of the canonical pack), then exit. Edit the copies, then run --check-locale CODE."
+
+# ── Heron.py --check-locale / --new-locale (locale_tools) ──────────
+cli.locale.check_header: "Locale check: {code}"
+cli.locale.missing: "  missing {count}: {keys}"
+cli.locale.extra: "  extra {count}: {keys}"
+cli.locale.stray_backslash: "  stray backslash {count}: {keys}"
+cli.locale.untranslated: "  untranslated (identical to en): {count}"
+cli.locale.ok: "{code}: OK ({total} keys)"
+cli.locale.invalid_code: "Invalid locale code: {code} (must match [A-Za-z][A-Za-z0-9-]*)"
+cli.locale.scaffold_exists: "Locale already exists, refusing to overwrite: {code}"
+cli.locale.scaffold_copied: "copied {count} files: {code}"
+cli.locale.endonym_injected: "Injected endonym key admin.locale.name.{code} into every pack."
+cli.locale.scaffold_done: "Locale {code} scaffolded. Translate the *.yaml values (and set the real endonym), then run: python Heron.py --check-locale {code}"
 
 # ── Heron.py --check (version / MANIFEST status) ───────────────────
 cli.check.program_version: "Program version : {ver}"

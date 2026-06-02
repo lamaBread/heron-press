@@ -260,7 +260,7 @@ class SiteConfig:
     # v0.4.5: i18n + 카테고리 페이지네이션 디폴트.
     # v0.4.6: home_* 류 필드는 Articles/meta.yaml 로 이전됨 — site.yaml 에는
     # 진짜 '전역' (= 카테고리 류 전반에 적용되는 디폴트, 또는 사이트 메타) 만 남김.
-    lang: str = 'ko'
+    lang: str = 'en'
     category_per_page: int = 20
     category_preview_per_page: int = 5
     # v0.5.1: 이미지 자동 최적화 정책 (WebP + 다중 해상도 + lazy loading).
