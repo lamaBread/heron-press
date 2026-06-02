@@ -11,9 +11,16 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from scripts.report import BuildReport, ReportEntry, abort  # noqa: E402
+from scripts import i18n  # noqa: E402
 
 
 class ReportTests(unittest.TestCase):
+
+    def setUp(self):
+        # v1.9.2: render()/render_markdown() 가 헤딩/요약을 전역 i18n.t() 로
+        # 조회한다 — 다른 테스트가 도구 언어를 바꿔 둘 수 있으므로 ko(정본)로
+        # 고정해 이 클래스의 한국어 단언이 실행 순서와 무관히 성립하게 한다.
+        i18n.init('ko')
 
     def test_empty_renders_no_issue_message(self):
         r = BuildReport()

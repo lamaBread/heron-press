@@ -1,4 +1,4 @@
-# Heron v1.9.1 — 사용설명서
+# Heron v1.9.2 — 사용설명서
 
 **Heron** 은 **글마다 폴더 하나**를 만들어 본문·첨부를 관리하고, `python Heron.py` 한 번으로 사이트를 만드는 **PHP 기반 경량 웹 사이트 생성기**입니다.
 
@@ -165,6 +165,7 @@ heron-press/
 │   │   ├── images.py               ← WebP 변환 + <img> 후처리
 │   │   ├── cache.py                ← 글 단위 증분 캐시 (BuildCache)
 │   │   ├── report.py               ← BuildReport (issue/warning, render_markdown)
+│   │   ├── i18n.py                 ← (v1.9.0) 로케일 문자열 lookup (Surface 1/3; ko 정본 + 파서)
 │   │   ├── version.py              ← (v1.6.0) 스키마 버전 스탬프 + semver 비교
 │   │   ├── migrations/             ← (v1.6.0) 마이그레이션 엔진 (순서 스텝, user/ 만 변형)
 │   │   ├── update.py               ← (v1.6.0) GitHub 자가 업데이트 (다운로드/검증/오버레이)
@@ -181,9 +182,11 @@ heron-press/
 │   ├── admin/                   ← Pond — 로컬 글쓰기 도구 로직 (§ 17)
 │   │   ├── render_one.py            ← 단일 글 본문 렌더 (scripts.markdown 재사용)
 │   │   ├── slug_one.py              ← 폴더명 → slug (scripts.slugs 재사용)
-│   │   ├── lib/                     ← fs · proc · metayaml · articles (PHP)
+│   │   ├── lib/                     ← fs · proc · metayaml · articles · i18n (PHP)
 │   │   └── views/                   ← layout · list · new · edit · build · deploy (PHP)
-│   └── tests/                   ← 단위 테스트 (490) + run_diagnostics.py (6 항목)
+│   ├── locales/                 ← (v1.9.0) i18n 문자열 팩 (ko 정본 + en; 로더 = i18n.py / i18n.php)
+│   │   └── ko/ · en/                ← admin.yaml · site.yaml · build.yaml · cli.yaml (Surface 2 / 1 / 3 + CLI)
+│   └── tests/                   ← 단위 테스트 (514) + run_diagnostics.py (6 항목)
 │
 ├── dist/                    ← 빌드 산출물 (배포 대상 / 직접 수정 금지)
 │
@@ -789,7 +792,8 @@ curl -I https://your-domain.com/sitemap.xml     # 200 application/xml
 
 | 버전 | 날짜 | 요약 |
 |---|---|---|
-| **v1.9.1** | 2026-06-02 | **언어팩 안정화 + 운영자 메시지 다국어화.** *안정화:* 두 로케일 로더(PHP `i18n.php` / Python `i18n.py`)가 이제 **바이트 동일한 단일 파서**를 공유하며 escape 를 해석한다(큰따옴표 값 안 `\"` `\\` `\n` `\t`; 작은따옴표는 리터럴). 실서버에서 드러난 v1.9.0 버그 둘을 고친다 — `<code class="k">` 가 **리터럴 백슬래시**(`class=\"k\"`)로 출력돼 admin UI 전반의 `code.k`/`code.file` 스타일이 조용히 깨지던 문제, 그리고 Pillow abort 메시지의 **리터럴 `\n`**(줄바꿈 대신). 회귀 테스트로 PHP↔Python 파서 패리티 + 해석값에 백슬래시가 남지 않음을 강제한다. *확장(빠뜨렸던 표면):* 신설 `cli.yaml` 조각이 **운영자 대면 CLI/배포/업데이트/마이그레이션 출력을 언어팩으로 편입** — 배포(`deploy.py`/`rclone_bin.py`), 자가 업데이트(`update.py`), 마이그레이션 엔진 + 스텝 요약/상세, `Heron.py` 액션 출력(`--check`/`--migrate`/`--check-update`/`--deploy`/`--check-config`/`--clean`) — `Heron.py` 시작 시 도구 언어로 한 번 적재하는 전역 `i18n.t()` 로 조회한다(Pond 의 PHP `t()` 미러). 그래서 도구=`en` 이면 배포/업데이트/마이그레이션 패널이 **이제 영문**으로 나온다(i18n 설계 문서가 `deploy.py` 를 소비자로 적었지만 실제 미배선이던 부분). 빌드 쪽 두 표면은 설계상 정본 한국어 유지: argparse `--help`(Pond 패널에 안 뜨는 개발/CI 참조)와 빌더의 16단계 진행 라벨(다음 회차 — 빌드 패널의 경고/abort 는 이미 현지화됨). *그 외:* **설정** 언어 드롭다운이 코드 대신 자칭(`한국어 (ko)`/`English (en)`) 표시; orphan 이던 `admin.home.flow.serve.t` 키를 홈에 배선; `proc.php` 의 마지막 하드코딩 에러 로컬라이즈; `test_build_cli` 의 `--help` 가 더는 Windows 콘솔 인코딩에 의존하지 않음. user/ 스키마 무변경 → 새 마이그레이션 스텝 없음(스탬프 1.9.0 → 1.9.1); MANIFEST 84 → 86 파일(`ko/cli.yaml` + `en/cli.yaml`); 단위 503 → 512 + 진단 6/6. `lang=ko`·도구=`ko` 의 `dist/` 렌더 출력 불변(방문자 사이트 chrome 미변경). |
+| **v1.9.2** | 2026-06-02 | **빌드 콘솔 + 빌드 리포트 현지화 (v1.9.x 언어팩 라인).** 빌더 자신의 운영자 출력을 언어팩으로 편입 — 16단계 진행 라벨(`[ n/16] …`), 시작/완료/캐시 마일스톤, in-place 글 카운터, `[search]` 토크나이저 패리티 라인, **그리고 `build-report.md` 전체**(제목·메타·진행·단계별 시간 표·보완필요/살펴볼/PHP-빌드 헤딩 + 요약·시스템 결함 abort 접미)를 `build.yaml` 의 `build.step.*` / `build.console.*` / `build.parity.*` / `build.report.*` 로(빌더는 `tool_tr`, `report.py` / `search.py` 는 전역 `i18n.t()`). 그래서 도구=`en` 빌드가 **완전 영문** — 항상 보이는 마지막 Surface 3 불일치(빌드 패널이 영문 경고 + 한국어 진행을 혼용하던 것)를 해소한다. `ko` 값은 v1.9.1 과 byte-동일이라 한국어 콘솔은 불변(`[search]` 한 줄만 예외 — 영문→한국어, 나머지와 일치). 문서: § 3 트리에 `i18n.py` / `locales/` / `i18n.php` 추가, § 17-9 에 파서 escape 규칙과 세 표면 전체 범위를 명시. 설계상 보류(로드맵 기록): `images.*` 검증 abort 6줄 + 토크나이저 패리티-실패 detail 은 한국어 유지(나머지 abort *상세*는 이미 영문), 글 단위 `_issue`/`_warning` *메시지 본문*은 별개의 더 큰 표면; argparse `--help` 는 정본 한국어 유지. user/ 스키마 무변경 → 새 마이그레이션 스텝 없음(스탬프 1.9.1 → 1.9.2); MANIFEST 해시 갱신(86파일, 개수 불변); dist byte-동일(빌드 콘솔/리포트는 `dist/` 밖); 단위 512 → 514 + 진단 6/6. |
+| v1.9.1 | 2026-06-02 | 언어팩 안정화 + 운영자 메시지 다국어화. PHP/Python 로케일 로더를 바이트 동일 단일 파서로 통일(큰따옴표 값 escape `\"` `\\` `\n` `\t`, 작은따옴표=리터럴) — v1.9.0 버그 둘(admin `class` 속성의 리터럴 백슬래시, Pillow abort 의 리터럴 `\n`) 수정. 신설 `cli.yaml` 로 배포/업데이트/마이그레이션/CLI 운영자 출력을 전역 `i18n.t()` 로 편입(도구=`en` 이면 영문 패널). 스키마 무변경(스탬프 1.9.0 → 1.9.1); MANIFEST 84 → 86 파일; 단위 503 → 512. |
 | v1.9.0 | 2026-06-01 | 도구 다국어 — 언어팩. 한국어 기반이던 도구를 `system/locales/<locale>/*.yaml` 플랫 닷키 팩으로 현지화 — 세 표면(방문자 사이트 chrome / Pond admin UI / 빌드 메시지)에 **선택자 둘**: *사이트 언어*(`site.yaml: lang`)는 빌드 시점에 `dist/` 에 구워지고(결정성 유지), 신설 *도구 언어*는 런타임에 `user/.heron/locale`(기본 `ko`, **설정** 드롭다운) 로 읽는다. `ko` 정본 겸 폴백(키 부재 → 키 문자열), `en` 동봉, 로더 의존성 0(`i18n.py`/`i18n.php`). `m_1_9_0` 이 `user/.heron/locale=ko` 시드(멱등). `ko` 값이 v1.8.0 과 byte-동일이라 `lang=ko`·도구=`ko` 출력 불변. 스탬프 1.8.0 → 1.9.0; MANIFEST 74 → 84 파일. |
 | v1.8.0 | 2026-06-01 | Pond **설정**(`?a=settings`) + 시스템 개요 **홈**(`?a=home`) 추가 — `deploy.json` 구조화 폼 + `site.yaml` 원문 편집기(저장 시 `Heron.py --check-config` 로 빌드와 동일 검증 후 기록·백업), 좌상단 **Pond admin** 브랜드가 전체 흐름 시각화 홈으로 링크(글 목록은 nav `?a=list`) (§ 17-3 · § 17-8). user/ 스키마 무변경; 스탬프 1.7.2 → 1.8.0; dist byte-동일 to v1.7.0 (57파일); 단위 490 + 진단 6/6. |
 | v1.7.2 | 2026-06-01 | 자가 업데이트 후 "업데이트 가능" 배너 잔존 핫픽스 — `self_update` 가 시작의 `check_update` 로 `update.json` 캐시에 적어 둔 `update_available=true` 를 오버레이·마이그레이션 후 갱신하지 않아 재시작해도 배너가 안 사라지던 버그를, 오버레이 성공 직후 캐시를 새 버전 상태로 갱신해 수정(`update.py::self_update`); 배너의 `vv` 중복 표시도 `list.php` 에서 선행 'v' 제거. 스키마 무변경; 스탬프 1.7.1 → 1.7.2. dist byte-동일 to v1.7.0 (57파일). |
@@ -979,9 +983,11 @@ Heron+Pond 는 한국어로 설계됐지만 표시 문자열을 **로케일 팩*
 - **사이트 언어** — 방문자가 보는 `dist/` 의 chrome(검색 박스·푸터·페이지네이션·404·홈/카테고리 라벨). 기존 `site.yaml: lang` 으로 정해지며 **빌드 시점에 치환**된다(결정적 빌드 유지 — 같은 `lang` 이면 출력 byte 불변; `search.php` 는 BM25 인덱스처럼 문자열 테이블을 빌드 때 주입). 사이트 *콘텐츠*(글 본문)의 다국어와는 무관 — 도구가 만드는 UI chrome 의 언어다.
 - **도구 언어** — 운영자가 보는 Pond admin UI 와 빌드/CLI 메시지(경고·abort). 신설 `user/.heron/locale` 한 줄(BCP 47 코드, 없으면 `ko`)로 정해지고 **설정**(`?a=settings`) 의 드롭다운에서 고른다. 런타임 lookup 이라 빌드와 무관.
 
-**팩 형식.** `system/locales/<locale>/*.yaml` — 한 줄 `키: "값"` 의 플랫 닷(dot) 키. 한 폴더의 조각 파일(`admin.yaml`·`site.yaml`·`build.yaml`)을 머지한다. `ko` 가 정본 겸 모든 로케일의 폴백이고, 키가 없으면 **키 문자열 자체**를 돌려 화면이 절대 빈칸이 안 된다. `{name}` 자리표시자는 치환된다(예: `검색결과: {n}건`). 로더는 외부 의존성 0 — Python `system/scripts/i18n.py`, PHP `system/admin/lib/i18n.php` 가 같은 포맷을 공유한다.
+**팩 형식.** `system/locales/<locale>/*.yaml` — 한 줄 `키: "값"` 의 플랫 닷(dot) 키. 한 폴더의 조각 파일(`admin.yaml`·`site.yaml`·`build.yaml`·`cli.yaml`)을 머지한다. `ko` 가 정본 겸 모든 로케일의 폴백이고, 키가 없으면 **키 문자열 자체**를 돌려 화면이 절대 빈칸이 안 된다. `{name}` 자리표시자는 치환된다(예: `검색결과: {n}건`). 큰따옴표 값 안에서는 파서가 `\"` `\\` `\n` `\t` 를 해석하고(그 외 `\x` 는 백슬래시 보존), 작은따옴표 값은 리터럴이다 — 그래서 PHP·Python 로더가 **바이트 동일**하게 파싱한다(`system/admin/lib/i18n.php` / `system/scripts/i18n.py`, 둘 다 의존성 0; `test_i18n` 패리티 테스트가 강제).
 
-**새 언어 추가.** `system/locales/<코드>/` 에 `admin.yaml`·`site.yaml`·`build.yaml` 을 두고 `ko` 의 키를 번역하면 끝(누락 키는 자동으로 `ko` 폴백). 영어 팩(`en`)이 동봉돼 있다. `ko` 정본 ↔ 다른 팩의 키 패리티는 `system/tests/test_i18n.py` 가 검증한다.
+**세 표면.** (1) **방문자 사이트 chrome** — *사이트 언어*(`site.yaml: lang`), 빌드 시점에 `dist/` 에 구움; (2) **Pond admin UI** — *도구 언어*, PHP 전역 `t()`; (3) **빌드/CLI 운영자 메시지** — *도구 언어*, Python 전역 `i18n.t()`(및 빌더의 `tool_tr`). 표면 3 은 deploy/update/migration/CLI 출력과, v1.9.2 부터 빌더 자신의 **16단계 진행·마일스톤·요약·`build-report.md` 전체**까지 포함한다 — 그래서 도구=`en` 설치는 모든 운영자 표면이 영문으로 나온다. 유일한 의도적 예외는 argparse `--help` 텍스트(개발/CI 참조용, Pond 에 안 뜸)로 정본 한국어를 유지한다.
+
+**새 언어 추가.** `system/locales/<코드>/` 에 `admin.yaml`·`site.yaml`·`build.yaml`·`cli.yaml` 을 두고 `ko` 의 키를 번역하면 끝(누락 키는 자동으로 `ko` 폴백). 영어 팩(`en`)이 동봉돼 있다. `ko` 정본 ↔ 다른 팩의 키 패리티는 `system/tests/test_i18n.py` 가 검증한다.
 
 ---
 

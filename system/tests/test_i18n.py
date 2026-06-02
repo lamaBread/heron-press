@@ -129,6 +129,33 @@ class CanonicalInvarianceTests(unittest.TestCase):
             'strip 되었습니다: {{BODY}}.',
         )
 
+    def test_build_console_report_canonical_values(self):
+        # v1.9.2: 빌드 콘솔/리포트 신규 키의 ko 정본 — 옛 하드코딩과 byte-동일
+        # (도구=ko 빌드 콘솔/build-report.md 가 v1.9.1 과 동일해야 한다).
+        tr = i18n.load('ko')
+        self.assertEqual(tr.t('build.step.1'),
+                         '설정 로드 (site.yaml / 토크나이저 패리티)')
+        self.assertEqual(tr.t('build.step.8'), '글 렌더링')
+        self.assertEqual(tr.t('build.step.16'), '고아 산출물 정리')
+        self.assertEqual(tr.t('build.console.output'), '산출물: dist/ (Heron).')
+        self.assertEqual(
+            tr.t('build.console.done', art=12, cat=5, issue=0, warn=1,
+                 php='', elapsed=5.8),
+            '빌드 완료: 12 글, 5 카테고리, 0 보완 필요, 1 살펴볼 사항. (5.8s)')
+        self.assertEqual(tr.t('build.report.issues_header'),
+                         '── 보완이 필요한 항목 (산출물 일부 누락 가능) ──')
+        self.assertEqual(tr.t('build.report.abort_suffix'),
+                         '빌드 중단 (시스템 결함).')
+        self.assertEqual(tr.t('build.report.md_title'), '# Heron 빌드 리포트')
+
+    def test_build_console_report_en_translated(self):
+        # 신규 build.* 키가 en 으로 실제 번역됐는지(ko 폴백이 아닌지) 표본 확인.
+        en = i18n.load('en')
+        self.assertEqual(en.t('build.step.8'), 'Render articles')
+        self.assertEqual(en.t('build.console.output'), 'Output: dist/ (Heron).')
+        self.assertEqual(en.t('build.report.abort_suffix'),
+                         'Build aborted (system fault).')
+
 
 class EscapeDecodingTests(unittest.TestCase):
     """v1.9.1 — 큰따옴표 값 escape 해석 (\\" \\\\ \\n \\t), 작은따옴표는 리터럴."""

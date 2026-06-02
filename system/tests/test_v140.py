@@ -26,6 +26,7 @@ from scripts.models import (  # noqa: E402
     SiteConfig, SeoMeta, ArticleMeta, Article, CategoryMeta,
 )
 from scripts.report import BuildReport  # noqa: E402
+from scripts import i18n  # noqa: E402
 
 
 def _site(**overrides) -> SiteConfig:
@@ -441,6 +442,7 @@ class InternalLinkValidationTests(unittest.TestCase):
             b = Builder.__new__(Builder)
             b.dist = dist
             b.report = BuildReport()
+            b.tool_tr = i18n.load('ko')   # v1.9.2: _emit 가 build.console.* 를 조회
             b.articles = [
                 _article('srcart', '2026-01-01',
                          category_path=['Blog', 'srcart']),
@@ -516,6 +518,7 @@ class InternalLinkValidationTests(unittest.TestCase):
             b = Builder.__new__(Builder)
             b.dist = dist
             b.report = BuildReport()
+            b.tool_tr = i18n.load('ko')   # v1.9.2: _emit 가 build.console.* 를 조회
             b.articles = [
                 _article('srcart', '2026-01-01',
                          category_path=['Blog', 'srcart']),
@@ -540,6 +543,11 @@ class InternalLinkValidationTests(unittest.TestCase):
 # ════════════════════════════════════════════════════════════════
 
 class BuildReportPhpBuiltTests(unittest.TestCase):
+
+    def setUp(self):
+        # v1.9.2: render_markdown()/render() 의 헤딩·요약이 전역 i18n.t() 를
+        # 거치므로 ko(정본)로 고정 — 실행 순서 무관히 한국어 단언이 성립.
+        i18n.init('ko')
 
     def test_note_php_built_dedupes(self):
         r = BuildReport()

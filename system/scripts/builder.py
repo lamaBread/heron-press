@@ -2357,7 +2357,8 @@ class Builder:
             content_path = article.content_file
             # v0.7.2: in-place 진행 (TTY 전용). slug 은 meta 가 채워진 뒤라
             # 항상 존재. 캐시 hit/miss 총계는 빌드 종료 요약에서 보고된다.
-            self._live(f'  글 {_i}/{_n}  {m.slug}')
+            self._live(self.tool_tr.t(
+                'build.console.live_render', i=_i, n=_n, slug=m.slug))
 
             if not content_path or not content_path.exists():
                 self._issue(
@@ -2697,9 +2698,9 @@ class Builder:
 
         # v0.7.2: 단계 요약 (리포트 트랜스크립트에 한 줄로 남는다).
         if _n:
-            self._emit(f'        {_n} 글 처리 '
-                       f'(캐시 {self._cache_hits} hit / '
-                       f'{self._cache_misses} miss).')
+            self._emit(self.tool_tr.t(
+                'build.console.articles_done', n=_n,
+                hit=self._cache_hits, miss=self._cache_misses))
 
     # ── [6] Asset sync ────────────────────────────────────────
 
@@ -2796,8 +2797,9 @@ class Builder:
                         article_expected[slug],
                     )
                     img_done += 1
-                    self._live(f'  자산 글 {_i}/{_n}  {slug}  '
-                               f'(이미지 {img_done} 변환  {rel})')
+                    self._live(self.tool_tr.t(
+                        'build.console.live_asset_img', i=_i, n=_n,
+                        slug=slug, img=img_done, rel=rel))
             else:
                 # ProcessPoolExecutor.map 은 결과 순서를 입력 순서로 보장한다.
                 args = [
@@ -2814,12 +2816,15 @@ class Builder:
                             article_expected[slug],
                         )
                         img_done += 1
-                        self._live(f'  자산 글 {_i}/{_n}  {slug}  '
-                                   f'(이미지 {img_done} 변환  {rel})')
+                        self._live(self.tool_tr.t(
+                            'build.console.live_asset_img', i=_i, n=_n,
+                            slug=slug, img=img_done, rel=rel))
 
         # ─ 패스 3: 비-raster 복사 + per-article prune ────────────
         for _i, slug, src_file, dst_file, rel in copy_jobs:
-            self._live(f'  자산 글 {_i}/{_n}  {slug}  ({rel})')
+            self._live(self.tool_tr.t(
+                'build.console.live_asset_copy', i=_i, n=_n,
+                slug=slug, rel=rel))
             _copy_if_newer(src_file, dst_file)
         for article in self.articles:
             self._prune_article_assets(
@@ -2828,8 +2833,8 @@ class Builder:
 
         # v0.7.2: 단계 요약 (리포트 트랜스크립트 한 줄).
         if _n:
-            self._emit(f'        {_n} 글 자산 동기화 '
-                       f'(이미지 {img_done} 변환).')
+            self._emit(self.tool_tr.t(
+                'build.console.assets_done', n=_n, img=img_done))
 
     def _handle_image_result(self, slug, src_file, dst_file, url,
                              variants, err, expected_set):
@@ -3928,7 +3933,8 @@ class Builder:
                         p,
                     )
         if broken_total:
-            self._emit(f'        내부 링크 검증: {broken_total} 건 깨짐.')
+            self._emit(self.tool_tr.t(
+                'build.console.internal_links', n=broken_total))
 
     # ── [15] Global orphan pruning ────────────────────────────
 
@@ -3996,10 +4002,11 @@ class Builder:
         self._step_times = []
         self._step_current = ()
         self._build_started = datetime.datetime.now()
-        self._emit(f'빌드 시작 - Heron v{_SITE_VERSION} '
-                   f'({self._build_started.strftime("%Y-%m-%d %H:%M:%S")})')
+        self._emit(self.tool_tr.t(
+            'build.console.start', ver=_SITE_VERSION,
+            time=self._build_started.strftime('%Y-%m-%d %H:%M:%S')))
         if not self.cache.enabled:
-            self._emit('  (증분 캐시 비활성 - --no-cache)')
+            self._emit(self.tool_tr.t('build.console.no_cache'))
 
         # v0.8.2: per-Builder 리포트로 전환 (모듈 전역 폐지). 한 인스턴스를
         # 재사용해 build() 를 여러 번 호출해도 issue/warning 이 누적되지
@@ -4046,42 +4053,43 @@ class Builder:
         # 추가로 보여준다. `# [n]` 주석은 v0.4.x ~ v0.6.4 의 역사적 파이프라인
         # id (재배치 흔적) 라 그대로 두고, 사용자 대상 진행 번호는 1..16 으로
         # 단조 증가한다.
-        self._step(1, '설정 로드 (site.yaml / 토크나이저 패리티)')
+        # v1.9.2: 16단계 진행 라벨을 도구 언어(build.step.N)로 현지화.
+        self._step(1, self.tool_tr.t('build.step.1'))
         self._load_config()                    # [1]
-        self._step(2, '글 폴더 스캔 (user/articles/)')
+        self._step(2, self.tool_tr.t('build.step.2'))
         self._scan_articles()                  # [2]
-        self._step(3, 'meta.yaml 파싱')
+        self._step(3, self.tool_tr.t('build.step.3'))
         self._parse_frontmatter()              # [3]
-        self._step(4, '검증 / 카테고리 트리 구축')
+        self._step(4, self.tool_tr.t('build.step.4'))
         self._validate()                       # [4]
-        self._step(5, '자산 동기화 / 이미지 최적화 (WebP)')
+        self._step(5, self.tool_tr.t('build.step.5'))
         self._sync_assets()                    # [5] (v0.5.1: 옛 [6])
-        self._step(6, '사이트 공통 자산 복사')
+        self._step(6, self.tool_tr.t('build.step.6'))
         self._copy_site_assets()               # [6] (v0.5.1: 옛 [9])
-        self._step(7, '카테고리/홈 CSS 복사')
+        self._step(7, self.tool_tr.t('build.step.7'))
         self._sync_page_css()                  # [6b] (v0.6.4) 카테고리/홈 CSS
-        self._step(8, '글 렌더링')
+        self._step(8, self.tool_tr.t('build.step.8'))
         self._render_articles()                # [7] (v0.5.1: 옛 [5])
-        self._step(9, '카테고리 페이지')
+        self._step(9, self.tool_tr.t('build.step.9'))
         self._build_categories()               # [8]
-        self._step(10, '홈 페이지')
+        self._step(10, self.tool_tr.t('build.step.10'))
         self._build_home()                     # [9]
-        self._step(11, '404 페이지')
+        self._step(11, self.tool_tr.t('build.step.11'))
         self._build_404()                      # [10]
-        self._step(12, 'robots.txt / ads.txt')
+        self._step(12, self.tool_tr.t('build.step.12'))
         self._build_robots()                   # [11]
         self._build_ads_txt()                  # [11b] (v1.1.3) Google AdSense
-        self._step(13, 'sitemap.xml')
+        self._step(13, self.tool_tr.t('build.step.13'))
         self._build_sitemap()                  # [12]
-        self._step(14, 'RSS / Atom 피드')
+        self._step(14, self.tool_tr.t('build.step.14'))
         self._build_feeds()                    # [12b] (v0.5.3) RSS/Atom
-        self._step(15, '검색 인덱스 (dist/search.php)')
+        self._step(15, self.tool_tr.t('build.step.15'))
         self._build_search()                   # [13]
         # v1.1.5: exclude_urls 의 매칭 안 되는 entry 를 warning 으로 보고.
         # 5 페이지 렌더가 모두 끝난 직후라 self._adsense_seen_urls 가 완성된
         # 상태. _step 번호를 추가하지 않는 quiet check — 산출물에 영향 없음.
         self._check_exclude_urls()
-        self._step(16, '고아 산출물 정리')
+        self._step(16, self.tool_tr.t('build.step.16'))
         self._prune_orphans()                  # [14]
         # v1.4.0: 내부 링크 검증 — 글 페이지의 <a href="..."> 가 dist 에 실제
         # 대응 파일/디렉터리를 가지는지 확인. 깨진 링크는 글 단위 issue 로
@@ -4102,22 +4110,24 @@ class Builder:
         elapsed = (datetime.datetime.now() - self._build_started).total_seconds()
         self._emit()
         # v1.4.0: PHP 빌드 글 수도 끝줄에 표시 (작성자가 한눈에).
+        # v1.9.2: 마일스톤·요약을 도구 언어(build.console.*)로 현지화.
         php_segment = (
-            f', PHP 빌드 {php_built_count}건' if php_built_count else ''
+            self.tool_tr.t('build.console.done_php', n=php_built_count)
+            if php_built_count else ''
         )
-        self._emit(
-            f'빌드 완료: {art_count} 글, {cat_count} 카테고리, '
-            f'{issue_count} 보완 필요, {warn_count} 살펴볼 사항'
-            f'{php_segment}. ({elapsed:.1f}s)'
-        )
+        self._emit(self.tool_tr.t(
+            'build.console.done', art=art_count, cat=cat_count,
+            issue=issue_count, warn=warn_count, php=php_segment,
+            elapsed=elapsed,
+        ))
         if self.cache.enabled:
             total_attempts = self._cache_hits + self._cache_misses
             if total_attempts > 0:
-                self._emit(
-                    f'증분 캐시: {self._cache_hits} 히트 / '
-                    f'{self._cache_misses} 미스 (글 {total_attempts}건).'
-                )
-        self._emit('산출물: dist/ (Heron).')
+                self._emit(self.tool_tr.t(
+                    'build.console.cache', hit=self._cache_hits,
+                    miss=self._cache_misses, n=total_attempts,
+                ))
+        self._emit(self.tool_tr.t('build.console.output'))
 
         # v0.5.5: 빌드 종료 시 일원화 리포트 출력. meta.yaml 의 필드 부족 /
         # 빈 문자열 / 형식 오류 등 모든 콘텐츠 결함이 여기 모아진다.
@@ -4146,33 +4156,40 @@ class Builder:
         """
         report_path = self.base / 'build-report.md'
         finished = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        cache_line = '비활성 (--no-cache)'
+        # v1.9.2: build-report.md 골격(제목·메타·진행/시간 헤딩·푸터)을 도구
+        # 언어(build.report.*)로 현지화. report.render_markdown() 의 리포트
+        # 본문 헤딩도 같은 키 네임스페이스(전역 i18n.t()) — 한 문서가 도구
+        # 언어로 일관. dist/ 밖이라 결정성 무관.
+        cache_line = self.tool_tr.t('build.report.md_cache_disabled')
         if self.cache.enabled:
             attempts = self._cache_hits + self._cache_misses
             if attempts:
-                cache_line = (f'{self._cache_hits} 히트 / '
-                              f'{self._cache_misses} 미스 (글 {attempts}건)')
+                cache_line = self.tool_tr.t(
+                    'build.report.md_cache_hitmiss',
+                    hit=self._cache_hits, miss=self._cache_misses, n=attempts)
             else:
-                cache_line = '활성 (대상 글 없음)'
+                cache_line = self.tool_tr.t('build.report.md_cache_no_articles')
 
         lines = []
-        lines.append('# Heron 빌드 리포트')
+        lines.append(self.tool_tr.t('build.report.md_title'))
         lines.append('')
-        lines.append(f'- **버전**: v{_SITE_VERSION}')
-        lines.append(f'- **빌드 시각**: {finished}')
-        lines.append(f'- **소요**: {elapsed:.1f}s')
-        lines.append(f'- **결과**: {art_count} 글 · {cat_count} 카테고리')
-        meta_line = (
-            f'- **보완 필요**: {self.report.issue_count()}건 · '
-            f'**살펴볼 사항**: {self.report.warning_count()}건'
-        )
+        lines.append(self.tool_tr.t(
+            'build.report.md_meta_version', ver=_SITE_VERSION))
+        lines.append(self.tool_tr.t('build.report.md_meta_built', time=finished))
+        lines.append(self.tool_tr.t('build.report.md_meta_elapsed', elapsed=elapsed))
+        lines.append(self.tool_tr.t(
+            'build.report.md_meta_result', art=art_count, cat=cat_count))
+        meta_line = self.tool_tr.t(
+            'build.report.md_meta_followups',
+            issue=self.report.issue_count(), warn=self.report.warning_count())
         # v1.4.0: PHP 빌드 글 수 노출 (있을 때만).
         if self.report.php_built_count():
-            meta_line += f' · **PHP 빌드**: {self.report.php_built_count()}건'
+            meta_line += self.tool_tr.t(
+                'build.report.md_meta_php', n=self.report.php_built_count())
         lines.append(meta_line)
-        lines.append(f'- **증분 캐시**: {cache_line}')
+        lines.append(self.tool_tr.t('build.report.md_meta_cache', cache=cache_line))
         lines.append('')
-        lines.append('## 빌드 진행')
+        lines.append(self.tool_tr.t('build.report.md_progress_h2'))
         lines.append('')
         lines.append('```')
         lines.extend(self._console)
@@ -4183,9 +4200,9 @@ class Builder:
         # 생략. 단계 시간은 매 빌드 다른 값이므로 결정성 검증 대상 아님 —
         # build-report.md 자체가 dist 밖이라 무관.
         if self._step_times:
-            lines.append('## 단계별 시간')
+            lines.append(self.tool_tr.t('build.report.md_steptime_h2'))
             lines.append('')
-            lines.append('| 단계 | 설명 | 시간(s) |')
+            lines.append(self.tool_tr.t('build.report.md_steptime_thead'))
             lines.append('|---:|---|---:|')
             for n, label, secs in self._step_times:
                 lines.append(f'| {n} | {label} | {secs:.2f} |')
@@ -4194,16 +4211,15 @@ class Builder:
         lines.append('')
         lines.append('---')
         lines.append('')
-        lines.append('_이 문서는 매 빌드마다 자동 생성·갱신됩니다 '
-                     '(build.py 가 있는 폴더). dist/ 산출물에는 포함되지 '
-                     '않습니다._')
+        lines.append(self.tool_tr.t('build.report.md_footer'))
         doc = '\n'.join(lines) + '\n'
 
         try:
             report_path.write_text(doc, encoding='utf-8')
-            self._emit(f'리포트 문서: {report_path.name} 생성 '
-                       f'({report_path}).')
+            self._emit(self.tool_tr.t(
+                'build.console.report_written',
+                name=report_path.name, path=report_path))
         except OSError as e:
             # 파일 쓰기 실패는 콘텐츠 결함이 아니므로 abort 하지 않는다.
-            print(f'[경고] build-report.md 작성 실패: {e}',
+            print(self.tool_tr.t('build.console.report_write_failed', error=e),
                   file=sys.stderr, flush=True)

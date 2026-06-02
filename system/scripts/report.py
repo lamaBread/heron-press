@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from . import i18n  # v1.9.2: 리포트 헤딩/요약/abort 접미를 도구 언어로 (전역 t()).
+
 
 @dataclass
 class ReportEntry:
@@ -120,13 +122,12 @@ class BuildReport:
         php_built = sorted(set(self.php_built))
 
         if not issues and not warnings and not php_built:
-            print('빌드 리포트: 보완 필요 / 살펴볼 사항 / PHP 빌드 글 없음.',
-                  file=out)
+            print(i18n.t('build.report.none'), file=out)
             return
 
         if issues:
             print('', file=out)
-            print('── 보완이 필요한 항목 (산출물 일부 누락 가능) ──', file=out)
+            print(i18n.t('build.report.issues_header'), file=out)
             for header, grp in _group_by_target(issues):
                 print(f'  {header}', file=out)
                 for e in grp:
@@ -136,7 +137,7 @@ class BuildReport:
 
         if warnings:
             print('', file=out)
-            print('── 살펴볼 사항 (산출물 정상) ──', file=out)
+            print(i18n.t('build.report.warnings_header'), file=out)
             for header, grp in _group_by_target(warnings):
                 print(f'  {header}', file=out)
                 for e in grp:
@@ -149,17 +150,15 @@ class BuildReport:
         # became .php for operational visibility.
         if php_built:
             print('', file=out)
-            print(f'── PHP 로 빌드된 글 ({len(php_built)}건) ──', file=out)
+            print(i18n.t('build.report.php_header', n=len(php_built)), file=out)
             for slug in php_built:
                 print(f'  /{slug}/  (dist/{slug}/index.php)', file=out)
 
         print('', file=out)
-        summary = (
-            f'빌드 리포트 요약: 보완 필요 {self.issue_count()}건, '
-            f'살펴볼 사항 {self.warning_count()}건'
-        )
+        summary = i18n.t('build.report.summary',
+                         issue=self.issue_count(), warn=self.warning_count())
         if php_built:
-            summary += f', PHP 빌드 {len(php_built)}건'
+            summary += i18n.t('build.report.summary_php', n=len(php_built))
         summary += '.'
         print(summary, file=out)
 
@@ -179,7 +178,7 @@ class BuildReport:
         php_built = sorted(set(self.php_built))
 
         if not issues and not warnings and not php_built:
-            return '_빌드 리포트: 보완 필요 / 살펴볼 사항 / PHP 빌드 글 없음._'
+            return i18n.t('build.report.md_none')
 
         out = []
 
@@ -190,36 +189,33 @@ class BuildReport:
                 for e in grp:
                     out.append(f'- {e.message}')
                     if e.location:
-                        out.append(f'  - 위치: `{e.location}`')
+                        out.append(i18n.t('build.report.md_location',
+                                          loc=e.location))
                 out.append('')
 
         if issues:
-            out.append('## 보완이 필요한 항목 (산출물 일부 누락 가능)')
+            out.append(i18n.t('build.report.md_issues_h2'))
             out.append('')
             _emit_group(issues)
 
         if warnings:
-            out.append('## 살펴볼 사항 (산출물 정상)')
+            out.append(i18n.t('build.report.md_warnings_h2'))
             out.append('')
             _emit_group(warnings)
 
         if php_built:
-            out.append(f'## PHP 로 빌드된 글 ({len(php_built)}건)')
+            out.append(i18n.t('build.report.md_php_h2', n=len(php_built)))
             out.append('')
-            out.append('_의도된 출력 — `imgBox`/`imgSlideBox` 외 살아 있는 PHP '
-                       '구문이 있는 글은 `index.php` 로 떨어진다. 시스템 결함이 '
-                       '아니라 작성자(웹 개발자)의 명시적 선택._')
+            out.append(i18n.t('build.report.md_php_note'))
             out.append('')
             for slug in php_built:
                 out.append(f'- `/{slug}/` → `dist/{slug}/index.php`')
             out.append('')
 
-        summary = (
-            f'> **빌드 리포트 요약**: 보완 필요 {self.issue_count()}건, '
-            f'살펴볼 사항 {self.warning_count()}건'
-        )
+        summary = i18n.t('build.report.md_summary',
+                         issue=self.issue_count(), warn=self.warning_count())
         if php_built:
-            summary += f', PHP 빌드 {len(php_built)}건'
+            summary += i18n.t('build.report.summary_php', n=len(php_built))
         summary += '.'
         out.append(summary)
         return '\n'.join(out)
@@ -251,5 +247,5 @@ def abort(msg: str):
     recorded via BuildReport.issue(...) instead, letting the build continue.
     """
     print(f'[ABORT] {msg}', file=sys.stderr)
-    print('빌드 중단 (시스템 결함).', file=sys.stderr)
+    print(i18n.t('build.report.abort_suffix'), file=sys.stderr)
     sys.exit(1)

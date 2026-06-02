@@ -50,6 +50,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from . import i18n  # v1.9.2: 토크나이저 패리티 진단 라인을 도구 언어로 (전역 t()).
+
 
 _SEARCH_LATIN_RE = re.compile(r'[a-z0-9]+')
 _SEARCH_HAN_RE = re.compile(r'[가-힣]+')
@@ -334,7 +336,7 @@ def run_parity_test(runtime_dir: Path, php_bin: str, warn_fn, die_fn,
             timeout=10,
         )
         if probe.returncode != 0:
-            warn_fn('PHP not available — skipping tokenizer parity test.')
+            warn_fn(i18n.t('build.parity.php_missing'))
             return False
     except (FileNotFoundError, subprocess.TimeoutExpired):
         warn_fn('PHP not available — skipping tokenizer parity test.')
@@ -355,8 +357,7 @@ def run_parity_test(runtime_dir: Path, php_bin: str, warn_fn, die_fn,
             if cache_file.exists():
                 data = json.loads(cache_file.read_text(encoding='utf-8'))
                 if data.get('key') == key and data.get('passed') is True:
-                    print(f'[search] tokenizer parity (cached: '
-                          f'{len(PARITY_FIXTURES)} fixtures)')
+                    print(i18n.t('build.parity.cached', n=len(PARITY_FIXTURES)))
                     return True
         except (OSError, json.JSONDecodeError):
             pass  # 캐시 깨졌으면 그냥 실행 후 새로 저장.
@@ -391,7 +392,7 @@ def run_parity_test(runtime_dir: Path, php_bin: str, warn_fn, die_fn,
         except OSError:
             pass  # 캐시 쓰기 실패는 빌드 실패가 아님.
 
-    print(f'[search] tokenizer parity OK ({len(PARITY_FIXTURES)} fixtures)')
+    print(i18n.t('build.parity.ok', n=len(PARITY_FIXTURES)))
     return True
 
 
