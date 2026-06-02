@@ -1,133 +1,135 @@
-# Heron — 사이트 전역 설정 (예시값).
+# Heron — site-wide settings (example values).
 #
-# 이 파일은 그대로 빌드되는 데모 설정입니다. 자신의 사이트로 쓰려면
-# 아래 your-domain.com / Your Name 등을 실제 값으로 바꾸세요.
+# This file is the demo config that builds as-is. To use it for your own site,
+# replace your-domain.com / Your Name etc. below with your real values.
 #
-# 페이지 단위 오버라이드:
-#   - 메인페이지 (홈)         — user/articles/meta.yaml
-#   - 카테고리 인덱스 페이지   — user/articles/<카테고리경로>/meta.yaml
-#   - 글 페이지                — user/articles/<카테고리경로>/<글경로>/meta.yaml
+# Per-page overrides:
+#   - Home (main page)        — user/articles/meta.yaml
+#   - Category index pages    — user/articles/<category-path>/meta.yaml
+#   - Article pages           — user/articles/<category-path>/<article-path>/meta.yaml
 
 
-# 사이트 도메인 / DNS 호스트명 (예: your-domain.com)
+# Site domain / DNS hostname (e.g. your-domain.com)
 domain: your-domain.com
-# 사이트 base URL / scheme + host (canonical / sitemap / 피드에 사용)
+# Site base URL / scheme + host (used for canonical / sitemap / feeds)
 base_url: https://your-domain.com
 
-# 사이트 이름 / og:site_name 과 홈/카테고리/시스템 페이지 <title> 기본값
+# Site name / default for og:site_name and the home/category/system page <title>
 name: Heron Demo
-# 헤더 좌상단 큰 글씨 / 임의 문자열
+# Large text at the top-left of the header / arbitrary string
 main_title: Heron Demo
-# 기본 저자 / 임의 문자열 (글 seo.author 비우면 폴백)
+# Default author / arbitrary string (fallback when an article's seo.author is empty)
 default_author: Your Name
-# 기본 og:image / site-relative 또는 절대 URL (글/홈/카테고리 seo.og_image 비우면 폴백)
+# Default og:image / site-relative or absolute URL (fallback when seo.og_image is empty on article/home/category)
 default_og_image: /assets/default-og.png
 
-# 모든 페이지 <html lang> 디폴트 / BCP 47 코드 (예: ko / en / ja)
+# Default <html lang> for every page / BCP 47 code (e.g. ko / en / ja)
 lang: ko
 
-# 모든 페이지 <title> 기본 prefix — `{prefix}{title}{suffix}` / 임의 문자열
+# Default <title> prefix — `{prefix}{title}{suffix}` / arbitrary string
 default_title_prefix: ""
-# 모든 페이지 <title> 기본 suffix / 임의 문자열
+# Default <title> suffix / arbitrary string
 default_title_suffix: ""
 
-# 저작권자 표시 / 임의 문자열 (푸터에 사용)
+# Copyright holder / arbitrary string (used in the footer)
 copyright_holder: Your Name
-# 저작권 시작 연도 / 정수 (예: 2025)
+# Copyright start year / integer (e.g. 2025)
 copyright_year_start: 2025
 
-# 카테고리 자기 페이지의 페이지당 글 수 / 양수 (카테고리 meta.yaml 의 per_page 로 오버라이드)
+# Articles per page on a category's own page / positive integer (overridden by per_page in the category meta.yaml)
 category_per_page: 20
-# 카테고리가 상위 페이지에 section 임베드될 때 페이지당 글 수 / 양수
+# Articles per page when a category is embedded as a section on a parent page / positive integer
 category_preview_per_page: 5
 
-# 피드 summary (Atom <summary> / RSS <description>) 의 최대 글자 수 / 양수
+# Max characters for the feed summary (Atom <summary> / RSS <description>) / positive integer
 description_truncate: 150
 
-# v1.4.0: 글 푸터의 이전/다음 글 내비게이션 사이트 전역 토글.
-# 같은 부모 폴더(직계 형제) 글들을 date 오름차순으로 정렬해 prev=과거·next=
-# 미래로 글 본문 끝(글 마지막 section 다음)에 두 카드로 표시. noindex 글은
-# sibling 풀에서 제외 (UI 내비게이션은 색인 정책과 별개라 자기 자신은
-# 표시 가능하지만 남의 prev/next 에는 안 잡힌다). 글 단위 끄기는 두지
-# 않는다 — 페이지 단위 토글은 의미 없음. 블록 부재/false 시 비활성.
+# v1.4.0: site-wide toggle for the prev/next article navigation in the article footer.
+# Sorts same-parent-folder (direct sibling) articles by date ascending and shows two
+# cards at the end of the article body (after the last section) with prev=older,
+# next=newer. noindex articles are excluded from the sibling pool (UI navigation is
+# separate from indexing policy, so such an article can still show its own prev/next
+# but won't appear in others' prev/next). There is no per-article off switch — a
+# page-level toggle would be meaningless. Disabled when the block is absent or false.
 prev_next:
   enabled: true
 
-# v1.4.0 폐기 — 다섯 키 (reserved_slugs / warn_on_underscore_ref /
-# warn_on_missing_asset / error_404_title / search_title) 는 시스템
-# 내재 상수로 승격됐다 (system/scripts/builder.py 의 RESERVED_SLUGS /
-# DEFAULT_ERROR_404_TITLE / DEFAULT_SEARCH_TITLE + warn_on_underscore_ref
-# 의 "항상 경고" 행동 고정 + dead config 였던 warn_on_missing_asset).
-# 옛 site.yaml 에 키가 남아 있어도 파서가 silently 무시한다.
+# Removed in v1.4.0 — the five keys (reserved_slugs / warn_on_underscore_ref /
+# warn_on_missing_asset / error_404_title / search_title) were promoted to
+# system-internal constants (RESERVED_SLUGS / DEFAULT_ERROR_404_TITLE /
+# DEFAULT_SEARCH_TITLE in system/scripts/builder.py + the "always warn" behavior of
+# warn_on_underscore_ref fixed in place + warn_on_missing_asset, which was dead config).
+# If the keys linger in an old site.yaml the parser silently ignores them.
 
-# /robots.txt 본문 / 여러 줄 문자열
+# /robots.txt body / multi-line string
 robots_txt_main: |
   User-agent: *
   Allow: /
 
   Sitemap: https://your-domain.com/sitemap.xml
 
-# 이미지 자동 최적화 정책 (WebP + 다중 해상도 + lazy loading)
+# Automatic image optimization policy (WebP + multiple resolutions + lazy loading)
 images:
-  # 이미지 최적화 전체 토글 / true / false
+  # Master toggle for image optimization / true / false
   enabled: true
-  # 생성할 변종 너비 (px) 목록 / 양수 리스트
+  # List of variant widths (px) to generate / list of positive integers
   widths: [400, 800, 1600]
-  # 원본이 이보다 크면 다운스케일 / 0 또는 양수
+  # Downscale when the source is larger than this / 0 or positive integer
   max_width: 1600
-  # WebP 인코더 quality / 0 ~ 100
+  # WebP encoder quality / 0 - 100
   quality: 85
-  # 모든 <img> 에 loading="lazy" 자동 부착 / true / false
+  # Auto-attach loading="lazy" to every <img> / true / false
   lazy_loading: true
-  # srcset 과 짝이 되는 sizes 속성 디폴트 / CSS media query
+  # Default sizes attribute paired with srcset / CSS media query
   default_sizes: "(max-width: 800px) 100vw, 800px"
 
-# 글 페이지 <head> 의 schema.org JSON-LD (Article + BreadcrumbList). 기존 OG/canonical 등을 대체 않고 보강.
+# schema.org JSON-LD in the article page <head> (Article + BreadcrumbList). Augments rather than replaces the existing OG/canonical etc.
 jsonld:
-  # 전체 토글 / true / false. false 면 전 글 미출력 (글 단위 seo.jsonld:false 로 opt-out, 단 사이트 off 시 글 단위 복구 불가)
+  # Master toggle / true / false. When false no article emits it (opt out per article via seo.jsonld:false, but a site-level off can't be restored per article)
   enabled: true
 
-# PHP 서명 변수 / `{변수명: 문자열}` 맵.
-# 원본 PHP 서버는 PHP/GlobalVariables.php 를 auto_prepend 해 글 본문
-# imgBox 캡션 안 `{$site_credit}` 같은 토큰을 런타임에 치환했다. 정적
-# 빌드엔 그 런타임이 없으므로 값을 여기 옮겨 적으면 빌드 시점에 캡션에
-# 치환된다. 정의 안 된 변수는 빈 문자열(PHP 미정의 변수 echo 동작과
-# 동일). 변수명 앞 `$` 는 생략. (user/articles/About 예시 글이 사용)
+# PHP signature variables / `{var_name: string}` map.
+# The original PHP server auto_prepended PHP/GlobalVariables.php to substitute tokens
+# like `{$site_credit}` inside article-body imgBox captions at runtime. The static
+# build has no such runtime, so copying the values here substitutes them into captions
+# at build time. Undefined variables become the empty string (matching PHP's echo
+# behavior for undefined variables). Omit the leading `$` from the variable name.
+# (Used by the user/articles/About example article.)
 php_globals:
   site_credit: "Illustrations by the Heron Demo team"
 
-# Google AdSense 통합 (v1.1.3, v1.1.5 에 URL 기반 제외 리스트로 교체).
-# 세 필드 모두 빈 문자열/빈 리스트/키 부재 시 자동 비활성 — 아래는 기본
-# 비활성(광고 미통합) 상태다. 광고를 켜려면 ads_txt 와 head_script 에
-# 자신의 AdSense 퍼블리셔 값을 채우면 된다. 별도 enabled 마스터 토글은
-# 두지 않는다 (SeoMeta 의 3-state None/''/'text' 원칙과 일관).
+# Google AdSense integration (v1.1.3, replaced in v1.1.5 with a URL-based exclude list).
+# Auto-disabled when all three fields are an empty string / empty list / absent key —
+# the below is the default disabled (no ads) state. To turn ads on, fill ads_txt and
+# head_script with your own AdSense publisher values. There is no separate enabled
+# master toggle (consistent with SeoMeta's 3-state None/''/'text' principle).
 google_adsense:
-  # /ads.txt 본문 / 여러 줄 문자열 (literal `|` 블록 권장 — trailing
-  # newline 자동 보존). 빈 문자열이면 dist/ads.txt 미생성 + 이전 빌드의
-  # 잔존 ads.txt 가 있으면 자동 삭제. 외부에 노출되는 사이트 루트 정적
-  # 파일이므로 https://your-domain.com/ads.txt 로 직접 검증 가능.
-  # 예: google.com, pub-0000000000000000, DIRECT, 0000000000000000
+  # /ads.txt body / multi-line string (a literal `|` block is recommended — trailing
+  # newline preserved automatically). An empty string produces no dist/ads.txt and
+  # auto-deletes a leftover ads.txt from a previous build. Being a site-root static
+  # file exposed externally, it's directly verifiable at https://your-domain.com/ads.txt.
+  # e.g. google.com, pub-0000000000000000, DIRECT, 0000000000000000
   ads_txt: ""
-  # 모든 페이지 <head> 에 raw 그대로 삽입할 자동광고 스크립트 (escape
-  # 없음 — author 가 명시한 문자열을 신뢰). 빈 문자열이면 5 페이지 모두
-  # 미주입 (placeholder 라인 자체가 제거되어 빈 줄도 남지 않음). 적용
-  # 대상 = 글·홈·카테고리·404·search.php. Pond.php·system/admin/ 은 dist
-  # 에 누수되지 않으므로 자연 제외. 예:
+  # Auto-ads script injected raw into every page <head> (no escaping — the author's
+  # given string is trusted). An empty string injects into none of the 5 pages (the
+  # placeholder line itself is removed, leaving no blank line). Applies to
+  # article/home/category/404/search.php. Pond.php and system/admin/ never leak into
+  # dist, so they're naturally excluded. e.g.:
   #   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-0000000000000000" crossorigin="anonymous"></script>
   head_script: ""
-  # v1.1.5 신설 — head_script 주입에서 제외할 페이지의 URL 목록 / 문자열
-  # 리스트. site-relative 절대 경로 ('/' 로 시작), case-sensitive · trailing
-  # slash 포함 정확 일치 매칭. 매칭된 URL 의 페이지 head 에 로더 스크립트가
-  # 들어가지 않아 Google auto-ads JS 자체가 로드되지 않음 = 광고 원천 차단.
-  # 빈 리스트/키 부재면 v1.1.3 과 동일 (5 페이지 전체 주입). 매칭 안 되는
-  # URL (오타·삭제된 글) 은 빌드 종료 시 build-report.md "살펴볼 사항" 으로
-  # 자동 보고. 인-페이지 광고 위치는 여전히 Google auto-ads 가 결정하며, 이
-  # 필드는 "어느 URL 에 로더를 둘지" 의 페이지 단위 on/off 만 제어한다.
-  # 페이지별 canonical URL 형식:
-  #   홈        = /
-  #   글        = /<slug>/             (예: /about/, /welcome-to-heron/)
-  #   카테고리  = /<slug_path>/        (예: /blog/, /blog/tutorials/)
+  # Added in v1.1.5 — list of page URLs to exclude from head_script injection / list of
+  # strings. Site-relative absolute paths (starting with '/'), matched case-sensitively
+  # and exactly including the trailing slash. The loader script is not placed in the head
+  # of a matched URL's page, so Google auto-ads JS itself never loads = ads blocked at the
+  # source. An empty list / absent key behaves like v1.1.3 (inject into all 5 pages). A
+  # non-matching URL (typo / deleted article) is auto-reported at build end under the
+  # build-report.md "items to review". In-page ad placement is still decided by Google
+  # auto-ads; this field only controls the per-page on/off of "which URLs get the loader".
+  # Per-page canonical URL forms:
+  #   home      = /
+  #   article   = /<slug>/             (e.g. /about/, /welcome-to-heron/)
+  #   category  = /<slug_path>/        (e.g. /blog/, /blog/tutorials/)
   #   404       = /404.html
-  #   검색      = /search.php
-  # 예: ['/', '/404.html', '/search.php', '/about/'] — 홈/404/검색/about 차단.
+  #   search    = /search.php
+  # e.g. ['/', '/404.html', '/search.php', '/about/'] — blocks home/404/search/about.
   exclude_urls: []
