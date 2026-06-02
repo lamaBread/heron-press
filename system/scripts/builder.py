@@ -1070,13 +1070,13 @@ class Builder:
             try:
                 widths = sorted({int(w) for w in widths_raw if int(w) > 0})
             except (TypeError, ValueError):
-                abort(f"site.yaml: images.widths 는 양의 정수 리스트여야 합니다 "
-                      f"(받은 값: {widths_raw!r})")
+                abort(self.tool_tr.t('build.abort.images_widths_type',
+                      received=widths_raw))
             if not widths:
-                abort("site.yaml: images.widths 가 비어 있습니다")
+                abort(self.tool_tr.t('build.abort.images_widths_empty'))
         else:
-            abort(f"site.yaml: images.widths 는 리스트여야 합니다 "
-                  f"(받은 값: {widths_raw!r})")
+            abort(self.tool_tr.t('build.abort.images_widths_list',
+                  received=widths_raw))
 
         max_width_raw = raw.get('max_width')
         if max_width_raw is None:
@@ -1085,8 +1085,8 @@ class Builder:
             try:
                 max_width = int(max_width_raw)
             except (TypeError, ValueError):
-                abort(f"site.yaml: images.max_width 는 정수여야 합니다 "
-                      f"(받은 값: {max_width_raw!r})")
+                abort(self.tool_tr.t('build.abort.images_max_width_int',
+                      received=max_width_raw))
 
         quality_raw = raw.get('quality')
         if quality_raw is None:
@@ -1095,11 +1095,11 @@ class Builder:
             try:
                 quality = int(quality_raw)
             except (TypeError, ValueError):
-                abort(f"site.yaml: images.quality 는 정수여야 합니다 "
-                      f"(받은 값: {quality_raw!r})")
+                abort(self.tool_tr.t('build.abort.images_quality_int',
+                      received=quality_raw))
             if not (0 <= quality <= 100):
-                abort(f"site.yaml: images.quality 는 0~100 범위여야 합니다 "
-                      f"(받은 값: {quality})")
+                abort(self.tool_tr.t('build.abort.images_quality_range',
+                      received=quality))
 
         sizes = raw.get('default_sizes')
         if sizes is None:

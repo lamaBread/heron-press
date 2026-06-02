@@ -339,7 +339,7 @@ def run_parity_test(runtime_dir: Path, php_bin: str, warn_fn, die_fn,
             warn_fn(i18n.t('build.parity.php_missing'))
             return False
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        warn_fn('PHP not available — skipping tokenizer parity test.')
+        warn_fn(i18n.t('build.parity.php_unavailable'))
         return False
 
     php_version = ''
@@ -373,7 +373,7 @@ def run_parity_test(runtime_dir: Path, php_bin: str, warn_fn, die_fn,
             mismatches.append((fixture, py_tokens, php_tokens))
 
     if mismatches:
-        lines = ['토크나이저 패리티 실패 (Python ≠ PHP):']
+        lines = [i18n.t('build.parity.fail_header')]
         for fx, py, php in mismatches:
             lines.append(f"  input: {repr(fx)}")
             lines.append(f"    Python: {py}")

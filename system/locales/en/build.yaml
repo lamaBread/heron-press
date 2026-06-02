@@ -16,6 +16,15 @@ build.warn.non_ascii_slug: "URL slug contains non-ASCII characters: '{folder}' -
 build.warn.excluded_asset_ref: "Body references an asset excluded from the build: {ref}"
 build.warn.unfilled_placeholder: "An unfilled placeholder was found in the template and stripped to an empty string: {{{{{name}}}}}."
 
+# ── Image-config validation aborts (builder._parse_image_config) ───
+# {received} renders via .format's !r conversion = repr() (preserves the original f-string {x!r}).
+build.abort.images_widths_type: "site.yaml: images.widths must be a list of positive integers (got: {received!r})"
+build.abort.images_widths_empty: "site.yaml: images.widths is empty"
+build.abort.images_widths_list: "site.yaml: images.widths must be a list (got: {received!r})"
+build.abort.images_max_width_int: "site.yaml: images.max_width must be an integer (got: {received!r})"
+build.abort.images_quality_int: "site.yaml: images.quality must be an integer (got: {received!r})"
+build.abort.images_quality_range: "site.yaml: images.quality must be in the range 0-100 (got: {received})"
+
 # ── Build 16-step progress labels (builder._step) ──────────────────
 # The label in `[ n/16] {label}`. Used by both the console and the
 # build-report.md "per-step timing" table.
@@ -55,7 +64,10 @@ build.console.report_write_failed: "[warning] Failed to write build-report.md: {
 # ── Tokenizer parity diagnostics (search.run_parity_test, global i18n.t()) ──
 build.parity.ok: "[search] tokenizer parity OK ({n} fixtures)"
 build.parity.cached: "[search] tokenizer parity (cached: {n} fixtures)"
+# php_missing = `php -v` returned non-zero (installed but erroring). php_unavailable = cannot run at all (missing/timeout).
 build.parity.php_missing: "PHP not available — skipping tokenizer parity test."
+build.parity.php_unavailable: "PHP not available — skipping tokenizer parity test."
+build.parity.fail_header: "Tokenizer parity failed (Python ≠ PHP):"
 
 # ── Build report (report.py render/render_markdown + builder._write_build_report) ──
 # render() — console (stderr) summary. render_markdown()/_write_build_report — build-report.md.

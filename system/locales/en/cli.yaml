@@ -4,6 +4,22 @@
 # (user/.heron/locale) via the global i18n.t() (v1.9.1). ko is canonical.
 # Format: flat dotted keys -> quoted strings. {name} = .format. \n = newline.
 
+# ── Heron.py --help (argparse description/epilog/option help) ──────
+# main() loads i18n before parse_args, so these resolve at parser-build time.
+cli.help.description: "Build a Heron static site (targets PHP at runtime)."
+cli.help.epilog: "Related commands:\n  python -m unittest discover -s system/tests   # unit tests\n  python system/tests/run_diagnostics.py        # integration diagnostics"
+cli.help.clean: "Wipe both dist/ and .build_cache/, then build (full rebuild)."
+cli.help.clean_cache: "Discard only .build_cache/, then build (keep dist/)."
+cli.help.no_cache: "Disable incremental cache lookup/store (v0.6.5 behavior)."
+cli.help.check: "Print program/schema version status + MANIFEST integrity, then exit."
+cli.help.migrate: "Migrate the user/ schema up to the program version, then exit."
+cli.help.dry_run: "With --migrate: preview changes without applying them."
+cli.help.check_update: "Check GitHub for the latest version, then exit (refreshes Pond's banner cache)."
+cli.help.update: "Download the latest release, overlay it, migrate, then exit."
+cli.help.fetch_rclone: "Pre-fetch the rclone binary (download + SHA256 verify), then exit. Idempotent."
+cli.help.deploy: "Incrementally sync dist/ to the server, then exit (preview with --dry-run)."
+cli.help.check_config: "Parse/validate a candidate site.yaml from stdin exactly as the build does, then exit (0=valid). Does not touch the on-disk site.yaml — Pond's settings save gate."
+
 # ── Heron.py --check (version / MANIFEST status) ───────────────────
 cli.check.program_version: "Program version : {ver}"
 cli.check.schema_stamp: "Schema stamp    : {schema}  (user/.heron/version)"

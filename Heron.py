@@ -78,52 +78,51 @@ from scripts import i18n  # noqa: E402
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    # v1.9.3: description/epilog/옵션 help 를 cli.help.* 로 현지화. main() 이
+    # parse_args 보다 먼저 i18n 을 적재하므로 여기서 도구 언어로 조회된다.
     parser = argparse.ArgumentParser(
         prog='Heron.py',
-        description='Heron 정적 사이트 빌드 (런타임 PHP 대상).',
-        epilog=('관련 명령:\n'
-                '  python -m unittest discover -s system/tests   # 단위 테스트\n'
-                '  python system/tests/run_diagnostics.py        # 통합 진단'),
+        description=i18n.t('cli.help.description'),
+        epilog=i18n.t('cli.help.epilog'),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         allow_abbrev=False,
     )
     parser.add_argument(
         '--clean', action='store_true',
-        help='dist/ 와 .build_cache/ 를 모두 지운 뒤 빌드 (완전 재빌드).')
+        help=i18n.t('cli.help.clean'))
     parser.add_argument(
         '--clean-cache', action='store_true',
-        help='.build_cache/ 만 폐기한 뒤 빌드 (dist/ 는 유지).')
+        help=i18n.t('cli.help.clean_cache'))
     parser.add_argument(
         '--no-cache', action='store_true',
-        help='증분 캐시 lookup/store 비활성 (v0.6.5 동작).')
+        help=i18n.t('cli.help.no_cache'))
     # v1.6.0: 버전/업그레이드 액션 (build 대신 실행되고 종료).
     parser.add_argument(
         '--check', action='store_true',
-        help='프로그램/스키마 버전 상태 + MANIFEST 무결성을 출력하고 종료.')
+        help=i18n.t('cli.help.check'))
     parser.add_argument(
         '--migrate', action='store_true',
-        help='user/ 스키마를 프로그램 버전까지 마이그레이션하고 종료.')
+        help=i18n.t('cli.help.migrate'))
     parser.add_argument(
         '--dry-run', action='store_true',
-        help='--migrate 와 함께: 적용 없이 변경 미리보기.')
+        help=i18n.t('cli.help.dry_run'))
     parser.add_argument(
         '--check-update', action='store_true',
-        help='GitHub 최신 버전을 확인하고 종료 (Pond 배너 캐시 갱신).')
+        help=i18n.t('cli.help.check_update'))
     parser.add_argument(
         '--update', action='store_true',
-        help='최신 릴리스를 받아 오버레이 후 마이그레이션하고 종료.')
+        help=i18n.t('cli.help.update'))
     # v1.7.0: dist 서버 배포 (rclone SFTP 증분 동기화).
     parser.add_argument(
         '--fetch-rclone', action='store_true',
-        help='rclone 바이너리를 선확보(다운로드+SHA256 검증)하고 종료. 멱등.')
+        help=i18n.t('cli.help.fetch_rclone'))
     parser.add_argument(
         '--deploy', action='store_true',
-        help='dist/ 를 서버에 증분 동기화하고 종료 (--dry-run 으로 미리보기).')
+        help=i18n.t('cli.help.deploy'))
     # v1.8.0: 후보 site.yaml(stdin)을 빌드와 동일 경로로 검증 (Pond 설정 저장 게이트).
     parser.add_argument(
         '--check-config', action='store_true',
-        help='stdin 의 site.yaml 후보를 빌드와 동일하게 파싱·검증하고 종료 '
-             '(0=유효). 디스크 site.yaml 은 건드리지 않음 — Pond 설정 저장 게이트.')
+        help=i18n.t('cli.help.check_config'))
     return parser
 
 
@@ -245,15 +244,18 @@ def main(argv=None) -> int:
         except (AttributeError, ValueError):
             pass
 
-    args = _build_arg_parser().parse_args(argv)
     base = Path(__file__).parent
 
     # v1.9.1: 운영자 대면 CLI/배포/업데이트/마이그레이션 메시지를 도구 언어
     # (user/.heron/locale)로 적재한다 — 이후 모든 액션(+deploy/update/rclone/
     # migrations)이 전역 i18n.t() 로 조회. Pond 가 도구 언어를 en 으로 두면
-    # 빌드/배포/업데이트 패널 출력도 영문이 된다. (argparse --help 는 개발/CI
-    # 참조 표면이라 의도적으로 정본 한국어 유지.)
+    # 빌드/배포/업데이트 패널 출력도 영문이 된다.
+    # v1.9.3: argparse --help(description/epilog/옵션 help)도 cli.help.* 로
+    # 현지화했으므로, 파서가 텍스트를 생성 시점에 고정하기 전에 i18n 을 적재해야
+    # 한다 — 적재를 parse_args 보다 앞으로 둔다 (reconfigure → init → 파서 생성).
     i18n.init_from_base(base)
+
+    args = _build_arg_parser().parse_args(argv)
 
     # v1.6.0: 버전/업그레이드 액션은 build 대신 실행되고 종료 (우선순위 순).
     if args.check:

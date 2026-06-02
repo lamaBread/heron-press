@@ -156,6 +156,49 @@ class CanonicalInvarianceTests(unittest.TestCase):
         self.assertEqual(en.t('build.report.abort_suffix'),
                          'Build aborted (system fault).')
 
+    def test_cli_help_abort_canonical_values(self):
+        # v1.9.3: argparse --help + 잔여 abort 신규 키의 ko 정본 — 옛 하드코딩과
+        # byte-동일 (도구=ko 의 --help / 이미지 abort / 패리티 출력이 불변).
+        tr = i18n.load('ko')
+        self.assertEqual(tr.t('cli.help.description'),
+                         'Heron 정적 사이트 빌드 (런타임 PHP 대상).')
+        self.assertEqual(
+            tr.t('cli.help.clean'),
+            'dist/ 와 .build_cache/ 를 모두 지운 뒤 빌드 (완전 재빌드).')
+        # epilog 의 \n 은 개행으로 해석되고 # 라벨/정렬 공백이 보존돼야 한다.
+        self.assertEqual(
+            tr.t('cli.help.epilog'),
+            '관련 명령:\n'
+            '  python -m unittest discover -s system/tests   # 단위 테스트\n'
+            '  python system/tests/run_diagnostics.py        # 통합 진단')
+        # 이미지 abort: {received!r} 가 repr() 로 렌더 (옛 f-string {x!r} 보존).
+        self.assertEqual(
+            tr.t('build.abort.images_widths_type', received=['a']),
+            "site.yaml: images.widths 는 양의 정수 리스트여야 합니다 "
+            "(받은 값: ['a'])")
+        self.assertEqual(
+            tr.t('build.abort.images_quality_range', received=150),
+            'site.yaml: images.quality 는 0~100 범위여야 합니다 (받은 값: 150)')
+        self.assertEqual(tr.t('build.parity.fail_header'),
+                         '토크나이저 패리티 실패 (Python ≠ PHP):')
+        self.assertEqual(
+            tr.t('build.parity.php_unavailable'),
+            'PHP 실행 불가 — 토크나이저 패리티 검증을 건너뜁니다.')
+
+    def test_cli_help_abort_en_translated(self):
+        # v1.9.3: 신규 cli.help.* / abort 키가 en 으로 번역됐는지(ko 폴백 아닌지).
+        en = i18n.load('en')
+        self.assertEqual(en.t('cli.help.description'),
+                         'Build a Heron static site (targets PHP at runtime).')
+        self.assertEqual(
+            en.t('build.abort.images_quality_range', received=150),
+            'site.yaml: images.quality must be in the range 0-100 (got: 150)')
+        self.assertEqual(en.t('build.parity.fail_header'),
+                         'Tokenizer parity failed (Python ≠ PHP):')
+        # php_unavailable 은 php_missing 과 같은 영문 텍스트(조건만 다름).
+        self.assertEqual(en.t('build.parity.php_unavailable'),
+                         'PHP not available — skipping tokenizer parity test.')
+
 
 class EscapeDecodingTests(unittest.TestCase):
     """v1.9.1 — 큰따옴표 값 escape 해석 (\\" \\\\ \\n \\t), 작은따옴표는 리터럴."""

@@ -81,6 +81,29 @@ class ArgParserTests(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         self.assertIn('Heron.py', buf.getvalue())
 
+    def test_help_text_follows_tool_language(self):
+        # v1.9.3: --help 의 description/epilog/옵션 help 가 도구 언어로 적재된다.
+        # 파서는 생성 시점에 텍스트를 고정하므로, init 후 새 파서를 만들어 확인한다
+        # (main() 도 parse_args 보다 먼저 i18n 을 적재하는 것과 같은 순서). 출력은
+        # UTF-8 StringIO 로 받아 콘솔 인코딩과 무관.
+        from scripts import i18n
+        try:
+            i18n.init('en')
+            parser = build._build_arg_parser()
+            buf = io.StringIO()
+            with self.assertRaises(SystemExit) as cm, \
+                    contextlib.redirect_stdout(buf):
+                parser.parse_args(['--help'])
+            self.assertEqual(cm.exception.code, 0)
+            # argparse 가 옵션 help 를 콘솔 폭에 맞춰 줄바꿈하므로, 공백을
+            # 정규화해 줄바꿈 위치와 무관하게 부분 문자열을 검증한다.
+            flat = ' '.join(buf.getvalue().split())
+            self.assertIn('Build a Heron static site', flat)   # description
+            self.assertIn('full rebuild', flat)                # --clean help
+            self.assertIn('unit tests', flat)                  # epilog '# unit tests'
+        finally:
+            i18n.init('ko')   # 전역 오염 방지 — 다른 테스트에 영향 없도록 복원
+
 
 if __name__ == '__main__':
     unittest.main()

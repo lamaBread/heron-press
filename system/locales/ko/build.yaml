@@ -16,6 +16,15 @@ build.warn.non_ascii_slug: "URL slug 에 비ASCII 문자 포함: '{folder}' → 
 build.warn.excluded_asset_ref: "본문이 빌드에서 제외된 자산을 참조: {ref}"
 build.warn.unfilled_placeholder: "템플릿에 채우지 못한 placeholder 가 발견되어 빈 문자열로 strip 되었습니다: {{{{{name}}}}}."
 
+# ── 이미지 설정 검증 abort (builder._parse_image_config) ───────────
+# {received} 는 .format 의 !r 변환으로 repr() 출력 (원래 f-string {x!r} 보존).
+build.abort.images_widths_type: "site.yaml: images.widths 는 양의 정수 리스트여야 합니다 (받은 값: {received!r})"
+build.abort.images_widths_empty: "site.yaml: images.widths 가 비어 있습니다"
+build.abort.images_widths_list: "site.yaml: images.widths 는 리스트여야 합니다 (받은 값: {received!r})"
+build.abort.images_max_width_int: "site.yaml: images.max_width 는 정수여야 합니다 (받은 값: {received!r})"
+build.abort.images_quality_int: "site.yaml: images.quality 는 정수여야 합니다 (받은 값: {received!r})"
+build.abort.images_quality_range: "site.yaml: images.quality 는 0~100 범위여야 합니다 (받은 값: {received})"
+
 # ── 빌드 16단계 진행 라벨 (builder._step) ──────────────────────────
 # `[ n/16] {라벨}` 의 라벨. 콘솔 + build-report.md "단계별 시간" 표에 동일 사용.
 build.step.1: "설정 로드 (site.yaml / 토크나이저 패리티)"
@@ -54,7 +63,10 @@ build.console.report_write_failed: "[경고] build-report.md 작성 실패: {err
 # ── 토크나이저 패리티 진단 (search.run_parity_test, 전역 i18n.t()) ──
 build.parity.ok: "[search] 토크나이저 패리티 OK ({n} fixtures)"
 build.parity.cached: "[search] 토크나이저 패리티 (캐시됨: {n} fixtures)"
+# php_missing = `php -v` 가 0 이외 반환(설치됐으나 오류). php_unavailable = 실행 불가(미설치/타임아웃).
 build.parity.php_missing: "PHP 없음 — 토크나이저 패리티 검증 생략."
+build.parity.php_unavailable: "PHP 실행 불가 — 토크나이저 패리티 검증을 건너뜁니다."
+build.parity.fail_header: "토크나이저 패리티 실패 (Python ≠ PHP):"
 
 # ── 빌드 리포트 (report.py render/render_markdown + builder._write_build_report) ──
 # render() — 콘솔(stderr) 요약. render_markdown()/_write_build_report — build-report.md.
