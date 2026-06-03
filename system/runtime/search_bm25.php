@@ -319,10 +319,15 @@ function highlight_html(string $text, string $q): string {
         fn($p) => preg_quote(htmlspecialchars($p, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'), '/'),
         $patterns
     );
-    return preg_replace(
+    // preg_replace 는 PCRE 한계 초과(backtrack/recursion) 시 null 을 돌려준다.
+    // 함수 반환형이 string 이라 strict_types 하에선 null 반환이 TypeError →
+    // 500 이 된다 (기본 한계에선 도달 불가하나, 서버의 비표준 pcre.* 설정
+    // 대비 방어). 실패 시 하이라이트 없는 안전한 이스케이프본으로 폴백한다.
+    $out = preg_replace(
         '/(' . implode('|', $alts) . ')/iu',
         '<mark>$1</mark>',
         $escaped
     );
+    return $out ?? $escaped;
 }
 }

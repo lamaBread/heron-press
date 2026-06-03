@@ -251,7 +251,7 @@ if ($action === 'visibility') {
     $abs = require_post_abs($id);
     $name = basename(str_replace('\\', '/', $id));
     $parent = trim(dirname(str_replace('\\', '/', $id)), '.');
-    $newName = $name[0] === '_' ? ltrim($name, '_') : '_' . $name;
+    $newName = $name[0] === '_' ? substr($name, 1) : '_' . $name;
     if ($newName === '' || $newName === '_') {
         $_SESSION['flash_errs'] = [t('admin.visibility.err.empty')];
         redirect('?a=list');

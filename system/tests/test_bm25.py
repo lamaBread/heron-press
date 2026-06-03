@@ -30,8 +30,42 @@ from scripts.search import (  # noqa: E402
     bm25_idf,
     bm25_score,
     build_search_index,
+    html_to_plain,
     search_tokenize,
 )
+
+
+# ════════════════════════════════════════════════════════════════
+# html_to_plain — 스니펫 평문화 (v1.11.0: 엔티티 디코딩 회귀 가드)
+# ════════════════════════════════════════════════════════════════
+
+class HtmlToPlainTests(unittest.TestCase):
+
+    def test_strips_tags(self):
+        self.assertEqual(html_to_plain('<p>Hello <b>World</b></p>'), 'Hello World')
+
+    def test_drops_style_and_script_blocks(self):
+        self.assertEqual(
+            html_to_plain('<style>p{color:red}</style>keep<script>x()</script>'),
+            'keep',
+        )
+
+    def test_decodes_entities_no_double_encoding(self):
+        # v1.11.0: 렌더된 본문에 escape 된 HTML(코드펜스 등)이 있으면 스니펫에
+        # `&lt;` 가 남아 런타임 highlight_html() 의 htmlspecialchars 가 이를
+        # `&amp;lt;` 로 이중 인코딩해 화면에 `&lt;` 가 그대로 노출됐다. 평문화
+        # 단계에서 엔티티를 디코딩해 스니펫은 진짜 `<` 를 담고, 출력 이스케이프는
+        # PHP 측에서 딱 한 번만 일어나게 한다.
+        self.assertEqual(
+            html_to_plain('the &lt;html lang&gt; attribute'),
+            'the <html lang> attribute',
+        )
+        self.assertEqual(html_to_plain('a &amp; b'), 'a & b')
+        self.assertEqual(html_to_plain('x &rarr; y'), 'x → y')
+
+    def test_empty_and_none(self):
+        self.assertEqual(html_to_plain(''), '')
+        self.assertEqual(html_to_plain(None), '')
 
 
 # ════════════════════════════════════════════════════════════════

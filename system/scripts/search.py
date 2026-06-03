@@ -44,6 +44,7 @@ v0.4.0 → v0.5.0 → v0.6.0 흐름:
   - v0.6.0: 본문 색인 폐기 → 메타데이터 3-필드 색인 + 정적 PHP 인라인 인덱스.
 """
 import hashlib
+import html
 import json
 import math
 import re
@@ -90,16 +91,21 @@ _STYLE_SCRIPT_RE = re.compile(
 _WS_COLLAPSE_RE = re.compile(r'\s+')
 
 
-def html_to_plain(html: str) -> str:
+def html_to_plain(html_text: str) -> str:
     """렌더된 본문 HTML 에서 태그를 제거한 평문. 공백은 1개로 압축.
 
     <style> / <script> 블록은 내용까지 통째로 제거 — 본문 인라인 스타일이
     스니펫 노이즈가 되는 것을 방지.
+
+    태그를 벗긴 뒤 HTML 엔티티를 디코딩한다 (`&lt;`→`<`). 스니펫은 평문으로
+    보존되어 런타임 `highlight_html()` 이 출력 시 정확히 1회 이스케이프하므로,
+    여기서 엔티티를 남기면 `&amp;lt;` 로 이중 인코딩돼 화면에 `&lt;` 가 그대로
+    노출된다 (v1.11.0 수정). 색인엔 영향 없음 — body 는 스니펫 전용.
     """
-    s = _STYLE_SCRIPT_RE.sub(' ', html or '')
+    s = _STYLE_SCRIPT_RE.sub(' ', html_text or '')
     s = _TAG_STRIP_RE.sub(' ', s)
     s = _WS_COLLAPSE_RE.sub(' ', s).strip()
-    return s
+    return html.unescape(s)
 
 
 # ════════════════════════════════════════════════════════════════

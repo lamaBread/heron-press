@@ -24,6 +24,7 @@ function admin_articles_dir(): string {
  */
 function admin_safe_rel(?string $rel): ?string {
     if ($rel === null) return null;
+    if (str_contains($rel, "\x00")) return null;   // NUL 거부 (경로 절단 방지).
     $rel = str_replace('\\', '/', trim($rel));
     $rel = ltrim($rel, '/');
     if ($rel === '') return '';
