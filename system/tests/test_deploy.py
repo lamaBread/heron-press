@@ -10,7 +10,9 @@
 """
 import json
 import os
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -22,6 +24,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from scripts import deploy  # noqa: E402
+from scripts import rclone_bin  # noqa: E402
 
 
 def _write(path: Path, text: str):
@@ -123,7 +126,7 @@ class TestBuildArgv(_Base):
                           ('--sftp-user', 'deploy'),
                           ('--sftp-port', '2222'),
                           ('--sftp-key-file', str(self.key)),
-                          ('--sftp-known-hosts', str(self.kh))]:
+                          ('--sftp-known-hosts-file', str(self.kh))]:
             self.assertIn(flag, argv)
             self.assertEqual(argv[argv.index(flag) + 1], val)
         self.assertNotIn('--dry-run', argv)
@@ -136,9 +139,57 @@ class TestBuildArgv(_Base):
         cfg = self._cfg()
         del cfg['known_hosts_path']
         argv = deploy.build_argv('/bin/rclone', self.tmp, cfg, False)
-        kh = argv[argv.index('--sftp-known-hosts') + 1]
+        kh = argv[argv.index('--sftp-known-hosts-file') + 1]
         self.assertTrue(kh.endswith(os.path.join('.ssh', 'known_hosts')))
         self.assertNotIn('~', kh)                      # 전개됨 (구분자 무관)
+
+
+def _find_rclone() -> str:
+    """배포에 실제로 쓰이는 rclone 실행파일 경로를 찾는다 (없으면 '').
+
+    우선순위: 핀 버전이 받아져 있으면 그것(``system/runtime/bin/<os>-<arch>/``),
+    아니면 PATH 의 rclone. 둘 다 없으면 '' — 호출부가 skip 한다.
+    """
+    base = Path(__file__).resolve().parents[2]   # heron-press/
+    try:
+        pinned = rclone_bin.binary_path(base)
+    except RuntimeError:                          # 미지원 OS/arch
+        pinned = None
+    if pinned is not None and pinned.is_file():
+        return str(pinned)
+    return shutil.which('rclone') or shutil.which('rclone.exe') or ''
+
+
+def _rclone_long_flags(rclone: str) -> set:
+    """``rclone help flags`` 가 보고하는 모든 ``--long-flag`` 이름 집합."""
+    out = subprocess.run([rclone, 'help', 'flags'], capture_output=True,
+                         text=True, encoding='utf-8', errors='replace',
+                         timeout=30)
+    return set(re.findall(r'--[A-Za-z0-9][A-Za-z0-9-]*', out.stdout or ''))
+
+
+class TestArgvFlagsAgainstRealRclone(_Base):
+    """회귀 가드 (v1.10.0): build_argv 가 내보내는 모든 ``--flag`` 가 실제
+    rclone 바이너리에 존재하는지 대조한다.
+
+    단위 테스트는 build_argv 가 만든 *리스트 형태* 만 검증해, 코드와 테스트가
+    같은 오타를 공유하면(예 v1.9.x 의 ``--sftp-known-hosts``) 자기일관적으로
+    통과한다 — "코드가 만든 문자열"과 "rclone 이 받아들이는 플래그 표면"의
+    불일치는 못 잡는다. 이 테스트가 그 틈을 닫는다. 바이너리가 없으면(다운로드
+    전·미지원 플랫폼·CI) skip — 가용한 머신에선 진짜 게이트로 동작한다.
+    """
+    def test_every_emitted_flag_exists_in_rclone(self):
+        rclone = _find_rclone()
+        if not rclone:
+            self.skipTest('rclone 바이너리 없음 (미다운로드/미지원 플랫폼)')
+        known = _rclone_long_flags(rclone)
+        self.assertIn('--sftp-host', known,    # 파싱 sanity (표면 비었으면 무의미)
+                      'rclone help flags 파싱 실패 — 플래그 표면이 비었다')
+        argv = deploy.build_argv(rclone, self.tmp, self._write_cfg(), True)
+        emitted = [a for a in argv if a.startswith('--')]
+        unknown = [f for f in emitted if f not in known]
+        self.assertEqual(unknown, [],
+                         f'rclone 가 모르는 플래그: {unknown}')
 
 
 class TestExample(unittest.TestCase):

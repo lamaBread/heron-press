@@ -9,7 +9,7 @@
 
 안전장치:
   - 인증은 **SSH 키파일**(개인키는 저장소 밖 OS 표준 위치, deploy.json 엔 경로만).
-  - 호스트키 검증을 강제(``--sftp-known-hosts``) — rclone sftp 기본(미검증)은 MITM
+  - 호스트키 검증을 강제(``--sftp-known-hosts-file``) — rclone sftp 기본(미검증)은 MITM
     에 취약. 최초 접속은 사용자가 ``ssh user@host`` 1회로 known_hosts 에 등록.
   - argv 리스트 + subprocess(shell 미경유)로 셸 인젝션 차단.
   - ``sync`` 는 원격을 *삭제*하므로 Pond UI 가 2단계(미리보기 dry-run → 적용)
@@ -155,7 +155,7 @@ def build_argv(rclone, base, cfg: dict, dry_run: bool) -> List[str]:
         '--sftp-user', str(cfg['user']),
         '--sftp-port', str(cfg.get('port', 22)),
         '--sftp-key-file', str(cfg['ssh_key_path']),
-        '--sftp-known-hosts', known_hosts_path(cfg),
+        '--sftp-known-hosts-file', known_hosts_path(cfg),
         '--stats-one-line', '--stats', '1s',
         '--log-level', 'INFO',
     ]
