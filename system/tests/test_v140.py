@@ -65,12 +65,19 @@ def _article(slug: str, date: str, *, category_path=None,
     )
 
 
-def _builder(site: SiteConfig = None) -> Builder:
-    """_render_articles 직접 호출 없이 헬퍼만 쓰는 minimal Builder."""
+def _builder(site: SiteConfig = None, *, lang: str = 'en') -> Builder:
+    """_render_articles 직접 호출 없이 헬퍼만 쓰는 minimal Builder.
+
+    v1.11.3: 사이트 chrome 을 만드는 헬퍼(예: _render_article_end_meta)가
+    self.site_tr 를 읽으므로, 실제 빌더(builder.py 의 _apply_site_config)가
+    site.lang 으로 site_tr 를 적재하듯 여기서도 적재한다. 기본은 en
+    (i18n.CANONICAL) — lang= 으로 로케일별 출력을 검증할 수 있다.
+    """
     b = Builder.__new__(Builder)
     b.site = site or _site()
     b.articles = []
     b.report = BuildReport()
+    b.site_tr = i18n.load(lang)
     return b
 
 
@@ -277,7 +284,7 @@ class PrevNextRenderTests(unittest.TestCase):
 class ArticleEndMetaTests(unittest.TestCase):
 
     def test_published_only_when_no_updated(self):
-        b = _builder()
+        b = _builder(lang='ko')
         m = ArticleMeta(slug='x', title='X', date='2026-01-01')
         html = b._render_article_end_meta(m)
         self.assertIn('class="article-end-meta"', html)
@@ -286,14 +293,14 @@ class ArticleEndMetaTests(unittest.TestCase):
         self.assertNotIn('article-end-meta-sep', html)
 
     def test_published_only_when_updated_equals_date(self):
-        b = _builder()
+        b = _builder(lang='ko')
         m = ArticleMeta(slug='x', title='X', date='2026-01-01',
                         updated='2026-01-01')
         html = b._render_article_end_meta(m)
         self.assertNotIn('수정', html)
 
     def test_both_when_updated_differs(self):
-        b = _builder()
+        b = _builder(lang='ko')
         m = ArticleMeta(slug='x', title='X', date='2026-01-01',
                         updated='2026-02-15')
         html = b._render_article_end_meta(m)
@@ -308,6 +315,30 @@ class ArticleEndMetaTests(unittest.TestCase):
         b = _builder()
         m = ArticleMeta(slug='x', title='X', date='')
         self.assertEqual(b._render_article_end_meta(m), '')
+
+    # v1.11.3: 사이트-언어 현지화 회귀 가드. v1.4.0~v1.11.2 는 라벨이
+    # 한국어로 하드코딩돼 lang=en 빌드에서도 푸터만 한국어로 샜다. 이제
+    # self.site_tr(사이트 언어) 로 라우팅하므로 로케일별로 라벨이 갈린다.
+    def test_label_localized_to_site_language_en(self):
+        b = _builder(lang='en')
+        m = ArticleMeta(slug='x', title='X', date='2026-01-01',
+                        updated='2026-02-15')
+        html = b._render_article_end_meta(m)
+        # 영문 라벨이 나오고, 한국어가 새지 않는다 (드리프트 재발 가드).
+        self.assertIn('Published 2026-01-01', html)
+        self.assertIn('Updated 2026-02-15', html)
+        self.assertNotIn('발행', html)
+        self.assertNotIn('수정', html)
+        # datetime 속성은 로케일과 무관하게 raw 날짜 유지.
+        self.assertIn('datetime="2026-01-01"', html)
+        self.assertIn('datetime="2026-02-15"', html)
+
+    def test_label_localized_to_site_language_ko(self):
+        b = _builder(lang='ko')
+        m = ArticleMeta(slug='x', title='X', date='2026-01-01')
+        html = b._render_article_end_meta(m)
+        self.assertIn('2026-01-01 발행', html)
+        self.assertNotIn('Published', html)
 
 
 # ════════════════════════════════════════════════════════════════

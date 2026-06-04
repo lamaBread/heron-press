@@ -2300,23 +2300,31 @@ class Builder:
     # 수동 줄을 점차 제거할 예정 — 자동 줄은 그 자리를 대체).
     # updated 가 date 와 같거나 부재면 "발행" 한 줄만 (불필요한 ' · 수정'
     # 잔재 방지). 토글 없음 — 시스템 전역 기본.
+    #
+    # v1.11.3: 라벨("발행"/"수정")은 v1.4.0 도입 당시 한국어로 하드코딩돼
+    # v1.9.x 사이트-언어 현지화 스윕에서 누락됐다 — site.yaml lang=en 으로
+    # 빌드해도 푸터만 한국어로 새던 드리프트. 다른 방문자 chrome 과 동일하게
+    # self.site_tr(사이트 언어, 빌드 시점 치환) 로 라우팅한다. {date} 는
+    # 자리표시자로 치환되며(escape 후 주입), 라벨은 신뢰된 로케일 값이라
+    # 추가 escape 불필요. site.article.* 키 패리티는 test_i18n 이 강제.
 
     def _render_article_end_meta(self, m: 'ArticleMeta') -> str:
         date = m.date or ''
         if not date:
             return ''
+        tr = self.site_tr
         # 본문 끝 한 줄. 절제된 디자인은 CSS (.article-end-meta) 에서.
         out = [
             '\n<div class="article-end-meta">',
             f'<time class="published" datetime="{escape_html(date)}">'
-            f'{escape_html(date)} 발행</time>',
+            f'{tr.t("site.article.published", date=escape_html(date))}</time>',
         ]
         upd = m.updated
         if upd and upd != date:
             out.append(
                 f'<span class="article-end-meta-sep"> · </span>'
                 f'<time class="updated" datetime="{escape_html(upd)}">'
-                f'{escape_html(upd)} 수정</time>'
+                f'{tr.t("site.article.updated", date=escape_html(upd))}</time>'
             )
         out.append('</div>\n')
         return ''.join(out)

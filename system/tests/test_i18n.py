@@ -116,6 +116,21 @@ class CanonicalInvarianceTests(unittest.TestCase):
         self.assertEqual(tr.t('site.pagination.next_aria'), 'Next page')
         self.assertEqual(tr.t('site.error_404.heading'), 'Not Found')
 
+    def test_article_end_meta_substitution(self):
+        # v1.11.3: 글 끝 발행/수정 메타 라벨 — {date} 자리표시자 치환 +
+        # 사이트 언어별 라벨/어순. 빌더 _render_article_end_meta 가 한국어를
+        # 하드코딩하던 v1.4.0 드리프트를 site_tr 로 라우팅한 회귀 가드.
+        ko = i18n.load('ko')
+        self.assertEqual(ko.t('site.article.published', date='2026-01-01'),
+                         '2026-01-01 발행')
+        self.assertEqual(ko.t('site.article.updated', date='2026-02-15'),
+                         '2026-02-15 수정')
+        en = i18n.load('en')
+        self.assertEqual(en.t('site.article.published', date='2026-01-01'),
+                         'Published 2026-01-01')
+        self.assertEqual(en.t('site.article.updated', date='2026-02-15'),
+                         'Updated 2026-02-15')
+
     def test_build_canonical_values(self):
         tr = i18n.load('ko')
         # legacy_home_key 의 {key} 치환이 옛 f-string 결과와 동일해야 한다.

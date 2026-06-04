@@ -16,6 +16,9 @@ site.footer.rights: "All rights reserved."
 site.pagination.prev_aria: "Previous page"
 site.pagination.next_aria: "Next page"
 
+site.article.published: "{date} 발행"
+site.article.updated: "{date} 수정"
+
 site.home.recent: "Recent posts"
 
 site.category.no_articles: "No articles found"
