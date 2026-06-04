@@ -107,6 +107,33 @@ class TestSafeRel(unittest.TestCase):
         self.assertFalse(update._safe_rel(''))
 
 
+class TestTrustedZipball(unittest.TestCase):
+    """B2 — API 가 준 zipball_url 은 고정 저장소 도메인일 때만 사용, 그 외엔
+    구성된 ZIPBALL 로 폴백 (위조/리다이렉트 출처 차단)."""
+
+    def test_trusted_prefix_passes_through(self):
+        url = ('https://api.github.com/repos/lamaBread/heron-press/'
+               'zipball/v1.7.0')
+        self.assertEqual(update._trusted_zipball(url, 'v1.7.0'), url)
+
+    def test_foreign_host_falls_back(self):
+        self.assertEqual(
+            update._trusted_zipball('https://evil.example/x.zip', 'v1.7.0'),
+            update.ZIPBALL.format(tag='v1.7.0'))
+
+    def test_other_github_repo_falls_back(self):
+        # 같은 호스트라도 다른 저장소는 거부.
+        self.assertEqual(
+            update._trusted_zipball(
+                'https://api.github.com/repos/attacker/evil/zipball/v9',
+                'v1.7.0'),
+            update.ZIPBALL.format(tag='v1.7.0'))
+
+    def test_none_falls_back(self):
+        self.assertEqual(update._trusted_zipball(None, 'v1.7.0'),
+                         update.ZIPBALL.format(tag='v1.7.0'))
+
+
 class TestOverlay(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -167,6 +194,15 @@ class TestCheckUpdateMocked(unittest.TestCase):
         opener = _FakeOpener([{'name': 'v1.5.3'}], b'')
         r = update.check_update(self.tmp, opener=opener)
         self.assertFalse(r['update_available'])
+
+    def test_forged_zipball_url_is_replaced(self):
+        # B2 — API 가 위조 zipball_url 을 줘도 고정 저장소 URL 로 대체.
+        opener = _FakeOpener([{'name': 'v1.7.0',
+                               'zipball_url': 'https://evil.example/x.zip'}],
+                             b'')
+        r = update.check_update(self.tmp, opener=opener)
+        self.assertEqual(r['zipball_url'],
+                         update.ZIPBALL.format(tag='v1.7.0'))
 
     def test_network_error_is_captured(self):
         def boom(req, timeout=None):
@@ -254,6 +290,32 @@ class TestSelfUpdateMocked(unittest.TestCase):
         r = update.self_update(self.dst, opener=opener, log=lambda _m: None)
         self.assertTrue(r['ok'])
         self.assertFalse(r['updated'])
+
+    def test_no_manifest_download_is_refused(self):
+        # B1 — 다운로드 트리에 MANIFEST.json 이 없으면 (sha256 무결성 검증
+        # 불가) 오버레이하지 않고 중단해야 한다. 예전엔 경고만 하고 덮어썼다.
+        _make_program_tree(self.dst, '1.6.0')
+        make_manifest.write_manifest(self.dst)
+        _write(self.dst / 'user' / 'site.yaml', 'domain: keep.me\n')
+
+        # 새 릴리스 트리 — MANIFEST 를 일부러 동봉하지 않는다.
+        _make_program_tree(self.rel, '1.7.0',
+                           extra={'system/scripts/feature.py': '# 1.7\n'})
+        zb = _zip_bytes(self.rel, 'lamaBread-heron-press-abc123')
+        opener = _FakeOpener([{'name': 'v1.7.0'}], zb)
+        logs = []
+
+        r = update.self_update(self.dst, opener=opener, log=logs.append)
+
+        self.assertFalse(r['ok'])
+        self.assertFalse(r['updated'])
+        self.assertIsNotNone(r['error'])
+        # 설치본은 손대지 않은 채 그대로 (오버레이 미발생).
+        self.assertIn('1.6.0',
+                      (self.dst / 'Heron.py').read_text(encoding='utf-8'))
+        self.assertFalse((self.dst / 'system/scripts/feature.py').is_file())
+        self.assertEqual(r['copied'], 0)
+        self.assertEqual(r['deleted'], 0)
 
 
 if __name__ == '__main__':

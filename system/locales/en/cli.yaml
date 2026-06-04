@@ -102,9 +102,9 @@ cli.update.already_latest: "Already up to date (v{current})."
 cli.update.downloading: "Downloading: {tag}"
 cli.update.download_failed: "Download failed: {error}"
 cli.update.unsafe_zip: "Unsafe zip entry: {entry}"
-cli.update.integrity_failed: "Download integrity check failed — missing={missing} modified={modified}"
+cli.update.integrity_failed: "Download integrity check failed — missing={missing} modified={modified}. Retry from a clean network; the official GitHub release verifies and applies normally."
 cli.update.integrity_ok: "Download integrity check passed (MANIFEST sha256 match)."
-cli.update.no_manifest: "Note: the download has no MANIFEST.json, so integrity verification is skipped."
+cli.update.no_manifest: "Download has no MANIFEST.json — refusing to overlay (integrity unverifiable). Retry from a clean network; the official GitHub release verifies and applies normally."
 cli.update.complete: "Update complete: v{from_v} → v{to_v} (schema {schema}). Restart Pond (php -S 127.0.0.1:8001 Pond.php)."
 
 # ── rclone binary provisioning (rclone_bin.py) ─────────────────────

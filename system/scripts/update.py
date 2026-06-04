@@ -87,6 +87,16 @@ def select_latest_tag(tags: list, _current=None):
     return best
 
 
+def _trusted_zipball(url: Optional[str], tag: str) -> str:
+    """GitHub API 가 준 zipball_url 이 고정 저장소 도메인/경로일 때만 그대로
+    쓰고, 아니면 구성된 ZIPBALL 로 폴백한다. 리다이렉트·위조된 다운로드 출처를
+    차단하는 심층 방어 (REPO 상수 + TLS 위에 한 겹 더)."""
+    prefix = f'https://api.github.com/repos/{REPO}/'
+    if url and url.startswith(prefix):
+        return url
+    return ZIPBALL.format(tag=tag)
+
+
 def _safe_rel(rel: str) -> bool:
     """오버레이/삭제가 허용되는 프로그램 표면 상대경로인가."""
     if not rel or rel.startswith('/') or rel.startswith('\\'):
@@ -186,8 +196,8 @@ def check_update(base, *, opener: Optional[Callable] = None,
         if latest:
             name = latest.get('name')
             result['latest'] = name
-            result['zipball_url'] = latest.get('zipball_url') \
-                or ZIPBALL.format(tag=name)
+            result['zipball_url'] = _trusted_zipball(
+                latest.get('zipball_url'), name)
             result['update_available'] = _version.compare(current, name) < 0
     except Exception as e:  # 네트워크/파싱 등 — UI 에 메시지로 표면화
         result['error'] = f'{type(e).__name__}: {e}'
@@ -283,7 +293,7 @@ def self_update(base, *, opener: Optional[Callable] = None,
         log(i18n.t('cli.update.already_latest', current=info['current']))
         return out
 
-    url = info['zipball_url'] or ZIPBALL.format(tag=info['latest'])
+    url = _trusted_zipball(info['zipball_url'], info['latest'])
     with tempfile.TemporaryDirectory(prefix='heron-update-') as tmp:
         tmp = Path(tmp)
         zip_path = tmp / 'release.zip'
@@ -318,7 +328,11 @@ def self_update(base, *, opener: Optional[Callable] = None,
                 return out
             log(i18n.t('cli.update.integrity_ok'))
         else:
-            log(i18n.t('cli.update.no_manifest'))
+            # MANIFEST 가 없으면 sha256 무결성을 확인할 길이 없다 → 오버레이를
+            # 거부하고 중단 (예전엔 경고만 하고 덮어썼다 — 공급망 심층 방어).
+            out['error'] = i18n.t('cli.update.no_manifest')
+            log(out['error'])
+            return out
 
         new_version = make_manifest.program_version(root)
         label = f"{info['current']}-to-{new_version}-{time.strftime('%Y%m%d-%H%M%S')}"
