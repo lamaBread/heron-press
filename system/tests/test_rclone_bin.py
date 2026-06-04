@@ -164,6 +164,25 @@ class TestEnsure(unittest.TestCase):
                 rclone_bin.ensure(self.tmp, opener=neterr,
                                   allow_path_fallback=True)
 
+    def test_fallback_warns_binary_is_unverified(self):
+        # v1.11.2 (B3): PATH 폴백 로그는 "미검증 바이너리" 라는 사실과
+        # 검증본 확보 안내(system/runtime/bin 경로)를 반드시 실어야 한다.
+        # 옛 양성(benign) 문안으로 되돌아가는 회귀를 막는 가드.
+        def neterr(req, timeout=None):
+            raise OSError('offline')
+        lines = []
+        with mock.patch.object(rclone_bin.shutil, 'which',
+                               return_value='/usr/bin/rclone'), \
+             mock.patch.object(rclone_bin, 'installed_version',
+                               return_value='v0.0.0'):
+            out = rclone_bin.ensure(self.tmp, opener=neterr,
+                                    allow_path_fallback=True,
+                                    log=lines.append)
+        self.assertEqual(Path(out), Path('/usr/bin/rclone'))
+        # 폴백 안내 문안(로케일 무관 토큰: 신설 메시지에만 있는 안내 경로).
+        self.assertTrue(any('system/runtime/bin' in ln for ln in lines),
+                        f'fallback warning lacks integrity guidance: {lines}')
+
 
 if __name__ == '__main__':
     unittest.main()

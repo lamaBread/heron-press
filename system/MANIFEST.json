@@ -2,8 +2,8 @@
   "files": {
     "Heron.py": "b2fc8fbe841bb5003aad56496d518f7c34eecbfeb62f4e22648c1f2f7a90d389",
     "Pond.php": "9f29ec910ddee1b56d725c8d959e9061a2b801d7f80a266ca4703401c6d6d078",
-    "README.ko.md": "dd77765a0e98a1171981cddf6553b440915813e710a0504c6894401b7c5b1965",
-    "README.md": "73abb415d5dc52f9530095052f3bb2f08392f2b0770302a8fd0717993ec3fbba",
+    "README.ko.md": "2d954b658d37c96f214e1b316dddc05377a623e988fdcebcd2d5b727f8f62209",
+    "README.md": "f3513c04c8fed6033f380b652d84ae6beaa1d87b0a483beb1dfbf2bf2dcc1a79",
     "system/admin/lib/articles.php": "6f6bbdae372e008c35f78e83b4141b82a7b850d2b7a6b263ee5f1bcaa5e69858",
     "system/admin/lib/fs.php": "95a6a63b7e15b3676ed41ff08afa7dbc8419a449783de0fadd9ef29fadce26b9",
     "system/admin/lib/i18n.php": "360bb5b3728063f689cec6561c726c522b3abf094dc18baa8614defe62ffa2dd",
@@ -23,18 +23,18 @@
     "system/admin/views/update.php": "effb8e17ba64799fcaf5e40d090c8077c6d213dbc35e265cb04f5c86497a0244",
     "system/locales/en/admin.yaml": "43717a5b647cb52112f3ece3542697bf1cdbefbfccc4531eb8f8d9ebbe0f9b71",
     "system/locales/en/build.yaml": "dd1db26243936578773a7f8b57d3a6e329d426f0958ec7b856e34876e5f0c0ce",
-    "system/locales/en/cli.yaml": "8498bf7da1cc7d49570ce39a896bd01421ccd633eab0828ba59b9e3b9143fd93",
+    "system/locales/en/cli.yaml": "ce674a109f4bab24e2563c00ae715a6b01f5a20c72be7ea6e0bdf1a08bba2390",
     "system/locales/en/site.yaml": "1f20e25fd81d63e7c39b8667dc3ef38de49d638f539e76371c9e31909630f980",
     "system/locales/ko/admin.yaml": "decf486f6d0f216517079ef401dbafbb2b16a5f3a595fab27faf0d6bfa48ce43",
     "system/locales/ko/build.yaml": "f27e28a33dfb37b8c37fd12e582e88c97f16f59ef6746009084333ede3fe4dbc",
-    "system/locales/ko/cli.yaml": "6599dba1585d8937d078ce7ea11e223829eda8b00095c70d7329e9a916fc1e88",
+    "system/locales/ko/cli.yaml": "0262fda06c1dc3f1cd6599f672bfb110f7838e23df9fab00c763cade71017554",
     "system/locales/ko/site.yaml": "6dcb2431316ea278993ac8f4ae4556ef6c4e84fc389cb033834ff90856e1c677",
     "system/runtime/imgslidebox.js": "6da74a272b0e618eed59d7491bac7a3122475ce6a0eb0f6cf5d079a26fc8bc06",
     "system/runtime/pagination.js": "6d8860ee9c2f58abe1a349a7ed8d8038feb11b03ed3302dccde121b7103e3c2d",
     "system/runtime/search.php": "23c5354d6a1eb50b0d425cf6f55e14fba9596abb6d7c2d237e07f86d559800bb",
     "system/runtime/search_bm25.php": "df3563df8a3c38ef55147c41043521557748e9c1f83952fa8610a574404fe0e9",
     "system/runtime/search_tokenize.php": "a00c999e478d6af71bdeab39ff859d3a902ee0bf69ded18d45640666b02c6221",
-    "system/scripts/__init__.py": "7b581375d3031f319dafd95dbb5889bc633c646df27352fd206f40e9887c2784",
+    "system/scripts/__init__.py": "e400100d78d78ec08c40a243e609aced562a53fdd0a6ebe57a13720c9cda2b93",
     "system/scripts/builder.py": "9252d0e15ee5b08cd83f15b14791c07502105b73b4925efb71f94ef09d85ecb1",
     "system/scripts/cache.py": "4fa2479409e40c2cc3e56aae42565ac8a499e702c6b6ebb6f432e4755f353f85",
     "system/scripts/deploy.py": "4eba92338916a27490e0b2c3ffe5cfc4d73972073869f25ef4ff8a2a0346b1bf",
@@ -77,7 +77,7 @@
     "system/tests/test_migrations.py": "9c1a004946ace31332a2e9531984e99cef7a54253e560b709c1130cdae3ed7c7",
     "system/tests/test_parsedown.py": "e13f14739b997b46406994fed6bc8bf2aa70f6a8f95af3b3fe86ec52a014e614",
     "system/tests/test_php_literal.py": "1e9ad2350f65821860ff089f26072a7fb091d018967015be59ba7987de9b0f9f",
-    "system/tests/test_rclone_bin.py": "d69e88bc4e426ac5bdd409bf7a6b263ec8f40a752c39591ce2afdcd094c0ffe1",
+    "system/tests/test_rclone_bin.py": "d649710e94b350314e69f25f0747e4ff1cf97c45fbc72f78443ed01420766f3f",
     "system/tests/test_render_one.py": "3bae89e7b8d7d47c6baeff9a02a97e9d5e24bd113c420a5861c141e3139480eb",
     "system/tests/test_report.py": "d82c50416c65716287e3179fc028000396de1768c0cfbc9d2ee743b217e78c21",
     "system/tests/test_seo.py": "05ab937792ffdcf6619525d266e0c5a04378ee520ccfa07863ce4c12745dc408",
@@ -89,5 +89,5 @@
     "system/tests/test_version.py": "b9e25216744822a79438ac69d3ef7a786e3e2694dd52a2fc2909acb66eb96910",
     "system/tests/test_yaml_parser.py": "5e6fbfd12d67e3e12a5b3e2fad6e95474363191d6bd9e2f91bb0691d9232d8d3"
   },
-  "version": "1.11.1"
+  "version": "1.11.2"
 }

@@ -123,5 +123,5 @@ cli.rclone.binary_not_found: "Could not find {name} in the archive (corrupted do
 cli.rclone.unsafe_zip: "Unsafe zip entry: {entry}"
 cli.rclone.reverify_failed: "Post-placement version re-check failed (got={have}, expected={need})."
 cli.rclone.ready: "rclone {ver} ready."
-cli.rclone.fallback_path: "Fallback: using rclone from PATH ({path}, version={ver})."
+cli.rclone.fallback_path: "Fallback: using UNVERIFIED rclone from PATH ({path}, version={ver}) — integrity not checked. For a verified binary, restore network access or place it under system/runtime/bin/<os>-<arch>/."
 cli.rclone.unavailable: "Could not obtain rclone. You need an internet connection, or put rclone on PATH, or place it manually under system/runtime/bin/<os>-<arch>/. (cause: {why})"
