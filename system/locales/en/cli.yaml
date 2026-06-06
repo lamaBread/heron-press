@@ -86,9 +86,11 @@ cli.deploy.cfg.missing_keys: "Missing/empty required keys: {keys}\nExample: {exa
 cli.deploy.cfg.port_not_int: "port is not an integer: {port}"
 cli.deploy.cfg.key_not_found: "SSH private key file not found: {path}\n(deploy.json holds only the key path; keep the key itself in an OS-standard location.)"
 cli.deploy.cfg.known_hosts_missing: "known_hosts file not found: {path}\nConnect once with `ssh <user>@<host>` to register the host key (required by rclone's host-key verification — MITM protection)."
+cli.deploy.cfg.bad_alias: "Invalid ssh_alias: {alias}\nUse a single ~/.ssh/config Host token (letters, digits, '.', '_', '-' only — no spaces)."
 cli.deploy.mode.preview: "preview (dry-run — no server changes)"
 cli.deploy.mode.apply: "real sync (including deletions)"
 cli.deploy.sync_line: "rclone sync → {user}@{host}:{remote}  [{mode}]"
+cli.deploy.sync_line_alias: "rclone sync → ssh {alias}:{remote}  [{mode}]"
 cli.deploy.done: "Done."
 cli.deploy.preview_done: 'Preview complete — review the "transfer/delete" list above, then apply.'
 cli.deploy.rclone_exit: "rclone exit code {code} — check the log above (host key not registered, key permissions, path typo, etc.)."

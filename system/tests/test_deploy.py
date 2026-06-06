@@ -103,6 +103,28 @@ class TestLoadConfig(_Base):
             deploy.load_config(self.tmp)
         self.assertIn('known_hosts', str(cm.exception))
 
+    # ── ssh_alias 위임 모드 (v1.11.4) ─────────────────────────────
+    def test_alias_mode_skips_key_and_known_hosts_checks(self):
+        # 키·known_hosts 파일이 없어도 alias 모드는 통과 — 그 경로를 안 쓴다.
+        _write(deploy.config_path(self.tmp), json.dumps({
+            'remote_path': '/var/www/site', 'ssh_alias': 'lama'}))
+        cfg = deploy.load_config(self.tmp)
+        self.assertEqual(cfg['ssh_alias'], 'lama')
+        self.assertEqual(cfg['remote_path'], '/var/www/site')
+
+    def test_alias_mode_requires_only_remote_path(self):
+        _write(deploy.config_path(self.tmp), json.dumps({'ssh_alias': 'lama'}))
+        with self.assertRaises(deploy.DeployConfigError) as cm:
+            deploy.load_config(self.tmp)
+        self.assertIn('remote_path', str(cm.exception))
+
+    def test_alias_bad_chars_rejected(self):
+        _write(deploy.config_path(self.tmp), json.dumps({
+            'remote_path': '/var/www/site', 'ssh_alias': 'bad alias;rm'}))
+        with self.assertRaises(deploy.DeployConfigError) as cm:
+            deploy.load_config(self.tmp)
+        self.assertIn('ssh_alias', str(cm.exception))   # v1.9.7: 기본값 en
+
 
 class TestBuildArgv(_Base):
     def _cfg(self, **over):
@@ -142,6 +164,29 @@ class TestBuildArgv(_Base):
         kh = argv[argv.index('--sftp-known-hosts-file') + 1]
         self.assertTrue(kh.endswith(os.path.join('.ssh', 'known_hosts')))
         self.assertNotIn('~', kh)                      # 전개됨 (구분자 무관)
+
+    # ── ssh_alias 위임 모드 (v1.11.4) ─────────────────────────────
+    def test_alias_mode_uses_sftp_ssh(self):
+        cfg = {'remote_path': '/var/www/site', 'ssh_alias': 'lama'}
+        argv = deploy.build_argv('/bin/rclone', self.tmp, cfg, False)
+        self.assertEqual(argv[:4], ['/bin/rclone', 'sync',
+                                    str(Path(self.tmp) / 'dist'),
+                                    ':sftp:/var/www/site'])
+        self.assertIn('--sftp-ssh', argv)
+        # rclone 이 공백으로 쪼개 ['ssh','lama'] 로 쓰는 두 토큰.
+        self.assertEqual(argv[argv.index('--sftp-ssh') + 1], 'ssh lama')
+        self.assertIn('--sftp-disable-hashcheck', argv)
+        # 키파일 모드 플래그는 전부 빠진다.
+        for flag in ('--sftp-host', '--sftp-user', '--sftp-port',
+                     '--sftp-key-file', '--sftp-known-hosts-file'):
+            self.assertNotIn(flag, argv)
+        self.assertIn('--log-level', argv)             # 공통 꼬리 유지
+        self.assertNotIn('--dry-run', argv)
+
+    def test_alias_mode_dry_run_toggle(self):
+        cfg = {'remote_path': '/var/www/site', 'ssh_alias': 'lama'}
+        argv = deploy.build_argv('/bin/rclone', self.tmp, cfg, True)
+        self.assertEqual(argv[-1], '--dry-run')
 
 
 def _find_rclone() -> str:
@@ -186,6 +231,22 @@ class TestArgvFlagsAgainstRealRclone(_Base):
         self.assertIn('--sftp-host', known,    # 파싱 sanity (표면 비었으면 무의미)
                       'rclone help flags 파싱 실패 — 플래그 표면이 비었다')
         argv = deploy.build_argv(rclone, self.tmp, self._write_cfg(), True)
+        emitted = [a for a in argv if a.startswith('--')]
+        unknown = [f for f in emitted if f not in known]
+        self.assertEqual(unknown, [],
+                         f'rclone 가 모르는 플래그: {unknown}')
+
+    def test_alias_emitted_flags_exist_in_rclone(self):
+        # v1.11.4: alias 모드가 내보내는 --sftp-ssh·--sftp-disable-hashcheck 가
+        # 실제 rclone 바이너리에 존재하는지 (키파일 모드와 같은 회귀 가드).
+        rclone = _find_rclone()
+        if not rclone:
+            self.skipTest('rclone 바이너리 없음 (미다운로드/미지원 플랫폼)')
+        known = _rclone_long_flags(rclone)
+        self.assertIn('--sftp-host', known,
+                      'rclone help flags 파싱 실패 — 플래그 표면이 비었다')
+        cfg = {'remote_path': '/var/www/site', 'ssh_alias': 'lama'}
+        argv = deploy.build_argv(rclone, self.tmp, cfg, True)
         emitted = [a for a in argv if a.startswith('--')]
         unknown = [f for f in emitted if f not in known]
         self.assertEqual(unknown, [],
@@ -249,6 +310,19 @@ class TestRun(_Base):
              mock.patch.object(deploy.sys, 'stdout'):
             code = deploy.run(self.tmp, dry_run=False, log=lambda _m: None)
         self.assertEqual(code, 5)
+
+    def test_run_alias_minimal_config_no_keyerror(self):
+        # v1.11.4: alias 최소 설정(host/user/key 없음)도 run() 이 sync_line
+        # 로깅에서 KeyError 없이 동작 — load_config 통과 후 죽지 않는다.
+        _write(deploy.config_path(self.tmp), json.dumps({
+            'remote_path': '/var/www/site', 'ssh_alias': 'lama'}))
+        with mock.patch.object(deploy.rclone_bin, 'ensure',
+                               return_value='/bin/rclone'), \
+             mock.patch.object(deploy.subprocess, 'Popen',
+                               return_value=_FakePopen([], 0)), \
+             mock.patch.object(deploy.sys, 'stdout'):
+            code = deploy.run(self.tmp, dry_run=True, log=lambda _m: None)
+        self.assertEqual(code, 0)
 
 
 if __name__ == '__main__':

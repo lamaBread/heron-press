@@ -29,6 +29,12 @@ _ROOT_FILES = ('Heron.py', 'Pond.php', 'README.md', 'README.ko.md')
 # 표면에서 제외할 경로 조각.
 _EXCLUDE_DIR_NAMES = {'__pycache__'}
 _EXCLUDE_SUFFIXES = ('.pyc', '.pyo', '.heron_tmp', '.tmp')
+# OS 파일탐색기 부산물 — 어느 깊이서든 basename 으로 제외 (v1.11.4). .gitignore
+# 로 커밋엔 안 새지만 make_manifest 는 *디스크* 에서 계산하므로, macOS 에서
+# 재생성하면 .DS_Store 가 매니페스트에 끼어들어 비-macOS 설치의 --check 가
+# 매번 그 파일을 missing 으로 본다. rclone 바이너리 제외(_EXCLUDE_PREFIXES)와
+# 같은 "머신 종속물은 프로그램 표면이 아니다" 원칙.
+_EXCLUDE_BASENAMES = {'.DS_Store', 'Thumbs.db'}
 # system/ 아래에서 제외할 상대경로 (base 기준). 생성물·매니페스트 자신.
 _EXCLUDE_SYSTEM_REL = {
     MANIFEST_REL,
@@ -60,6 +66,8 @@ def _sha256_file(path: Path) -> str:
 def _excluded(rel: str) -> bool:
     parts = rel.split('/')
     if any(seg in _EXCLUDE_DIR_NAMES for seg in parts):
+        return True
+    if parts[-1] in _EXCLUDE_BASENAMES:
         return True
     if rel.endswith(_EXCLUDE_SUFFIXES):
         return True

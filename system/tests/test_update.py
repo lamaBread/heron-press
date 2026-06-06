@@ -318,5 +318,33 @@ class TestSelfUpdateMocked(unittest.TestCase):
         self.assertEqual(r['deleted'], 0)
 
 
+class TestManifestExclusions(unittest.TestCase):
+    """v1.11.4: OS 파일탐색기 부산물(.DS_Store/Thumbs.db)은 프로그램 표면이
+    아니다 — basename 으로 어느 깊이서든 제외한다. (.gitignore 로 커밋엔 안
+    새지만 make_manifest 는 디스크에서 계산하므로 macOS/Windows 재생성 시
+    끼어들어 타 플랫폼 설치의 --check 가 missing 으로 보던 회귀를 막는다.)"""
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_excluded_basenames_at_any_depth(self):
+        for rel in ('system/.DS_Store', '.DS_Store',
+                    'system/admin/.DS_Store', 'system/Thumbs.db'):
+            self.assertTrue(make_manifest._excluded(rel), rel)
+        # 정상 파일은 제외되지 않는다.
+        self.assertFalse(make_manifest._excluded('system/scripts/deploy.py'))
+
+    def test_iter_program_files_omits_ds_store(self):
+        _make_program_tree(self.tmp, '1.11.4')
+        _write(self.tmp / 'system' / '.DS_Store', 'junk\n')
+        _write(self.tmp / 'system' / 'admin' / '.DS_Store', 'junk\n')
+        rels = make_manifest.iter_program_files(self.tmp)
+        self.assertNotIn('system/.DS_Store', rels)
+        self.assertNotIn('system/admin/.DS_Store', rels)
+        self.assertIn('system/scripts/__init__.py', rels)   # 표면은 그대로
+
+
 if __name__ == '__main__':
     unittest.main()

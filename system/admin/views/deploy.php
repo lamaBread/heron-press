@@ -47,6 +47,9 @@ $keyMask = static function (?string $p): string {
     <tr><td class="mono">remote_path</td><td class="mono"><?= h((string)($deployCfg['remote_path'] ?? '')) ?></td></tr>
     <tr><td class="mono">ssh_key_path</td><td class="mono"><?= h($keyMask($deployCfg['ssh_key_path'] ?? '')) ?></td></tr>
     <tr><td class="mono">known_hosts_path</td><td class="mono"><?= h(trim((string)($deployCfg['known_hosts_path'] ?? '')) ?: t('admin.deploy.cfg.known_hosts_default')) ?></td></tr>
+<?php if (trim((string)($deployCfg['ssh_alias'] ?? '')) !== ''): ?>
+    <tr><td class="mono">ssh_alias</td><td class="mono"><?= h((string)$deployCfg['ssh_alias']) ?></td></tr>
+<?php endif; ?>
   </table>
 <?php endif; ?>
 

@@ -180,6 +180,10 @@ function admin_deploy_example_exists(): bool {
  * 뒤 pretty JSON 으로 원자적 저장. known_hosts_path 는 빈 값이면 생략한다
  * (deploy.run 이 ~/.ssh/known_hosts 로 폴백). 반환: [ok:bool, errs:string[]].
  * 개인키 자체는 받지 않는다 — 저장소 밖 OS 표준 위치의 *경로*만 보관.
+ *
+ * ssh_alias 위임 모드(v1.11.4): ssh_alias 가 채워지면 전송을 시스템 ssh 에
+ * 위임하므로 host/user/ssh_key_path 는 ~/.ssh/config 에서 와 필수가 아니다
+ * (remote_path 만 필수). 별칭은 공백·셸 메타문자를 차단해 단일 토큰만 허용.
  */
 function admin_save_deploy_config(array $in): array {
     $host = trim((string)($in['host'] ?? ''));
@@ -188,12 +192,18 @@ function admin_save_deploy_config(array $in): array {
     $remote = trim((string)($in['remote_path'] ?? ''));
     $key = trim((string)($in['ssh_key_path'] ?? ''));
     $known = trim((string)($in['known_hosts_path'] ?? ''));
+    $alias = trim((string)($in['ssh_alias'] ?? ''));
 
     $errs = [];
-    if ($host === '') $errs[] = t('admin.deploy_cfg.err.host_empty');
-    if ($user === '') $errs[] = t('admin.deploy_cfg.err.user_empty');
     if ($remote === '') $errs[] = t('admin.deploy_cfg.err.remote_empty');
-    if ($key === '') $errs[] = t('admin.deploy_cfg.err.key_empty');
+    if ($alias === '') {
+        // 키파일 모드: host/user/ssh_key_path 도 필수.
+        if ($host === '') $errs[] = t('admin.deploy_cfg.err.host_empty');
+        if ($user === '') $errs[] = t('admin.deploy_cfg.err.user_empty');
+        if ($key === '')  $errs[] = t('admin.deploy_cfg.err.key_empty');
+    } elseif (!preg_match('/^[A-Za-z0-9._-]+$/', $alias)) {
+        $errs[] = t('admin.deploy_cfg.err.bad_alias');
+    }
     if (!preg_match('/^\d{1,5}$/', $portRaw) || (int)$portRaw < 1 || (int)$portRaw > 65535)
         $errs[] = t('admin.deploy_cfg.err.port_range');
     // ssh_key_path 의 실제 존재는 검증하지 않는다 — 다른 머신/아직 미생성
@@ -209,6 +219,7 @@ function admin_save_deploy_config(array $in): array {
         'ssh_key_path' => $key,
     ];
     if ($known !== '') $cfg['known_hosts_path'] = $known;
+    if ($alias !== '') $cfg['ssh_alias'] = $alias;
 
     $path = admin_deploy_config_path();
     if (!admin_backup_file($path, 'deploy'))

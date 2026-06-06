@@ -85,9 +85,11 @@ cli.deploy.cfg.missing_keys: "필수 키 누락/빈값: {keys}\n견본: {example
 cli.deploy.cfg.port_not_int: "port 가 정수가 아닙니다: {port}"
 cli.deploy.cfg.key_not_found: "SSH 개인키 파일을 찾을 수 없습니다: {path}\n(deploy.json 에는 키 경로만 둡니다. 키 자체는 OS 표준 위치에.)"
 cli.deploy.cfg.known_hosts_missing: "known_hosts 파일이 없습니다: {path}\n최초 1회 `ssh <user>@<host>` 로 접속해 호스트키를 등록하세요 (rclone 의 호스트키 검증에 필요 — MITM 방어)."
+cli.deploy.cfg.bad_alias: "ssh_alias 형식이 올바르지 않습니다: {alias}\n~/.ssh/config 의 Host 별칭 한 토큰만 쓰세요 (영문·숫자·'.'·'_'·'-' 만, 공백 불가)."
 cli.deploy.mode.preview: "미리보기 (dry-run — 서버 변경 없음)"
 cli.deploy.mode.apply: "실제 동기화 (삭제 포함)"
 cli.deploy.sync_line: "rclone sync → {user}@{host}:{remote}  [{mode}]"
+cli.deploy.sync_line_alias: "rclone sync → ssh {alias}:{remote}  [{mode}]"
 cli.deploy.done: "완료."
 cli.deploy.preview_done: '미리보기 완료 — 위 "전송/삭제" 목록을 확인 후 적용하세요.'
 cli.deploy.rclone_exit: "rclone 종료 코드 {code} — 위 로그를 확인하세요 (호스트키 미등록·키 권한·경로 오타 등)."

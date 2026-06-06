@@ -71,6 +71,11 @@ $dv = static fn(string $k, $def = '') => h((string)($d[$k] ?? $def));
     <div class="field"><label><?= t('admin.settings.deploy.field.known_hosts_path') ?></label>
       <input type="text" name="known_hosts_path" value="<?= $dv('known_hosts_path') ?>"
              placeholder="C:/Users/you/.ssh/known_hosts"></div>
+    <div class="field"><label><?= t('admin.settings.deploy.field.ssh_alias') ?></label>
+      <input type="text" name="ssh_alias" value="<?= $dv('ssh_alias') ?>"
+             placeholder="lama">
+      <p class="muted" style="font-size:12px;margin:4px 0 0">
+        <?= t('admin.settings.deploy.alias.note') ?></p></div>
     <div class="row" style="margin:6px 0">
       <button type="submit" class="primary"><?= h(t('admin.settings.deploy.save')) ?></button>
       <a class="btn" href="<?= h($self) ?>?a=deploy"><?= h(t('admin.settings.deploy.to_deploy')) ?></a>

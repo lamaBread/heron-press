@@ -21,6 +21,7 @@ dist 어디에도 새지 않는다. 견본(``deploy.example.json``)은 커밋되
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -34,6 +35,13 @@ CONFIG_NAME = 'deploy.json'
 EXAMPLE_NAME = 'deploy.example.json'
 
 REQUIRED_KEYS = ('host', 'user', 'remote_path', 'ssh_key_path')
+
+# ssh_alias 위임 모드(v1.11.4): 선택 필드 ``ssh_alias`` 가 있으면 전송을 시스템
+# ssh 에 위임(``--sftp-ssh "ssh <alias>"``)하므로 host/user/key·known_hosts 가
+# 전부 ~/.ssh/config 에서 온다 → remote_path 만 필수. 별칭은 argv 한 토큰(공백
+# 분리로 ['ssh','<alias>'])이라 공백·셸 메타문자를 차단해 단일 토큰만 허용한다.
+REQUIRED_KEYS_ALIAS = ('remote_path',)
+_ALIAS_RE = re.compile(r'^[A-Za-z0-9._-]+$')
 
 # 견본 — 단일 출처. 커밋되는 deploy.example.json 과 m_1_7_0 시드가 모두 이걸 쓴다.
 EXAMPLE_CONFIG = {
@@ -96,8 +104,11 @@ def known_hosts_path(cfg: dict) -> str:
 def load_config(base) -> dict:
     """``user/.heron/deploy.json`` 읽기·검증. 실패 시 DeployConfigError.
 
-    필수키(host/user/remote_path/ssh_key_path) 검증, port 기본 22, ssh_key_path
-    및 known_hosts 파일 존재 확인. 오류엔 deploy.example.json 안내를 포함한다.
+    두 모드. (1) 키파일 모드(기본): 필수키(host/user/remote_path/ssh_key_path)
+    검증, port 기본 22, ssh_key_path·known_hosts 파일 존재 확인. (2) ssh_alias
+    위임 모드(v1.11.4): ``ssh_alias`` 가 있으면 전송을 시스템 ssh 에 위임하므로
+    remote_path 만 필수이고 키·known_hosts 파일 검사는 건너뛴다(그 경로를 안 쓴다).
+    오류엔 deploy.example.json 안내를 포함한다.
     """
     p = config_path(base)
     if not p.is_file():
@@ -111,20 +122,32 @@ def load_config(base) -> dict:
     if not isinstance(cfg, dict):
         raise DeployConfigError(i18n.t('cli.deploy.cfg.not_object'))
 
-    missing = [k for k in REQUIRED_KEYS
+    # ssh_alias 위임 모드 판정 — 별칭 형식부터 검증(공백·셸 메타문자 차단).
+    alias = str(cfg.get('ssh_alias', '')).strip()
+    if alias and not _ALIAS_RE.match(alias):
+        raise DeployConfigError(i18n.t('cli.deploy.cfg.bad_alias', alias=alias))
+
+    required = REQUIRED_KEYS_ALIAS if alias else REQUIRED_KEYS
+    missing = [k for k in required
                if not str(cfg.get(k, '')).strip()]
     if missing:
         raise DeployConfigError(i18n.t(
             'cli.deploy.cfg.missing_keys',
             keys=', '.join(missing), example=example_path(base).as_posix()))
 
-    # 포트 정규화 (기본 22).
+    # 포트 정규화 (기본 22). 별칭 모드에선 미사용이지만 무해 — 형식만 정상화.
     port = cfg.get('port', 22)
     try:
         cfg['port'] = int(port)
     except (TypeError, ValueError):
         raise DeployConfigError(i18n.t('cli.deploy.cfg.port_not_int',
                                        port=repr(port)))
+
+    if alias:
+        # 위임 모드: 인증·검증을 ~/.ssh/config(별칭)·Keychain·agent·known_hosts 가
+        # 처리하므로 키/known_hosts 파일 존재 검사를 건너뛰고 조기 반환.
+        cfg['ssh_alias'] = alias
+        return cfg
 
     key = os.path.expanduser(str(cfg['ssh_key_path']).strip())
     if not os.path.isfile(key):
@@ -145,20 +168,33 @@ def load_config(base) -> dict:
 def build_argv(rclone, base, cfg: dict, dry_run: bool) -> List[str]:
     """``rclone sync <base>/dist :sftp:<remote>`` argv (shell 미경유 리스트).
 
-    글로벌 SFTP 백엔드 플래그 + ``:sftp:`` 온더플라이 리모트 — 연결문자열
-    이스케이프를 피하고 모든 좌표를 플래그로 명시한다.
+    두 모드. 기본은 글로벌 SFTP 백엔드 플래그 + ``:sftp:`` 온더플라이 리모트로
+    모든 좌표를 플래그로 명시한다. ``ssh_alias`` 가 있으면(v1.11.4) 전송을 시스템
+    ssh 에 위임(``--sftp-ssh "ssh <alias>"``)하므로 host/user/port/key/known_hosts
+    플래그를 전부 버리고, 파일별 ``md5sum``(=ssh 연결 폭주)을 막는
+    ``--sftp-disable-hashcheck`` 만 덧붙인다. ``--sftp-ssh`` 값은 rclone 이 공백으로
+    쪼개 argv 로 쓰므로 ``"ssh <alias>"`` 두 토큰이며 alias 는 공백 없는 단일 토큰
+    (load_config 가 보장).
     """
     src = str(Path(base) / 'dist')
-    argv = [
-        str(rclone), 'sync', src, f":sftp:{cfg['remote_path']}",
-        '--sftp-host', str(cfg['host']),
-        '--sftp-user', str(cfg['user']),
-        '--sftp-port', str(cfg.get('port', 22)),
-        '--sftp-key-file', str(cfg['ssh_key_path']),
-        '--sftp-known-hosts-file', known_hosts_path(cfg),
-        '--stats-one-line', '--stats', '1s',
-        '--log-level', 'INFO',
-    ]
+    remote = f":sftp:{cfg['remote_path']}"
+    alias = str(cfg.get('ssh_alias', '')).strip()
+    if alias:
+        argv = [
+            str(rclone), 'sync', src, remote,
+            '--sftp-ssh', f'ssh {alias}',
+            '--sftp-disable-hashcheck',
+        ]
+    else:
+        argv = [
+            str(rclone), 'sync', src, remote,
+            '--sftp-host', str(cfg['host']),
+            '--sftp-user', str(cfg['user']),
+            '--sftp-port', str(cfg.get('port', 22)),
+            '--sftp-key-file', str(cfg['ssh_key_path']),
+            '--sftp-known-hosts-file', known_hosts_path(cfg),
+        ]
+    argv += ['--stats-one-line', '--stats', '1s', '--log-level', 'INFO']
     if dry_run:
         argv.append('--dry-run')
     return argv
@@ -184,8 +220,14 @@ def run(base, dry_run: bool, *,
 
     mode = (i18n.t('cli.deploy.mode.preview') if dry_run
             else i18n.t('cli.deploy.mode.apply'))
-    log(i18n.t('cli.deploy.sync_line', user=cfg['user'], host=cfg['host'],
-               remote=cfg['remote_path'], mode=mode))
+    # alias 모드엔 host/user 가 없을 수 있다(remote_path 만 필수) — 별칭 줄로 분기.
+    alias = str(cfg.get('ssh_alias', '')).strip()
+    if alias:
+        log(i18n.t('cli.deploy.sync_line_alias', alias=alias,
+                   remote=cfg['remote_path'], mode=mode))
+    else:
+        log(i18n.t('cli.deploy.sync_line', user=cfg['user'], host=cfg['host'],
+                   remote=cfg['remote_path'], mode=mode))
 
     proc = subprocess.Popen(
         argv, cwd=str(base),
