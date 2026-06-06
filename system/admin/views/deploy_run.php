@@ -75,6 +75,7 @@ $code = admin_deploy_stream($dryRun, static function (string $line) use (&$summa
     $added = $summary['added']    ?? ['count' => 0, 'bytes' => 0];
     $modif = $summary['modified'] ?? ['count' => 0, 'bytes' => 0];
     $del   = $summary['delete']   ?? ['count' => 0, 'bytes' => 0];
+    $unch  = $summary['unchanged'] ?? ['count' => 0, 'bytes' => 0];
     $warns = $summary['warnings'] ?? [];
     $junk  = $summary['junk'] ?? [];
     $byDir = $summary['by_dir'] ?? [];
@@ -83,9 +84,11 @@ $code = admin_deploy_stream($dryRun, static function (string $line) use (&$summa
     $addedFiles = $summary['added_files'] ?? [];
     $modFiles   = $summary['modified_files'] ?? [];
     $delFiles   = $summary['deleted_files'] ?? [];
+    $unchFiles  = $summary['unchanged_files'] ?? [];
     $addedN = (int)($added['count'] ?? 0);
     $modN   = (int)($modif['count'] ?? 0);
     $delN   = (int)($del['count'] ?? 0);
+    $unchN  = (int)($unch['count'] ?? 0);
     // 파일 목록 한 벌 렌더: 경로(+옵션 접두) + 크기, diff 버튼(수정만), '+N개 더' 롤업.
     $fileList = static function (array $files, $more, callable $hsize,
                                 bool $withDiff, string $prefix = '') {
@@ -128,6 +131,11 @@ $code = admin_deploy_stream($dryRun, static function (string $line) use (&$summa
     <div class="num"><?= number_format($delN) ?></div>
     <div class="sub"><?= h($hsize($del['bytes'] ?? 0)) ?></div>
   </button>
+  <button type="button" class="card accbtn" data-panel="unchanged" aria-expanded="false">
+    <div class="lbl"><?= h(t('admin.deploy_run.summary.unchanged')) ?></div>
+    <div class="num"><?= number_format($unchN) ?></div>
+    <div class="sub"><?= h($hsize($unch['bytes'] ?? 0)) ?></div>
+  </button>
   <button type="button" class="card accbtn<?= $warnCount > 0 ? ' warn' : '' ?>" data-panel="warnings" aria-expanded="false">
     <div class="lbl"><?= h(t('admin.deploy_run.summary.warnings')) ?></div>
     <div class="num"><?= number_format($warnCount) ?></div>
@@ -155,6 +163,13 @@ $code = admin_deploy_stream($dryRun, static function (string $line) use (&$summa
     <p class="muted"><?= h(t('admin.deploy_run.detail.deleted_note')) ?></p>
     <?php $fileList($delFiles, $summary['deleted_more'] ?? null, $hsize, false,
                     $remotePath !== '' ? $remotePath . '/' : ''); }
+          else { ?><p class="muted"><?= h(t('admin.deploy_run.detail.empty')) ?></p><?php } ?>
+  </section>
+  <section class="panel" id="panel-unchanged" hidden>
+    <h4><?= h(t('admin.deploy_run.detail.unchanged')) ?></h4>
+    <?php if ($unchFiles) { ?>
+    <p class="muted"><?= h(t('admin.deploy_run.detail.unchanged_note')) ?></p>
+    <?php $fileList($unchFiles, $summary['unchanged_more'] ?? null, $hsize, false); }
           else { ?><p class="muted"><?= h(t('admin.deploy_run.detail.empty')) ?></p><?php } ?>
   </section>
   <section class="panel" id="panel-warnings" hidden>

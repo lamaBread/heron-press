@@ -466,6 +466,85 @@ class TestDryRunSummary(unittest.TestCase):
         self.assertEqual(deploy.build_dry_run_summary([])['remote_path'], '')
 
 
+class TestUnchanged(unittest.TestCase):
+    """v1.13.1: '변경 없음'(전송 안 함) = 로컬 dist 전체 − (추가 ∪ 수정).
+
+    dry-run 은 바뀌는 파일만 출력하므로, 그대로 둘 파일은 dist 워크에서 역산한다.
+    삭제는 원격에만 있어 워크에 안 잡히므로 변경 없음에 끼면 안 된다.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _dist(self, rel: str, data: bytes = b'x'):
+        p = self.tmp / 'dist' / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+
+    def test_unchanged_is_dist_minus_added_and_modified(self):
+        self._dist('a.html', b'aa')        # 추가될 것
+        self._dist('b.html', b'bbb')       # 수정될 것
+        self._dist('sub/c.html', b'cccc')  # 그대로 — 변경 없음
+        self._dist('sub/d.css', b'ddddd')  # 그대로 — 변경 없음
+        s = deploy.DryRunSummary('/var/www')
+        s.feed(_notice('a.html: Skipped copy as --dry-run is set (size 2)'))
+        s.feed(_notice('b.html: Skipped update as --dry-run is set (size 3)'))
+        s.compute_unchanged(self.tmp)
+        d = s.to_dict()
+        self.assertEqual(d['unchanged']['count'], 2)
+        self.assertEqual(d['unchanged']['bytes'], 4 + 5)
+        paths = [f['path'] for f in d['unchanged_files']]
+        self.assertEqual(paths, ['sub/c.html', 'sub/d.css'])  # 경로 정렬·정규화
+        self.assertNotIn('a.html', paths)
+        self.assertNotIn('b.html', paths)
+
+    def test_deletes_do_not_count_as_unchanged(self):
+        # 삭제 대상은 dist 에 없다(원격 전용) → _changed 에도 안 들어가고 워크에도
+        # 안 잡힌다. dist 의 실제 파일만 변경 없음으로 집계돼야 한다.
+        self._dist('keep.html', b'kk')
+        s = deploy.DryRunSummary('/var/www')
+        s.feed(_notice('old.html: Skipped delete as --dry-run is set (size 9)'))
+        s.compute_unchanged(self.tmp)
+        d = s.to_dict()
+        self.assertEqual(d['unchanged']['count'], 1)
+        self.assertEqual([f['path'] for f in d['unchanged_files']], ['keep.html'])
+
+    def test_all_changed_yields_zero_unchanged(self):
+        self._dist('only.html', b'z')
+        s = deploy.DryRunSummary()
+        s.feed(_notice('only.html: Skipped copy as --dry-run is set (size 1)'))
+        s.compute_unchanged(self.tmp)
+        self.assertEqual(s.to_dict()['unchanged']['count'], 0)
+        self.assertEqual(s.to_dict()['unchanged_files'], [])
+
+    def test_missing_dist_dir_is_noop(self):
+        s = deploy.DryRunSummary()          # dist/ 없음 → 무탈, 0.
+        s.compute_unchanged(self.tmp)
+        self.assertEqual(s.to_dict()['unchanged']['count'], 0)
+
+    def test_unchanged_cap_rolls_into_more(self):
+        for i in range(deploy._FILE_CAP + 6):
+            self._dist(f'f{i:04d}.html', b'1')
+        s = deploy.DryRunSummary()
+        s.compute_unchanged(self.tmp)
+        d = s.to_dict()
+        self.assertEqual(len(d['unchanged_files']), deploy._FILE_CAP)  # 목록 상한
+        self.assertEqual(d['unchanged']['count'], deploy._FILE_CAP + 6)
+        self.assertIsNotNone(d['unchanged_more'])
+        self.assertEqual(d['unchanged_more']['count'], 6)
+
+    def test_default_unchanged_zero_without_compute(self):
+        # 순수 파싱 경로(build_dry_run_summary)는 compute_unchanged 미호출 → 0.
+        d = deploy.build_dry_run_summary([
+            _notice('a.html: Skipped copy as --dry-run is set (size 1)')])
+        self.assertEqual(d['unchanged'], {'count': 0, 'bytes': 0})
+        self.assertEqual(d['unchanged_files'], [])
+        self.assertIsNone(d['unchanged_more'])
+
+
 class TestRunSummaryEmission(_Base):
     """v1.12.0: run() 이 env 게이트에 따라 기계용 JSON 한 줄을 낸다."""
 

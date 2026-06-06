@@ -80,6 +80,9 @@ function admin_head(string $title): void {
   td.r,th.r{text-align:right}
   ul.warns{margin:6px 0 0;padding:0 0 0 18px}ul.warns li{margin:2px 0}
   /* v1.13.0 — 카드 아코디언 + 파일별 unified diff */
+  /* v1.13.1 — 카드 5장(추가/수정/삭제/변경 없음/경고). 컨테이너 폭에 맞춰
+     auto-fit 로 한 줄에 5장 → 좁으면 자연 줄바꿈(고정 4열 그리드 무시). */
+  .cards.acc{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
   button.card.accbtn{font:inherit;text-align:left;cursor:pointer;width:100%;
        display:block;transition:border-color .12s,box-shadow .12s}
   button.card.accbtn:hover{border-color:var(--accent)}

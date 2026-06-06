@@ -286,6 +286,10 @@ class DryRunSummary:
         self.modified_bytes = 0
         self.delete_count = 0
         self.delete_bytes = 0
+        # '변경 없음'(서버로 전송 안 함) — dist 워크에서 역산하므로 dry-run 파싱만으론
+        # 0 이고, compute_unchanged(base) 호출 후 채워진다.
+        self.unchanged_count = 0
+        self.unchanged_bytes = 0
         self.dirs = {'make': 0, 'remove': 0, 'touch': 0}
         self.warnings: List[str] = []
         self.junk: List[str] = []
@@ -293,6 +297,10 @@ class DryRunSummary:
         self.added_files: List[dict] = []
         self.modified_files: List[dict] = []
         self.deleted_files: List[dict] = []
+        self.unchanged_files: List[dict] = []
+        # 추가·수정된 dist 상대경로 전체(상한 없음) — '변경 없음' 역산 시 제외 집합.
+        # 표시 목록(_FILE_CAP)과 달리 캡이 없어야 수천 변경에서도 역산이 정확하다.
+        self._changed = set()
         self._by_dir = {}   # top-level dir -> [count, bytes]
 
     def feed(self, line: str) -> None:
@@ -315,6 +323,7 @@ class DryRunSummary:
             else:                       # copy(신규) + update(변경) = 업로드.
                 self.upload_count += 1
                 self.upload_bytes += size
+                self._changed.add(obj)  # '변경 없음' 역산 시 dist 워크에서 제외.
                 if act == 'copy':       # 신규 파일 → 추가.
                     self.added_count += 1
                     self.added_bytes += size
@@ -349,6 +358,35 @@ class DryRunSummary:
                 and len(self.warnings) < _WARN_CAP:
             self.warnings.append(body)
 
+    def compute_unchanged(self, base) -> None:
+        """로컬 dist 전체를 걸어 '변경 없음'(추가·수정 아닌) 파일을 집계한다.
+
+        dry-run 은 *바뀌는* 파일만 한 줄씩 내고, 그대로 둘(전송 안 할) 파일은 한
+        줄도 안 낸다 — 사람 머리로 추가·수정·삭제에서 미변경을 역산하긴 불가능하다.
+        그래서 dist 의 전체 파일에서 추가·수정 집합(_changed)을 뺀 나머지를 변경
+        없음으로 본다. 삭제 대상은 *원격에만* 있어 이 워크에 안 잡히므로 간섭하지
+        않는다. 순수 로컬 stat 워크 — 네트워크 없음. (run() 이 dry-run 에서 호출.)
+        결과는 경로 정렬이라 _FILE_CAP 절단도 결정적이다.
+        """
+        dist = Path(base) / 'dist'
+        if not dist.is_dir():
+            return
+        for root, dirs, files in os.walk(dist):
+            dirs.sort()
+            for name in sorted(files):
+                full = Path(root) / name
+                rel = full.relative_to(dist).as_posix()
+                if rel in self._changed:
+                    continue
+                try:
+                    size = full.stat().st_size
+                except OSError:
+                    continue
+                self.unchanged_count += 1
+                self.unchanged_bytes += size
+                if len(self.unchanged_files) < _FILE_CAP:
+                    self.unchanged_files.append({'path': rel, 'bytes': size})
+
     @staticmethod
     def _list_more(total_count, total_bytes, files):
         """목록 상한 초과분 롤업 {count,bytes} (없으면 None). 총계−보관분."""
@@ -376,9 +414,13 @@ class DryRunSummary:
             'modified': {'count': self.modified_count,
                          'bytes': self.modified_bytes},
             'delete': {'count': self.delete_count, 'bytes': self.delete_bytes},
+            # '변경 없음' = dist 에 있고 전송 대상 아님(compute_unchanged 채움).
+            'unchanged': {'count': self.unchanged_count,
+                          'bytes': self.unchanged_bytes},
             'added_files': list(self.added_files),
             'modified_files': list(self.modified_files),
             'deleted_files': list(self.deleted_files),
+            'unchanged_files': list(self.unchanged_files),
             'added_more': self._list_more(self.added_count, self.added_bytes,
                                           self.added_files),
             'modified_more': self._list_more(self.modified_count,
@@ -387,6 +429,9 @@ class DryRunSummary:
             'deleted_more': self._list_more(self.delete_count,
                                             self.delete_bytes,
                                             self.deleted_files),
+            'unchanged_more': self._list_more(self.unchanged_count,
+                                              self.unchanged_bytes,
+                                              self.unchanged_files),
             'dirs': dict(self.dirs),
             'warnings': list(self.warnings),
             'junk': list(self.junk),
@@ -467,6 +512,8 @@ def run(base, dry_run: bool, *,
     code = proc.returncode
     if code == 0:
         if summary is not None:
+            # dry-run 출력엔 '그대로 둘' 파일이 없으므로 로컬 dist 워크로 역산.
+            summary.compute_unchanged(base)
             _emit_dry_run_summary(summary.to_dict(), log)
         log(i18n.t('cli.deploy.preview_done') if dry_run
             else i18n.t('cli.deploy.done'))
