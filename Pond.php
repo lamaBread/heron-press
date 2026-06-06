@@ -144,6 +144,40 @@ if ($action === 'asset') {
     exit;
 }
 
+// ── ajax: 배포 미리보기 '수정' 파일 한 개의 unified diff (v1.13.0) ─────
+// '이전' 내용은 로컬 dist 에 없고 원격에만 있어, 사용자가 클릭한 그 파일만
+// Heron.py --deploy-diff 가 서버에서 cat 해 로컬 dist 본과 비교한다. 경로는
+// asset 액션과 동일한 방식으로 정규화·realpath 경계 검증(dist 안 + is_file)해야
+// 한다. 경계를 벗어나면 가져오기 자체를 안 하고 {kind:'gone'} 으로 우아하게 응답.
+if ($action === 'deploy_diff') {
+    want_post(); check_csrf();
+    header('Content-Type: application/json; charset=utf-8');
+    $rel = admin_safe_rel((string)($_POST['path'] ?? ''));
+    if ($rel === null || $rel === '') {
+        echo json_encode(['kind' => 'error', 'message' => t('admin.deploy_diff.err.path')],
+            JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $dist = admin_base_dir() . DIRECTORY_SEPARATOR . 'dist';
+    $file = $dist . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+    $real = realpath($file);
+    $baseReal = realpath($dist);
+    if ($baseReal === false || $real === false
+        || !str_starts_with($real, rtrim($baseReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)
+        || !is_file($real)) {
+        echo json_encode(['kind' => 'gone', 'path' => $rel], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    [$code, $out, $err] = admin_deploy_diff($rel);
+    $j = json_decode(trim($out), true);
+    echo is_array($j)
+        ? json_encode($j, JSON_UNESCAPED_UNICODE)
+        : json_encode(['kind' => 'error',
+                       'message' => trim($err) !== '' ? trim($err) : t('admin.deploy_diff.err.run')],
+            JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // ── 저장 (기존 글) ───────────────────────────────────────────────
 if ($action === 'save') {
     want_post(); check_csrf();

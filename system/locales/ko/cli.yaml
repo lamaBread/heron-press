@@ -18,6 +18,7 @@ cli.help.update: "최신 릴리스를 받아 오버레이 후 마이그레이션
 cli.help.fetch_rclone: "rclone 바이너리를 선확보(다운로드+SHA256 검증)하고 종료. 멱등."
 cli.help.deploy: "dist/ 를 서버에 증분 동기화하고 종료 (--dry-run 으로 미리보기)."
 cli.help.check_config: "stdin 의 site.yaml 후보를 빌드와 동일하게 파싱·검증하고 종료 (0=유효). 디스크 site.yaml 은 건드리지 않음 — Pond 설정 저장 게이트."
+cli.help.deploy_diff: "수정 파일 한 개(stdin 의 dist 상대경로)를 라이브 서버와 비교한 unified diff 를 JSON 으로 출력하고 종료. Pond 전용 — 배포 미리보기 '수정' 패널이 사용."
 cli.help.check_locale: "로케일 팩을 정본(en) 키 집합과 대조하고 종료. 인자 없으면 전체, --check-locale ja 면 하나. missing/extra/잔존 백슬래시 키를 보고 (0=결함 없음)."
 cli.help.new_locale: "system/locales/ 아래에 새 로케일 CODE 를 스캐폴딩(정본 팩 그대로 복사)하고 종료. 복사본을 번역한 뒤 --check-locale CODE 로 점검."
 
@@ -96,6 +97,8 @@ cli.deploy.rclone_exit: "rclone 종료 코드 {code} — 위 로그를 확인하
 cli.deploy.summary.header: "── 미리보기 요약 ──────────────"
 cli.deploy.summary.counts: "업로드: {uploads}개 ({up_size}) · 삭제: {deletes}개 ({del_size}) · 디렉터리: {dirs}개 작업 · 경고: {warnings}건"
 cli.deploy.summary.junk: "⚠ 불필요 파일 업로드 대상: {count}건 (예: .DS_Store) — dist/ 정리 권장."
+cli.deploy.diff.bad_path: "잘못된 경로."
+cli.deploy.diff.cat_failed: "서버에서 파일을 읽지 못했습니다."
 
 # ── 자가 업데이트 (update.py) ──────────────────────────────────────
 cli.update.unsafe_overlay: "안전하지 않은 오버레이 경로 거부: {rel}"

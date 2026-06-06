@@ -19,6 +19,7 @@ cli.help.update: "Download the latest release, overlay it, migrate, then exit."
 cli.help.fetch_rclone: "Pre-fetch the rclone binary (download + SHA256 verify), then exit. Idempotent."
 cli.help.deploy: "Incrementally sync dist/ to the server, then exit (preview with --dry-run)."
 cli.help.check_config: "Parse/validate a candidate site.yaml from stdin exactly as the build does, then exit (0=valid). Does not touch the on-disk site.yaml — Pond's settings save gate."
+cli.help.deploy_diff: "Print a unified diff (JSON) of one modified file (dist-relative path from stdin) vs the live server, then exit. Pond-only — used by the deploy preview's Modified panel."
 cli.help.check_locale: "Check locale packs against the canonical (en) key set, then exit. Bare = all locales; --check-locale ja = one. Reports missing/extra/stray-backslash keys (0=clean)."
 cli.help.new_locale: "Scaffold a new locale CODE under system/locales/ (verbatim copy of the canonical pack), then exit. Edit the copies, then run --check-locale CODE."
 
@@ -97,6 +98,8 @@ cli.deploy.rclone_exit: "rclone exit code {code} — check the log above (host k
 cli.deploy.summary.header: "── Preview summary ──────────────"
 cli.deploy.summary.counts: "Upload: {uploads} ({up_size}) · Delete: {deletes} ({del_size}) · Dir ops: {dirs} · Warnings: {warnings}"
 cli.deploy.summary.junk: "⚠ Junk files staged for upload: {count} (e.g. .DS_Store) — consider cleaning dist/."
+cli.deploy.diff.bad_path: "Invalid path."
+cli.deploy.diff.cat_failed: "Could not read the file from the server."
 
 # ── Self-update (update.py) ────────────────────────────────────────
 cli.update.unsafe_overlay: "Refused unsafe overlay path: {rel}"

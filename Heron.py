@@ -123,6 +123,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--check-config', action='store_true',
         help=i18n.t('cli.help.check_config'))
+    # v1.13.0: 미리보기 수정 파일 한 개의 unified diff (stdin=상대경로). Pond 전용.
+    parser.add_argument(
+        '--deploy-diff', action='store_true',
+        help=i18n.t('cli.help.deploy_diff'))
     # v1.9.7: 로케일 팩 점검(키 패리티/잔존 백슬래시) + 새 로케일 스캐폴딩.
     parser.add_argument(
         '--check-locale', nargs='?', const='*', metavar='CODE',
@@ -240,6 +244,29 @@ def _action_check_config(base: Path) -> int:
     return 0
 
 
+def _action_deploy_diff(base: Path) -> int:
+    """stdin 의 dist 상대경로 한 개의 unified diff 를 JSON 한 줄로 출력 (v1.13.0).
+
+    Pond 가 미리보기 '수정' 패널에서 파일을 클릭하면 그 경로를 stdin 으로 흘려보내고,
+    여기서 deploy.compute_diff 가 원격 cat + 로컬 dist 본을 비교해 kind 유니온 JSON
+    을 낸다(파싱·diff 로직 단일 출처). 설정/네트워크 오류도 깨지지 않게 JSON 으로
+    표면화 — exit 0 고정(Pond 는 stdout JSON 만 신뢰).
+    """
+    import json
+    from scripts import deploy
+    rel = sys.stdin.read().strip()
+    try:
+        result = deploy.compute_diff(base, rel)
+    except deploy.DeployConfigError as e:
+        result = {'kind': 'error', 'path': rel,
+                  'message': i18n.t('cli.deploy.config_error', error=e)}
+    except Exception as e:
+        result = {'kind': 'error', 'path': rel,
+                  'message': f'{type(e).__name__}: {e}'}
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
 def _action_check_locale(base: Path, code) -> int:
     """로케일 팩 점검 — 센티넬 '*'(=전부)를 None 으로 옮겨 locale_tools.check 호출."""
     from scripts import locale_tools
@@ -292,6 +319,8 @@ def main(argv=None) -> int:
         return _action_deploy(base, dry_run=args.dry_run)
     if args.check_config:
         return _action_check_config(base)
+    if args.deploy_diff:
+        return _action_deploy_diff(base)
     if args.check_locale is not None:
         return _action_check_locale(base, args.check_locale)
     if args.new_locale is not None:

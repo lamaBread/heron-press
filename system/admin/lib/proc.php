@@ -159,6 +159,20 @@ function admin_deploy_stream(bool $dryRun, callable $onLine): int {
     return admin_proc_stream($argv, admin_base_dir(), $onLine, $env);
 }
 
+/**
+ * 미리보기 '수정' 파일 한 개의 unified diff (v1.13.0). dist 상대경로를 stdin 으로
+ * Heron.py --deploy-diff 에 흘려보내면 Python 이 원격 cat + 로컬 dist 본을 비교해
+ * kind 유니온 JSON 한 줄을 stdout 에 낸다. 작은 페이로드라 블로킹 admin_proc 로 족함
+ * (스트리밍 불필요). 경로 검증·dist 경계는 호출부(Pond)가 책임진다. 반환 [code,out,err].
+ */
+function admin_deploy_diff(string $rel): array {
+    $argv = array_merge(
+        admin_python(),
+        [admin_base_dir() . DIRECTORY_SEPARATOR . 'Heron.py', '--deploy-diff']
+    );
+    return admin_proc($argv, $rel, admin_base_dir());
+}
+
 /** user/.heron/deploy.json 절대경로. */
 function admin_deploy_config_path(): string {
     return admin_heron_dir() . DIRECTORY_SEPARATOR . 'deploy.json';

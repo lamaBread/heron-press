@@ -79,6 +79,36 @@ function admin_head(string $title): void {
   .card.danger{border-color:#e6b8bf;background:#fff5f6}.card.danger .num{color:#b00020}
   td.r,th.r{text-align:right}
   ul.warns{margin:6px 0 0;padding:0 0 0 18px}ul.warns li{margin:2px 0}
+  /* v1.13.0 — 카드 아코디언 + 파일별 unified diff */
+  button.card.accbtn{font:inherit;text-align:left;cursor:pointer;width:100%;
+       display:block;transition:border-color .12s,box-shadow .12s}
+  button.card.accbtn:hover{border-color:var(--accent)}
+  button.card.accbtn[aria-expanded=true]{border-color:var(--accent);
+       box-shadow:0 0 0 2px rgba(43,108,176,.18)}
+  .panels{margin:0 0 8px}
+  .panel{border:1px solid var(--bd);border-radius:8px;padding:10px 12px;
+       margin:0 0 12px;background:#fff}
+  .panel h4{margin:0 0 8px;font-size:13px}
+  ul.files{list-style:none;margin:0;padding:0;font-size:13px}
+  ul.files li{padding:4px 0;border-top:1px solid var(--bd)}
+  ul.files li:first-child{border-top:0}
+  ul.files .fp{font-family:ui-monospace,Consolas,monospace;word-break:break-all}
+  ul.files .fs{color:var(--mut);font-size:12px;margin-left:8px;white-space:nowrap}
+  .diffbtn{font-size:11px;padding:2px 8px;margin-right:8px;vertical-align:baseline}
+  .more{font-size:12px;margin:6px 0 0}
+  .diffbox{margin:8px 0 2px}
+  .dmsg{font-size:12px;color:var(--mut);margin:4px 0}.dmsg.err{color:#b00020}
+  table.diff{width:100%;border-collapse:collapse;font-family:ui-monospace,Consolas,
+       monospace;font-size:12px;background:#0d0d12;color:#d6d6dc;border-radius:6px;
+       overflow:hidden;table-layout:fixed}
+  table.diff td{padding:0 8px;vertical-align:top}
+  table.diff td.ln{width:46px;text-align:right;color:#6b6b76;user-select:none;
+       white-space:nowrap}
+  table.diff td.tx{white-space:pre-wrap;word-break:break-all}
+  table.diff tr.hh td{color:#7aa2f7;background:#161b29;padding:3px 8px}
+  table.diff tr.add td.tx{background:#0f2a17;color:#b6f0c2}
+  table.diff tr.del td.tx{background:#2b1416;color:#f3b6bd}
+  table.diff tr.add td.ln,table.diff tr.del td.ln{background:#11151f}
 </style>
 </head>
 <body>

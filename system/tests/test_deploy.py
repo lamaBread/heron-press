@@ -427,6 +427,44 @@ class TestDryRunSummary(unittest.TestCase):
         self.assertIsNotNone(d['by_dir_more'])
         self.assertEqual(d['by_dir_more']['dirs'], 5)
 
+    # ── v1.13.0: copy/update 분리 + 파일별 목록 ───────────────────
+    def test_added_modified_split_and_upload_backcompat(self):
+        d = deploy.build_dry_run_summary([
+            _notice('a/x.webp: Skipped copy as --dry-run is set (size 1Ki)'),
+            _notice('a/y.html: Skipped update as --dry-run is set (size 2Ki)'),
+            _notice('old: Skipped delete as --dry-run is set (size 4Ki)'),
+        ])
+        self.assertEqual(d['added']['count'], 1)
+        self.assertEqual(d['added']['bytes'], 1024)
+        self.assertEqual(d['modified']['count'], 1)
+        self.assertEqual(d['modified']['bytes'], 2048)
+        # 하위호환: upload(=기존 키) == added + modified (합산 유지).
+        self.assertEqual(d['upload']['count'],
+                         d['added']['count'] + d['modified']['count'])
+        self.assertEqual(d['upload']['bytes'],
+                         d['added']['bytes'] + d['modified']['bytes'])
+        self.assertEqual([f['path'] for f in d['added_files']], ['a/x.webp'])
+        self.assertEqual([f['path'] for f in d['modified_files']], ['a/y.html'])
+        self.assertEqual([f['path'] for f in d['deleted_files']], ['old'])
+        self.assertEqual(d['added_files'][0]['bytes'], 1024)
+
+    def test_file_list_cap_rolls_into_more(self):
+        n = deploy._FILE_CAP + 7
+        lines = [_notice(f'f{i:04d}.html: Skipped copy as --dry-run is set '
+                         f'(size 1Ki)') for i in range(n)]
+        d = deploy.build_dry_run_summary(lines)
+        self.assertEqual(len(d['added_files']), deploy._FILE_CAP)  # 목록은 상한
+        self.assertEqual(d['added']['count'], n)                   # 총계는 정확
+        self.assertIsNotNone(d['added_more'])
+        self.assertEqual(d['added_more']['count'], 7)
+        self.assertEqual(d['added_more']['bytes'], 7 * 1024)
+
+    def test_remote_path_carried_for_delete_display(self):
+        s = deploy.DryRunSummary('/var/www/site')
+        self.assertEqual(s.to_dict()['remote_path'], '/var/www/site')
+        # 기본(테스트 헬퍼)은 빈 문자열 — 하위호환.
+        self.assertEqual(deploy.build_dry_run_summary([])['remote_path'], '')
+
 
 class TestRunSummaryEmission(_Base):
     """v1.12.0: run() 이 env 게이트에 따라 기계용 JSON 한 줄을 낸다."""
@@ -473,6 +511,171 @@ class TestRunSummaryEmission(_Base):
             deploy.run(self.tmp, dry_run=True, log=lambda _m: None)
         self.assertFalse(any(s.startswith(deploy.SUMMARY_SENTINEL)
                              for s in captured))
+
+
+class TestSafeRelpath(unittest.TestCase):
+    """v1.13.0: diff 경로 정규화·거부 (심층 방어)."""
+
+    def test_rejects_traversal_and_nul(self):
+        self.assertIsNone(deploy._safe_relpath('../etc/passwd'))
+        self.assertIsNone(deploy._safe_relpath('a/../b'))
+        self.assertIsNone(deploy._safe_relpath('a\x00b'))
+        self.assertIsNone(deploy._safe_relpath(''))
+        self.assertIsNone(deploy._safe_relpath(None))
+        self.assertIsNone(deploy._safe_relpath('C:/Windows'))
+
+    def test_normalizes_slashes_and_leading_slash(self):
+        self.assertEqual(deploy._safe_relpath('a/b.html'), 'a/b.html')
+        self.assertEqual(deploy._safe_relpath('a\\b.html'), 'a/b.html')
+        # 선행 슬래시는 제거(원격은 remote_path 하위로만 붙어 탈출 불가).
+        self.assertEqual(deploy._safe_relpath('/a/b.html'), 'a/b.html')
+
+
+class _FakeStream:
+    def __init__(self, data: bytes):
+        self._d = data
+
+    def read(self, n: int = -1) -> bytes:
+        if n is None or n < 0:
+            d, self._d = self._d, b''
+            return d
+        d, self._d = self._d[:n], self._d[n:]
+        return d
+
+
+class _FakeCatPopen:
+    """cat_remote 의 capped read/kill/wait 배선을 검증할 가짜 Popen(바이너리)."""
+    def __init__(self, out: bytes = b'', err: bytes = b'', code: int = 0):
+        self.stdout = _FakeStream(out)
+        self.stderr = _FakeStream(err)
+        self.returncode = None
+        self._code = code
+        self.killed = False
+
+    def kill(self):
+        self.killed = True
+
+    def wait(self):
+        self.returncode = self._code
+
+
+class TestCatRemote(_Base):
+    """v1.13.0: 원격 한 파일 cat — argv 조립 + cap 절단 + 종료코드."""
+
+    def test_argv_shape_and_passthrough(self):
+        cfg = {'remote_path': '/var/www/site', 'ssh_alias': 'lama'}
+        captured = {}
+
+        def fake_popen(argv, **kw):
+            captured['argv'] = argv
+            return _FakeCatPopen(out=b'hello', code=0)
+
+        with mock.patch.object(deploy.subprocess, 'Popen', side_effect=fake_popen):
+            data, code, trunc, err = deploy.cat_remote(
+                self.tmp, 'a/x.html', cfg, '/bin/rclone')
+        self.assertEqual(data, b'hello')
+        self.assertEqual(code, 0)
+        self.assertFalse(trunc)
+        self.assertEqual(captured['argv'][:3],
+                         ['/bin/rclone', 'cat', ':sftp:/var/www/site/a/x.html'])
+        self.assertIn('--sftp-ssh', captured['argv'])   # 연결 좌표 공유
+
+    def test_truncates_oversize_and_kills(self):
+        cfg = {'remote_path': '/var/www/site', 'ssh_alias': 'lama'}
+        fake = _FakeCatPopen(out=b'x' * 100, code=0)
+        with mock.patch.object(deploy.subprocess, 'Popen', return_value=fake):
+            data, code, trunc, err = deploy.cat_remote(
+                self.tmp, 'x', cfg, '/bin/rclone', cap=10)
+        self.assertTrue(trunc)
+        self.assertLessEqual(len(data), 10)
+        self.assertTrue(fake.killed)
+
+
+class TestDeployDiff(_Base):
+    """v1.13.0: compute_diff 의 kind 유니온 (네트워크는 cat_remote 모킹)."""
+
+    def _dist(self, rel: str, data: bytes):
+        p = self.tmp / 'dist' / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+        return p
+
+    def _wired(self, cat_return):
+        """ensure/load_config/cat_remote 를 한꺼번에 모킹하는 컨텍스트들."""
+        return (
+            mock.patch.object(deploy.rclone_bin, 'ensure',
+                              return_value='/bin/rclone'),
+            mock.patch.object(deploy, 'load_config',
+                              return_value={'remote_path': '/var/www',
+                                            'ssh_alias': 'lama'}),
+            mock.patch.object(deploy, 'cat_remote', return_value=cat_return),
+        )
+
+    def test_bad_path_rejected_before_any_fetch(self):
+        with mock.patch.object(deploy.rclone_bin, 'ensure') as ens, \
+             mock.patch.object(deploy, 'cat_remote') as cat:
+            res = deploy.compute_diff(self.tmp, '../etc/passwd')
+        self.assertEqual(res['kind'], 'error')
+        ens.assert_not_called()
+        cat.assert_not_called()
+
+    def test_local_missing_is_gone(self):
+        with mock.patch.object(deploy.rclone_bin, 'ensure') as ens:
+            res = deploy.compute_diff(self.tmp, 'a/x.html')
+        self.assertEqual(res['kind'], 'gone')
+        ens.assert_not_called()
+
+    def test_local_too_large_skips_fetch(self):
+        self._dist('big.bin', b'x' * 50)
+        with mock.patch.object(deploy, '_DIFF_CAP', 10), \
+             mock.patch.object(deploy.rclone_bin, 'ensure') as ens:
+            res = deploy.compute_diff(self.tmp, 'big.bin')
+        self.assertEqual(res['kind'], 'too_large')
+        self.assertEqual(res['new_bytes'], 50)
+        ens.assert_not_called()
+
+    def test_unified_diff_hunks_and_line_numbers(self):
+        self._dist('a/x.html', b'line1\nline2 new\nline3\n')
+        ens, lc, cat = self._wired((b'line1\nline2 old\nline3\n', 0, False, ''))
+        with ens, lc, cat:
+            res = deploy.compute_diff(self.tmp, 'a/x.html')
+        self.assertEqual(res['kind'], 'diff')
+        changes = {l['tag']: l for hk in res['hunks'] for l in hk['lines']
+                   if l['tag'] in '+-'}
+        self.assertEqual(changes['-']['text'], 'line2 old')
+        self.assertEqual(changes['+']['text'], 'line2 new')
+        self.assertEqual(changes['-']['old'], 2)
+        self.assertEqual(changes['+']['new'], 2)
+
+    def test_identical_content_modtime_only(self):
+        same = b'same\ncontent\n'
+        self._dist('a/x.html', same)
+        ens, lc, cat = self._wired((same, 0, False, ''))
+        with ens, lc, cat:
+            res = deploy.compute_diff(self.tmp, 'a/x.html')
+        self.assertEqual(res['kind'], 'identical')
+
+    def test_binary_detected_by_null_byte(self):
+        self._dist('a/i.png', b'\x89PNG\x00\x01\x02')
+        ens, lc, cat = self._wired((b'\x89PNG\x00old', 0, False, ''))
+        with ens, lc, cat:
+            res = deploy.compute_diff(self.tmp, 'a/i.png')
+        self.assertEqual(res['kind'], 'binary')
+
+    def test_remote_truncated_is_too_large(self):
+        self._dist('a/x.html', b'small\n')
+        ens, lc, cat = self._wired((b'partial', 0, True, ''))
+        with ens, lc, cat:
+            res = deploy.compute_diff(self.tmp, 'a/x.html')
+        self.assertEqual(res['kind'], 'too_large')
+
+    def test_cat_failure_surfaces_as_error(self):
+        self._dist('a/x.html', b'local\n')
+        ens, lc, cat = self._wired((b'', 3, False, 'connection refused'))
+        with ens, lc, cat:
+            res = deploy.compute_diff(self.tmp, 'a/x.html')
+        self.assertEqual(res['kind'], 'error')
+        self.assertIn('connection refused', res['message'])
 
 
 if __name__ == '__main__':

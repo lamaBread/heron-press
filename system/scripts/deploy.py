@@ -19,6 +19,7 @@
 dist 어디에도 새지 않는다. 견본(``deploy.example.json``)은 커밋되며, 기존
 사용자에겐 ``m_1_7_0`` 마이그레이션이 시드한다 (오버레이는 user/ 미접촉이라).
 """
+import difflib
 import json
 import os
 import re
@@ -165,35 +166,37 @@ def load_config(base) -> dict:
 
 # ── argv 조립 ─────────────────────────────────────────────────────
 
+def _connection_flags(cfg: dict) -> List[str]:
+    """SFTP 연결 좌표 플래그(sync·cat 공용). 두 모드 동일 적용.
+
+    ``ssh_alias`` 가 있으면(v1.11.4) 전송을 시스템 ssh 에 위임
+    (``--sftp-ssh "ssh <alias>"``)하므로 host/user/port/key/known_hosts 플래그를
+    전부 버리고, 파일별 ``md5sum``(=ssh 연결 폭주)을 막는
+    ``--sftp-disable-hashcheck`` 만 둔다. ``--sftp-ssh`` 값은 rclone 이 공백으로
+    쪼개 argv 로 쓰므로 ``"ssh <alias>"`` 두 토큰이며 alias 는 공백 없는 단일 토큰
+    (load_config 가 보장). 아니면 글로벌 SFTP 백엔드 플래그로 모든 좌표를 명시.
+    """
+    alias = str(cfg.get('ssh_alias', '')).strip()
+    if alias:
+        return ['--sftp-ssh', f'ssh {alias}', '--sftp-disable-hashcheck']
+    return [
+        '--sftp-host', str(cfg['host']),
+        '--sftp-user', str(cfg['user']),
+        '--sftp-port', str(cfg.get('port', 22)),
+        '--sftp-key-file', str(cfg['ssh_key_path']),
+        '--sftp-known-hosts-file', known_hosts_path(cfg),
+    ]
+
+
 def build_argv(rclone, base, cfg: dict, dry_run: bool) -> List[str]:
     """``rclone sync <base>/dist :sftp:<remote>`` argv (shell 미경유 리스트).
 
-    두 모드. 기본은 글로벌 SFTP 백엔드 플래그 + ``:sftp:`` 온더플라이 리모트로
-    모든 좌표를 플래그로 명시한다. ``ssh_alias`` 가 있으면(v1.11.4) 전송을 시스템
-    ssh 에 위임(``--sftp-ssh "ssh <alias>"``)하므로 host/user/port/key/known_hosts
-    플래그를 전부 버리고, 파일별 ``md5sum``(=ssh 연결 폭주)을 막는
-    ``--sftp-disable-hashcheck`` 만 덧붙인다. ``--sftp-ssh`` 값은 rclone 이 공백으로
-    쪼개 argv 로 쓰므로 ``"ssh <alias>"`` 두 토큰이며 alias 는 공백 없는 단일 토큰
-    (load_config 가 보장).
+    연결 좌표는 _connection_flags 가 모드별(별칭/키파일)로 조립한다. 여기서는
+    sync 전용 옵션(통계 한 줄·로그 레벨·dry-run)만 덧붙인다.
     """
     src = str(Path(base) / 'dist')
     remote = f":sftp:{cfg['remote_path']}"
-    alias = str(cfg.get('ssh_alias', '')).strip()
-    if alias:
-        argv = [
-            str(rclone), 'sync', src, remote,
-            '--sftp-ssh', f'ssh {alias}',
-            '--sftp-disable-hashcheck',
-        ]
-    else:
-        argv = [
-            str(rclone), 'sync', src, remote,
-            '--sftp-host', str(cfg['host']),
-            '--sftp-user', str(cfg['user']),
-            '--sftp-port', str(cfg.get('port', 22)),
-            '--sftp-key-file', str(cfg['ssh_key_path']),
-            '--sftp-known-hosts-file', known_hosts_path(cfg),
-        ]
+    argv = [str(rclone), 'sync', src, remote] + _connection_flags(cfg)
     argv += ['--stats-one-line', '--stats', '1s', '--log-level', 'INFO']
     if dry_run:
         argv.append('--dry-run')
@@ -231,6 +234,14 @@ _JUNK_BASENAMES = {'.DS_Store', 'Thumbs.db', 'desktop.ini', '.localized'}
 
 _WARN_CAP = 12          # 경고 줄 수집 상한 (중복 제외).
 _BY_DIR_CAP = 30        # 상위 디렉터리별 표 행 상한 (나머지는 '그 외'로 롤업).
+_FILE_CAP = 500         # 추가/수정/삭제 파일별 목록 상한 (나머지는 '+N개 더'로 롤업).
+
+# 파일별 diff(미리보기→클릭 시 그 파일만 서버에서 cat)의 한계. 대용량은 네트워크·
+# 메모리·DOM 폭주를 막으려 받지 않고 'too_large'로 끊는다.
+_DIFF_CAP = 512 * 1024  # 한쪽이라도 이보다 크면 diff 생략(원격 DoS·메모리 방어).
+_DIFF_CONTEXT = 3       # unified hunk 앞뒤 맥락 줄 수.
+_DIFF_MAX_LINES = 4000  # hunk 줄 총합 상한(초과 시 truncated). JSON/DOM 폭증 방지.
+_LINE_CLIP = 2000       # 한 줄 표시 최대 글자(초과분 절단).
 
 # admin(PHP)이 스트림에서 가로채는 기계용 요약 한 줄의 접두 sentinel. 제어문자
 # (RS)라 rclone/Heron 의 어떤 정상 출력과도 충돌하지 않는다.
@@ -265,14 +276,23 @@ def _top_dir(obj: str) -> str:
 class DryRunSummary:
     """dry-run rclone 출력을 줄 단위로 먹으며 집계하는 누산기."""
 
-    def __init__(self):
-        self.upload_count = 0
+    def __init__(self, remote_path: str = ''):
+        self.remote_path = remote_path
+        self.upload_count = 0       # copy+update 합산 — 하위호환(기존 'upload' 키).
         self.upload_bytes = 0
+        self.added_count = 0        # copy(신규) — 'added'.
+        self.added_bytes = 0
+        self.modified_count = 0     # update(변경) — 'modified'.
+        self.modified_bytes = 0
         self.delete_count = 0
         self.delete_bytes = 0
         self.dirs = {'make': 0, 'remove': 0, 'touch': 0}
         self.warnings: List[str] = []
         self.junk: List[str] = []
+        # 파일별 목록(경로+bytes) — 각 _FILE_CAP 까지만 보관, 초과분은 총계로 롤업.
+        self.added_files: List[dict] = []
+        self.modified_files: List[dict] = []
+        self.deleted_files: List[dict] = []
         self._by_dir = {}   # top-level dir -> [count, bytes]
 
     def feed(self, line: str) -> None:
@@ -290,9 +310,21 @@ class DryRunSummary:
             if act == 'delete':
                 self.delete_count += 1
                 self.delete_bytes += size
+                if len(self.deleted_files) < _FILE_CAP:
+                    self.deleted_files.append({'path': obj, 'bytes': size})
             else:                       # copy(신규) + update(변경) = 업로드.
                 self.upload_count += 1
                 self.upload_bytes += size
+                if act == 'copy':       # 신규 파일 → 추가.
+                    self.added_count += 1
+                    self.added_bytes += size
+                    if len(self.added_files) < _FILE_CAP:
+                        self.added_files.append({'path': obj, 'bytes': size})
+                else:                   # update → 수정(내용·시각 변경).
+                    self.modified_count += 1
+                    self.modified_bytes += size
+                    if len(self.modified_files) < _FILE_CAP:
+                        self.modified_files.append({'path': obj, 'bytes': size})
                 slot = self._by_dir.setdefault(_top_dir(obj), [0, 0])
                 slot[0] += 1
                 slot[1] += size
@@ -317,6 +349,15 @@ class DryRunSummary:
                 and len(self.warnings) < _WARN_CAP:
             self.warnings.append(body)
 
+    @staticmethod
+    def _list_more(total_count, total_bytes, files):
+        """목록 상한 초과분 롤업 {count,bytes} (없으면 None). 총계−보관분."""
+        shown = len(files)
+        if total_count <= shown:
+            return None
+        return {'count': total_count - shown,
+                'bytes': total_bytes - sum(f['bytes'] for f in files)}
+
     def to_dict(self) -> dict:
         rows = sorted(self._by_dir.items(), key=lambda kv: (-kv[1][1], kv[0]))
         head, tail = rows[:_BY_DIR_CAP], rows[_BY_DIR_CAP:]
@@ -328,8 +369,24 @@ class DryRunSummary:
                     'bytes': sum(cb[1] for _, cb in tail)}
         return {
             'dry_run': True,
+            'remote_path': self.remote_path,
+            # 'upload' = copy+update 합산(하위호환). 'added'/'modified' 가 분리본.
             'upload': {'count': self.upload_count, 'bytes': self.upload_bytes},
+            'added': {'count': self.added_count, 'bytes': self.added_bytes},
+            'modified': {'count': self.modified_count,
+                         'bytes': self.modified_bytes},
             'delete': {'count': self.delete_count, 'bytes': self.delete_bytes},
+            'added_files': list(self.added_files),
+            'modified_files': list(self.modified_files),
+            'deleted_files': list(self.deleted_files),
+            'added_more': self._list_more(self.added_count, self.added_bytes,
+                                          self.added_files),
+            'modified_more': self._list_more(self.modified_count,
+                                             self.modified_bytes,
+                                             self.modified_files),
+            'deleted_more': self._list_more(self.delete_count,
+                                            self.delete_bytes,
+                                            self.deleted_files),
             'dirs': dict(self.dirs),
             'warnings': list(self.warnings),
             'junk': list(self.junk),
@@ -400,7 +457,7 @@ def run(base, dry_run: bool, *,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, encoding='utf-8', errors='replace', bufsize=1)
     assert proc.stdout is not None
-    summary = DryRunSummary() if dry_run else None
+    summary = DryRunSummary(cfg['remote_path']) if dry_run else None
     for line in proc.stdout:
         sys.stdout.write(line)
         sys.stdout.flush()
@@ -416,3 +473,152 @@ def run(base, dry_run: bool, *,
     else:
         log(i18n.t('cli.deploy.rclone_exit', code=code))
     return code
+
+
+# ── 파일별 diff (미리보기 → 클릭 시 그 파일만) ─────────────────────
+#
+# dry-run 은 '무엇이 바뀌는지'만 알려줄 뿐 파일 내용은 안 준다. 수정 파일의 '이전'
+# 은 로컬 dist 에 없고 원격에만 있으므로, 사용자가 한 파일을 클릭할 때만 그 파일을
+# rclone cat 으로 받아 로컬 dist 본과 unified diff 를 만든다(Python 단일 출처).
+# 대용량/바이너리/사라짐 등은 kind 유니온으로 우아하게 끊는다 — Pond 가 렌더만.
+
+def _safe_relpath(rel) -> Optional[str]:
+    """dist 기준 상대경로 정규화·검증(admin_safe_rel 과 동형, 심층 방어).
+
+    슬래시/역슬래시 통일, NUL·빈세그·'.'·'..'·드라이브문자·선행 슬래시 거부.
+    반환: 정규화된 rel 또는 None(거부). 선행 '-' 도 cat 인자에서 ``:sftp:.../``
+    접두 뒤에 붙어 플래그로 오인되지 않으나, 경로 자체의 안전성만 본다.
+    """
+    if rel is None:
+        return None
+    rel = str(rel).replace('\\', '/').strip()
+    if '\x00' in rel:
+        return None
+    rel = rel.lstrip('/')
+    if not rel or re.match(r'^[A-Za-z]:', rel):
+        return None
+    parts = rel.split('/')
+    for p in parts:
+        if p in ('', '.', '..'):
+            return None
+    return '/'.join(parts)
+
+
+def cat_remote(base, rel: str, cfg: dict, rclone, *,
+               cap: int = _DIFF_CAP, log=None):
+    """원격의 한 파일을 ``rclone cat`` 으로 받는다(바이너리, 연결 좌표는 sync 와 공유).
+
+    cap+1 바이트까지만 읽고 초과 시 프로세스를 끊어 대용량·원격 DoS·메모리 폭주를
+    막는다. rel 은 호출 전 _safe_relpath 통과 전제. 반환:
+    (data:bytes, returncode:int, truncated:bool, stderr_text:str).
+    """
+    remote = f":sftp:{cfg['remote_path']}/{rel}"
+    argv = [str(rclone), 'cat', remote] + _connection_flags(cfg)
+    proc = subprocess.Popen(argv, cwd=str(base),
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert proc.stdout is not None and proc.stderr is not None
+    data = proc.stdout.read(cap + 1)
+    truncated = len(data) > cap
+    if truncated:
+        proc.kill()
+    try:
+        err = proc.stderr.read().decode('utf-8', 'replace')
+    except OSError:
+        err = ''
+    proc.wait()
+    return data[:cap], proc.returncode, truncated, err
+
+
+def _clip_line(s: str) -> str:
+    """한 줄 표시 상한(초과분은 …로 절단) — DOM/JSON 폭증 방지."""
+    return s if len(s) <= _LINE_CLIP else s[:_LINE_CLIP] + '…'
+
+
+def _build_hunks(old_lines, new_lines, *,
+                 context: int = _DIFF_CONTEXT, max_lines: int = _DIFF_MAX_LINES):
+    """줄 리스트 두 개 → unified hunk 목록 + truncated 플래그.
+
+    difflib 의 그룹 오프코드(앞뒤 context 줄)로 hunk 를 만들고, 변경 블록은
+    삭제(-)를 먼저, 추가(+)를 나중에 낸다(unified 관례). 총 줄수 상한 초과 시 끊는다.
+    """
+    sm = difflib.SequenceMatcher(a=old_lines, b=new_lines)
+    hunks: List[dict] = []
+    emitted = 0
+    truncated = False
+    for group in sm.get_grouped_opcodes(context):
+        lines: List[dict] = []
+        old_start = group[0][1] + 1
+        new_start = group[0][3] + 1
+        for tag, i1, i2, j1, j2 in group:
+            if tag == 'equal':
+                for k in range(i1, i2):
+                    lines.append({'tag': ' ', 'old': k + 1,
+                                  'new': j1 + (k - i1) + 1,
+                                  'text': _clip_line(old_lines[k])})
+                    emitted += 1
+            else:
+                for k in range(i1, i2):
+                    lines.append({'tag': '-', 'old': k + 1, 'new': None,
+                                  'text': _clip_line(old_lines[k])})
+                    emitted += 1
+                for k in range(j1, j2):
+                    lines.append({'tag': '+', 'old': None, 'new': k + 1,
+                                  'text': _clip_line(new_lines[k])})
+                    emitted += 1
+            if emitted >= max_lines:
+                truncated = True
+                break
+        hunks.append({'old_start': old_start, 'new_start': new_start,
+                      'lines': lines})
+        if truncated:
+            break
+    return hunks, truncated
+
+
+def compute_diff(base, relpath, *, opener=None, log=None) -> dict:
+    """수정 파일 한 개의 unified diff (kind 유니온 dict). 네트워크는 이 안에서만.
+
+    kind: 'diff'(hunks) | 'identical'(내용 동일·modtime 만) | 'binary' |
+    'too_large' | 'gone'(로컬 dist 부재) | 'error'(잘못된 경로·cat 실패).
+    """
+    base = Path(base)
+    log = log or (lambda _m: None)
+    rel = _safe_relpath(relpath)
+    if rel is None:
+        return {'kind': 'error', 'path': str(relpath),
+                'message': i18n.t('cli.deploy.diff.bad_path')}
+
+    local = base / 'dist' / rel
+    try:
+        if not local.is_file():
+            return {'kind': 'gone', 'path': rel}
+        new_size = local.stat().st_size
+        if new_size > _DIFF_CAP:
+            return {'kind': 'too_large', 'path': rel,
+                    'old_bytes': None, 'new_bytes': new_size, 'cap': _DIFF_CAP}
+        new_bytes = local.read_bytes()
+    except OSError as e:
+        return {'kind': 'error', 'path': rel, 'message': str(e)}
+
+    rclone = rclone_bin.ensure(base, opener=opener, log=log)
+    cfg = load_config(base)
+    old_bytes, code, truncated, err = cat_remote(base, rel, cfg, rclone, log=log)
+    if truncated:
+        return {'kind': 'too_large', 'path': rel,
+                'old_bytes': None, 'new_bytes': len(new_bytes), 'cap': _DIFF_CAP}
+    if code != 0:
+        msg = (err or '').strip()[:500] or i18n.t('cli.deploy.diff.cat_failed')
+        return {'kind': 'error', 'path': rel, 'message': msg}
+
+    if b'\x00' in old_bytes or b'\x00' in new_bytes:
+        return {'kind': 'binary', 'path': rel,
+                'old_bytes': len(old_bytes), 'new_bytes': len(new_bytes)}
+    if old_bytes == new_bytes:
+        return {'kind': 'identical', 'path': rel, 'new_bytes': len(new_bytes)}
+
+    old_lines = old_bytes.decode('utf-8', 'replace').splitlines()
+    new_lines = new_bytes.decode('utf-8', 'replace').splitlines()
+    hunks, trunc = _build_hunks(old_lines, new_lines)
+    return {'kind': 'diff', 'path': rel,
+            'old_bytes': len(old_bytes), 'new_bytes': len(new_bytes),
+            'truncated': trunc, 'hunks': hunks}
