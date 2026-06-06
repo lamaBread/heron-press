@@ -39,6 +39,15 @@ function admin_head(string $title): void {
        vertical-align:top}
   th{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
   .muted{color:var(--mut)}.mono{font-family:ui-monospace,Consolas,monospace}
+  /* 이동 직후 목록에서 새 '경로' 문자열을 1회 강조 (list.php ?hl= → span.pathmoved).
+     성공 의미의 초록 하이라이트가 텍스트를 감싸며 평상복(muted)으로 가라앉는다. */
+  .pathmoved{display:inline-block;padding:1px 4px;border-radius:4px;
+       scroll-margin-top:64px;animation:pathmoved 1.8s ease-out both}
+  @keyframes pathmoved{0%{background:#cdebd0;color:#1e5b1e}
+       55%{background:#e4f4e6;color:#1e5b1e}
+       100%{background:transparent;color:var(--mut)}}
+  @media(prefers-reduced-motion:reduce){.pathmoved{animation:none;
+       background:#e4f4e6;color:#1e5b1e}}
   .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;
        border:1px solid var(--bd);color:var(--mut);background:#fff}
   .tag.hid{color:#9a6700;border-color:#e6d8a8;background:#fffaf0}

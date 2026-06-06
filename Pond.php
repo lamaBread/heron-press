@@ -266,6 +266,9 @@ if ($action === 'move') {
     $abs = require_post_abs($id);
     $target = admin_safe_rel((string)($_POST['target'] ?? ''));
     if ($target === null) { http_response_code(400); exit(t('admin.error.target_path')); }
+    // 드롭다운이 현재 카테고리를 기본 선택하므로, 같은 대상 제출 = 이동 없음.
+    $parent = trim(dirname(str_replace('\\', '/', $id)), '.');
+    if ($target === $parent) redirect('?a=list');
     $name = basename(str_replace('\\', '/', $id));
     $destRel = ($target === '' ? '' : $target . '/') . $name;
     $destAbs = admin_abs($destRel);
@@ -275,7 +278,8 @@ if ($action === 'move') {
     }
     @mkdir(dirname($destAbs), 0777, true);
     @rename($abs, $destAbs);
-    redirect('?a=list&moved=1');
+    // hl=새 경로 → 목록에서 그 행의 '경로' 칸을 한 번 반짝(이동 인지). #moved 로 스크롤.
+    redirect('?a=list&moved=1&hl=' . rawurlencode($destRel) . '#moved');
 }
 
 // ── 비공개/공개 토글 ('_' 접두) ──────────────────────────────────

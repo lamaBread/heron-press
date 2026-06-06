@@ -11,6 +11,7 @@ foreach ([['moved','admin.list.flash.moved'],
     if (!empty($_GET[$f[0]])) echo '<div class="flash ok">' . h(t($f[1])) . '</div>';
 }
 $cats = $scan['categories'];
+$hl = (string)($_GET['hl'] ?? '');   // 방금 이동한 글 id — 경로 칸 문자열 1회 강조.
 
 // v1.6.0 업데이트 배너 — admin_read_update_cache() 결과($updateInfo)에 기반.
 // 캐시는 헤더 "업데이트 확인" 버튼이 GitHub 를 조회해 갱신한다 (페이지 로드마다
@@ -41,10 +42,10 @@ if (!empty($ui['error'])):
   <thead><tr><th><?= h(t('admin.list.col.title')) ?></th><th><?= h(t('admin.list.col.path')) ?></th><th><?= h(t('admin.list.col.status')) ?></th>
     <th style="width:340px"><?= h(t('admin.list.col.actions')) ?></th></tr></thead>
   <tbody>
-  <?php foreach ($scan['posts'] as $p): $eid = rawurlencode($p['id']); ?>
+  <?php foreach ($scan['posts'] as $p): $eid = rawurlencode($p['id']); $isHl = ($p['id'] === $hl); ?>
     <tr>
       <td><a href="<?= h($self) ?>?a=edit&id=<?= $eid ?>"><?= h($p['title']) ?></a></td>
-      <td class="mono muted"><?= h($p['id']) ?></td>
+      <td class="mono muted"><?php if ($isHl): ?><span id="moved" class="pathmoved"><?= h($p['id']) ?></span><?php else: ?><?= h($p['id']) ?><?php endif; ?></td>
       <td>
         <?php if ($p['hidden']): ?><span class="tag hid"><?= h(t('admin.list.status.hidden')) ?></span><?php
           else: ?><span class="tag"><?= h(t('admin.list.status.public')) ?></span><?php endif; ?>
@@ -61,9 +62,8 @@ if (!empty($ui['error'])):
             <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
             <input type="hidden" name="id" value="<?= h($p['id']) ?>">
             <select name="target" title="<?= h(t('admin.list.action.move.title')) ?>">
-              <?php foreach ($cats as $c):
-                if ($c === $p['parent']) continue; ?>
-                <option value="<?= h($c) ?>"><?= $c === '' ? h(t('admin.list.cat.toplevel')) : h($c) ?></option>
+              <?php foreach ($cats as $c): ?>
+                <option value="<?= h($c) ?>"<?= $c === $p['parent'] ? ' selected' : '' ?>><?= $c === '' ? h(t('admin.list.cat.toplevel')) : h($c) ?></option>
               <?php endforeach; ?>
             </select>
             <button type="submit"><?= h(t('admin.list.action.move')) ?></button>
