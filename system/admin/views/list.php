@@ -57,16 +57,19 @@ if (!empty($ui['error'])):
         <div class="row">
           <a class="btn" href="<?= h($self) ?>?a=edit&id=<?= $eid ?>"><?= h(t('admin.list.action.edit')) ?></a>
 
-          <form method="post" action="<?= h($self) ?>?a=move" class="row"
-                style="gap:4px" onsubmit="return confirm('<?= h(t('admin.list.action.move.confirm')) ?>')">
+          <?php // 카테고리 변경 = 즉시 이동(별도 버튼 없음). confirm 1회 —
+                // 취소 시 현재값으로 복원(data-cur), 휠 스크롤 오작동은 blur 로 가드. ?>
+          <form method="post" action="<?= h($self) ?>?a=move">
             <input type="hidden" name="csrf" value="<?= h($CSRF) ?>">
             <input type="hidden" name="id" value="<?= h($p['id']) ?>">
-            <select name="target" title="<?= h(t('admin.list.action.move.title')) ?>">
+            <select name="target" title="<?= h(t('admin.list.action.move.title')) ?>"
+                    data-cur="<?= h($p['parent']) ?>" style="width:auto;max-width:200px"
+                    onchange="if(confirm('<?= h(t('admin.list.action.move.confirm')) ?>'))this.form.submit();else this.value=this.dataset.cur"
+                    onwheel="this.blur()">
               <?php foreach ($cats as $c): ?>
                 <option value="<?= h($c) ?>"<?= $c === $p['parent'] ? ' selected' : '' ?>><?= $c === '' ? h(t('admin.list.cat.toplevel')) : h($c) ?></option>
               <?php endforeach; ?>
             </select>
-            <button type="submit"><?= h(t('admin.list.action.move')) ?></button>
           </form>
 
           <form method="post" action="<?= h($self) ?>?a=visibility" style="display:inline">
