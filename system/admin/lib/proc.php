@@ -111,13 +111,15 @@ function admin_run_heron(array $flags): array {
  * 를 자기 stdout 으로 합치고 자체 로그도 stdout 으로 내므로 거의 모든 출력이
  * pipe1 로 온다 — 남은 stderr(예외/argparse)는 종료 후 드레인. 반환: exit code.
  */
-function admin_proc_stream(array $argv, ?string $cwd, callable $onLine): int {
+function admin_proc_stream(array $argv, ?string $cwd, callable $onLine, ?array $env = null): int {
     $desc = [
         0 => ['pipe', 'r'],
         1 => ['pipe', 'w'],
         2 => ['pipe', 'w'],
     ];
-    $proc = @proc_open($argv, $desc, $pipes, $cwd, null, ['bypass_shell' => true]);
+    // $env=null 이면 부모 환경을 그대로 상속. 비-null 이면 proc_open 이 자식 환경을
+    // 통째로 교체하므로 호출부가 getenv() 병합본을 넘겨야 한다(PATH 등 유실 방지).
+    $proc = @proc_open($argv, $desc, $pipes, $cwd, $env, ['bypass_shell' => true]);
     if (!is_resource($proc)) { $onLine(t('admin.error.proc_open')); return -1; }
     fclose($pipes[0]);
 
@@ -149,7 +151,12 @@ function admin_deploy_stream(bool $dryRun, callable $onLine): int {
         [admin_base_dir() . DIRECTORY_SEPARATOR . 'Heron.py', '--deploy']
     );
     if ($dryRun) $argv[] = '--dry-run';
-    return admin_proc_stream($argv, admin_base_dir(), $onLine);
+    // 자식(deploy.py)이 미리보기 끝에 기계용 요약 한 줄(JSON sentinel)을 내도록
+    // 신호. getenv() 전체를 병합해 넘겨야 proc_open 이 PATH 등을 보존한다.
+    $env = getenv();
+    if (!is_array($env)) $env = [];
+    $env['HERON_DEPLOY_SUMMARY'] = 'json';
+    return admin_proc_stream($argv, admin_base_dir(), $onLine, $env);
 }
 
 /** user/.heron/deploy.json 절대경로. */

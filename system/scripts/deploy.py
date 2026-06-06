@@ -200,6 +200,172 @@ def build_argv(rclone, base, cfg: dict, dry_run: bool) -> List[str]:
     return argv
 
 
+# ── dry-run 요약 파싱 ─────────────────────────────────────────────
+#
+# rclone 는 dry-run 에서 객체마다 NOTICE 한 줄(``Skipped …``)을 뱉어 수백 줄이
+# 된다 — deploy_run.php 의 <pre> 로그가 그래서 장황하다. 그 줄들을 스트리밍하며
+# 집계해(업로드/삭제 건수·용량, 디렉터리 작업, 경고, 상위 디렉터리별 내역) 사람용
+# 요약을 **항상** 출력하고, 환경변수 ``HERON_DEPLOY_SUMMARY=json`` 일 때만 기계가
+# 읽을 한 줄(JSON)을 sentinel 접두로 덧붙인다 — Pond(admin)가 이를 가로채 카드·
+# 표로 시각화한다(CLI 출력엔 안 보인다). 파싱은 여기 단일 출처라 test_deploy 로
+# 단위 검증한다.
+
+# rclone 한 줄 형식(--log-level INFO): "YYYY/MM/DD HH:MM:SS LEVEL : <body>".
+_RC_LINE = re.compile(
+    r'^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\s+(?P<lvl>\w+)\s*:\s*(?P<body>.*)$')
+# 파일 액션: "<obj>: Skipped copy|update|delete as --dry-run is set (size <X>)".
+_RC_FILE = re.compile(
+    r'^(?P<obj>.*): Skipped (?P<act>copy|update|delete) as --dry-run is set '
+    r'\(size (?P<size>[^)]*)\)$')
+# 디렉터리 액션(용량 없음): make/remove directory, set directory modification time.
+_RC_DIR = re.compile(
+    r'^(?P<obj>.*): Skipped (?P<act>set directory modification time|'
+    r'make directory|remove directory) as --dry-run is set$')
+# 사이즈 토큰: "59", "13.733Ki", "5.089Mi" (rclone 의 IEC 이진 단위).
+_SIZE_RE = re.compile(r'^([\d.]+)\s*([KMGTP]i)?B?$')
+_SIZE_MULT = {None: 1, 'Ki': 1024, 'Mi': 1024 ** 2,
+              'Gi': 1024 ** 3, 'Ti': 1024 ** 4, 'Pi': 1024 ** 5}
+
+# dist 에 섞여 배포되면 안 되는 OS 잡파일 — 업로드 대상에 잡히면 경고로 띄운다.
+_JUNK_BASENAMES = {'.DS_Store', 'Thumbs.db', 'desktop.ini', '.localized'}
+
+_WARN_CAP = 12          # 경고 줄 수집 상한 (중복 제외).
+_BY_DIR_CAP = 30        # 상위 디렉터리별 표 행 상한 (나머지는 '그 외'로 롤업).
+
+# admin(PHP)이 스트림에서 가로채는 기계용 요약 한 줄의 접두 sentinel. 제어문자
+# (RS)라 rclone/Heron 의 어떤 정상 출력과도 충돌하지 않는다.
+SUMMARY_SENTINEL = '\x1eHERON_DEPLOY_SUMMARY\x1e'
+
+
+def parse_size(token: str) -> int:
+    """rclone 휴먼 사이즈(``13.733Ki``/``59``)를 바이트(int)로. 실패 시 0."""
+    m = _SIZE_RE.match(token.strip())
+    if not m:
+        return 0
+    return int(float(m.group(1)) * _SIZE_MULT[m.group(2)])
+
+
+def human_size(n: int) -> str:
+    """바이트를 사람용 IEC 문자열로 (``86.4 MiB``). 1KiB 미만은 ``N B``."""
+    n = int(n)
+    units = ('B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB')
+    f = float(n)
+    i = 0
+    while f >= 1024 and i < len(units) - 1:
+        f /= 1024
+        i += 1
+    return f'{n} B' if i == 0 else f'{f:.1f} {units[i]}'
+
+
+def _top_dir(obj: str) -> str:
+    """객체 경로의 최상위 디렉터리. 루트 직속 파일은 '' (표시는 PHP 가 '(루트)')."""
+    return obj.split('/', 1)[0] if '/' in obj else ''
+
+
+class DryRunSummary:
+    """dry-run rclone 출력을 줄 단위로 먹으며 집계하는 누산기."""
+
+    def __init__(self):
+        self.upload_count = 0
+        self.upload_bytes = 0
+        self.delete_count = 0
+        self.delete_bytes = 0
+        self.dirs = {'make': 0, 'remove': 0, 'touch': 0}
+        self.warnings: List[str] = []
+        self.junk: List[str] = []
+        self._by_dir = {}   # top-level dir -> [count, bytes]
+
+    def feed(self, line: str) -> None:
+        m = _RC_LINE.match(line)
+        if not m:                       # Heron 자체 줄 등 — 집계 대상 아님.
+            return
+        lvl, body = m.group('lvl'), m.group('body')
+        if body.startswith(('Transferred:', 'Checks:', 'Elapsed time:')):
+            return                      # 한 줄 stats — 집계 제외.
+
+        fm = _RC_FILE.match(body)
+        if fm:
+            obj, act = fm.group('obj'), fm.group('act')
+            size = parse_size(fm.group('size'))
+            if act == 'delete':
+                self.delete_count += 1
+                self.delete_bytes += size
+            else:                       # copy(신규) + update(변경) = 업로드.
+                self.upload_count += 1
+                self.upload_bytes += size
+                slot = self._by_dir.setdefault(_top_dir(obj), [0, 0])
+                slot[0] += 1
+                slot[1] += size
+                if obj.rsplit('/', 1)[-1] in _JUNK_BASENAMES \
+                        and len(self.junk) < _WARN_CAP:
+                    self.junk.append(obj)
+            return
+
+        dm = _RC_DIR.match(body)
+        if dm:
+            act = dm.group('act')
+            if act == 'make directory':
+                self.dirs['make'] += 1
+            elif act == 'remove directory':
+                self.dirs['remove'] += 1
+            else:
+                self.dirs['touch'] += 1
+            return
+
+        # 남은 NOTICE/ERROR (호스트키 미검증·config 경고 등) → 경고로 수집.
+        if lvl in ('NOTICE', 'ERROR') and body not in self.warnings \
+                and len(self.warnings) < _WARN_CAP:
+            self.warnings.append(body)
+
+    def to_dict(self) -> dict:
+        rows = sorted(self._by_dir.items(), key=lambda kv: (-kv[1][1], kv[0]))
+        head, tail = rows[:_BY_DIR_CAP], rows[_BY_DIR_CAP:]
+        by_dir = [{'dir': d, 'count': cb[0], 'bytes': cb[1]} for d, cb in head]
+        more = None
+        if tail:
+            more = {'dirs': len(tail),
+                    'count': sum(cb[0] for _, cb in tail),
+                    'bytes': sum(cb[1] for _, cb in tail)}
+        return {
+            'dry_run': True,
+            'upload': {'count': self.upload_count, 'bytes': self.upload_bytes},
+            'delete': {'count': self.delete_count, 'bytes': self.delete_bytes},
+            'dirs': dict(self.dirs),
+            'warnings': list(self.warnings),
+            'junk': list(self.junk),
+            'by_dir': by_dir,
+            'by_dir_more': more,
+        }
+
+
+def build_dry_run_summary(lines) -> dict:
+    """줄 이터러블 → 요약 dict (테스트·CLI 공용 순수 함수)."""
+    s = DryRunSummary()
+    for line in lines:
+        s.feed(line)
+    return s.to_dict()
+
+
+def _emit_dry_run_summary(summary: dict, log: Callable[[str], None]) -> None:
+    """사람용 요약을 log 로 출력하고, env 가 켜졌으면 기계용 JSON 한 줄도 덧붙인다."""
+    up, dl, dirs = summary['upload'], summary['delete'], summary['dirs']
+    dir_ops = dirs['make'] + dirs['remove'] + dirs['touch']
+    warn = len(summary['warnings']) + len(summary['junk'])
+    log(i18n.t('cli.deploy.summary.header'))
+    log(i18n.t('cli.deploy.summary.counts',
+               uploads=up['count'], up_size=human_size(up['bytes']),
+               deletes=dl['count'], del_size=human_size(dl['bytes']),
+               dirs=dir_ops, warnings=warn))
+    if summary['junk']:
+        log(i18n.t('cli.deploy.summary.junk', count=len(summary['junk'])))
+    if os.environ.get('HERON_DEPLOY_SUMMARY') == 'json':
+        sys.stdout.write(
+            SUMMARY_SENTINEL
+            + json.dumps(summary, ensure_ascii=False, separators=(',', ':'))
+            + '\n')
+        sys.stdout.flush()
+
+
 # ── 실행 (스트리밍) ───────────────────────────────────────────────
 
 def run(base, dry_run: bool, *,
@@ -234,12 +400,17 @@ def run(base, dry_run: bool, *,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, encoding='utf-8', errors='replace', bufsize=1)
     assert proc.stdout is not None
+    summary = DryRunSummary() if dry_run else None
     for line in proc.stdout:
         sys.stdout.write(line)
         sys.stdout.flush()
+        if summary is not None:
+            summary.feed(line.rstrip('\r\n'))
     proc.wait()
     code = proc.returncode
     if code == 0:
+        if summary is not None:
+            _emit_dry_run_summary(summary.to_dict(), log)
         log(i18n.t('cli.deploy.preview_done') if dry_run
             else i18n.t('cli.deploy.done'))
     else:

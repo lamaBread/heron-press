@@ -93,6 +93,9 @@ cli.deploy.sync_line_alias: "rclone sync → ssh {alias}:{remote}  [{mode}]"
 cli.deploy.done: "완료."
 cli.deploy.preview_done: '미리보기 완료 — 위 "전송/삭제" 목록을 확인 후 적용하세요.'
 cli.deploy.rclone_exit: "rclone 종료 코드 {code} — 위 로그를 확인하세요 (호스트키 미등록·키 권한·경로 오타 등)."
+cli.deploy.summary.header: "── 미리보기 요약 ──────────────"
+cli.deploy.summary.counts: "업로드: {uploads}개 ({up_size}) · 삭제: {deletes}개 ({del_size}) · 디렉터리: {dirs}개 작업 · 경고: {warnings}건"
+cli.deploy.summary.junk: "⚠ 불필요 파일 업로드 대상: {count}건 (예: .DS_Store) — dist/ 정리 권장."
 
 # ── 자가 업데이트 (update.py) ──────────────────────────────────────
 cli.update.unsafe_overlay: "안전하지 않은 오버레이 경로 거부: {rel}"

@@ -94,6 +94,9 @@ cli.deploy.sync_line_alias: "rclone sync → ssh {alias}:{remote}  [{mode}]"
 cli.deploy.done: "Done."
 cli.deploy.preview_done: 'Preview complete — review the "transfer/delete" list above, then apply.'
 cli.deploy.rclone_exit: "rclone exit code {code} — check the log above (host key not registered, key permissions, path typo, etc.)."
+cli.deploy.summary.header: "── Preview summary ──────────────"
+cli.deploy.summary.counts: "Upload: {uploads} ({up_size}) · Delete: {deletes} ({del_size}) · Dir ops: {dirs} · Warnings: {warnings}"
+cli.deploy.summary.junk: "⚠ Junk files staged for upload: {count} (e.g. .DS_Store) — consider cleaning dist/."
 
 # ── Self-update (update.py) ────────────────────────────────────────
 cli.update.unsafe_overlay: "Refused unsafe overlay path: {rel}"

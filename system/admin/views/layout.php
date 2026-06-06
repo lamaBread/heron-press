@@ -58,6 +58,27 @@ function admin_head(string $title): void {
   iframe.pv{width:100%;height:640px;border:1px solid var(--bd);border-radius:8px;
        background:#fff}
   code.k{background:#eef;padding:1px 5px;border-radius:4px}
+  /* 배포 실행 로그 + dry-run 요약 (deploy_run.php) */
+  pre#log{background:#0d0d12;color:#d6d6dc;padding:14px 16px;border-radius:8px;
+       overflow:auto;white-space:pre-wrap;margin:0;
+       font:12px/1.5 ui-monospace,Consolas,monospace}
+  pre#log.log-peek{max-height:212px}   /* ≈ 10행 + 패딩 */
+  pre#log.log-full{max-height:75vh}
+  .logbar{display:flex;align-items:center;gap:10px;margin:0 0 6px}
+  .logbar .ttl{font-size:12px;color:var(--mut);text-transform:uppercase;
+       letter-spacing:.04em}
+  .logbar button{margin-left:auto;font-size:12px;padding:3px 10px}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}
+  @media(max-width:700px){.cards{grid-template-columns:1fr 1fr}}
+  .card{border:1px solid var(--bd);border-radius:8px;padding:10px 12px;background:#fff}
+  .card .lbl{font-size:11px;color:var(--mut);text-transform:uppercase;
+       letter-spacing:.04em}
+  .card .num{font-size:21px;font-weight:700;margin:2px 0 0}
+  .card .sub{font-size:12px;color:var(--mut)}
+  .card.warn{border-color:#e6d8a8;background:#fffaf0}.card.warn .num{color:#9a6700}
+  .card.danger{border-color:#e6b8bf;background:#fff5f6}.card.danger .num{color:#b00020}
+  td.r,th.r{text-align:right}
+  ul.warns{margin:6px 0 0;padding:0 0 0 18px}ul.warns li{margin:2px 0}
 </style>
 </head>
 <body>

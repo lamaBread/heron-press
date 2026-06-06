@@ -325,5 +325,155 @@ class TestRun(_Base):
         self.assertEqual(code, 0)
 
 
+_TS = '2026/06/06 16:07:05'
+
+
+def _notice(body: str) -> str:
+    return f'{_TS} NOTICE: {body}'
+
+
+class TestSizeParsing(unittest.TestCase):
+    """v1.12.0: rclone 휴먼 사이즈 ↔ 바이트 변환."""
+
+    def test_parse_size_units(self):
+        self.assertEqual(deploy.parse_size('0'), 0)
+        self.assertEqual(deploy.parse_size('59'), 59)
+        self.assertEqual(deploy.parse_size('1Ki'), 1024)
+        self.assertEqual(deploy.parse_size('1Mi'), 1024 ** 2)
+        self.assertEqual(deploy.parse_size('2Gi'), 2 * 1024 ** 3)
+        self.assertEqual(deploy.parse_size('13.733Ki'), int(13.733 * 1024))
+
+    def test_parse_size_garbage_is_zero(self):
+        self.assertEqual(deploy.parse_size(''), 0)
+        self.assertEqual(deploy.parse_size('n/a'), 0)
+
+    def test_human_size_roundtrip(self):
+        self.assertEqual(deploy.human_size(0), '0 B')
+        self.assertEqual(deploy.human_size(1023), '1023 B')
+        self.assertEqual(deploy.human_size(1024), '1.0 KiB')
+        self.assertEqual(deploy.human_size(1024 ** 2), '1.0 MiB')
+
+
+class TestDryRunSummary(unittest.TestCase):
+    """v1.12.0: dry-run 출력 줄 → 집계 dict."""
+
+    def test_uploads_copy_and_update_with_bytes(self):
+        d = deploy.build_dry_run_summary([
+            _notice('a/x.webp: Skipped copy as --dry-run is set (size 1Ki)'),
+            _notice('a/y.html: Skipped update as --dry-run is set (size 2Ki)'),
+        ])
+        self.assertEqual(d['upload']['count'], 2)
+        self.assertEqual(d['upload']['bytes'], 3 * 1024)
+        self.assertEqual(d['delete']['count'], 0)
+
+    def test_deletes_separated_from_uploads(self):
+        d = deploy.build_dry_run_summary([
+            _notice('old.html: Skipped delete as --dry-run is set (size 4Ki)'),
+        ])
+        self.assertEqual(d['delete']['count'], 1)
+        self.assertEqual(d['delete']['bytes'], 4 * 1024)
+        self.assertEqual(d['upload']['count'], 0)
+
+    def test_directory_actions(self):
+        d = deploy.build_dry_run_summary([
+            _notice('a: Skipped make directory as --dry-run is set'),
+            _notice('b: Skipped remove directory as --dry-run is set'),
+            _notice('c: Skipped set directory modification time as --dry-run is set'),
+        ])
+        self.assertEqual(d['dirs'], {'make': 1, 'remove': 1, 'touch': 1})
+
+    def test_by_dir_breakdown_and_root_bucket(self):
+        d = deploy.build_dry_run_summary([
+            _notice('blog/1.html: Skipped copy as --dry-run is set (size 1Ki)'),
+            _notice('blog/2.html: Skipped copy as --dry-run is set (size 1Ki)'),
+            _notice('index.html: Skipped copy as --dry-run is set (size 3Ki)'),
+        ])
+        by = {r['dir']: r for r in d['by_dir']}
+        self.assertEqual(by['blog']['count'], 2)
+        self.assertEqual(by['blog']['bytes'], 2 * 1024)
+        self.assertEqual(by['']['count'], 1)          # 루트 직속 → '' 버킷
+        self.assertEqual(d['by_dir'][0]['dir'], '')   # 용량 큰 순(3Ki 먼저)
+
+    def test_warnings_collected_info_and_stats_ignored(self):
+        d = deploy.build_dry_run_summary([
+            _notice(':sftp{ab}: No host key validation is being performed.'),
+            _notice('Transferred: 0 B / 0 B, -, 0 B/s, ETA -'),   # stats → 무시
+            f'{_TS} INFO  : something chatty',                    # INFO → 무시
+        ])
+        self.assertEqual(len(d['warnings']), 1)
+        self.assertIn('No host key validation', d['warnings'][0])
+
+    def test_junk_files_flagged(self):
+        d = deploy.build_dry_run_summary([
+            _notice('.DS_Store: Skipped copy as --dry-run is set (size 18Ki)'),
+            _notice('a/Thumbs.db: Skipped copy as --dry-run is set (size 1Ki)'),
+        ])
+        self.assertEqual(len(d['junk']), 2)
+        self.assertEqual(d['upload']['count'], 2)     # 잡파일도 업로드 집계엔 포함
+
+    def test_non_rclone_lines_ignored(self):
+        d = deploy.build_dry_run_summary([
+            'rclone sync → ssh lama:/var/www  [preview]',   # Heron 자체 줄
+            'Preview complete — review …',
+        ])
+        self.assertEqual(d['upload']['count'], 0)
+        self.assertEqual(d['warnings'], [])
+
+    def test_by_dir_cap_rolls_remainder_into_more(self):
+        lines = [_notice(f'd{i:02d}/f.html: Skipped copy as --dry-run is set '
+                         f'(size 1Ki)') for i in range(deploy._BY_DIR_CAP + 5)]
+        d = deploy.build_dry_run_summary(lines)
+        self.assertEqual(len(d['by_dir']), deploy._BY_DIR_CAP)
+        self.assertIsNotNone(d['by_dir_more'])
+        self.assertEqual(d['by_dir_more']['dirs'], 5)
+
+
+class TestRunSummaryEmission(_Base):
+    """v1.12.0: run() 이 env 게이트에 따라 기계용 JSON 한 줄을 낸다."""
+
+    def _run_capture(self, env):
+        self._write_cfg()
+        lines = [
+            _notice('a/x.webp: Skipped copy as --dry-run is set (size 1Ki)\n'),
+            _notice('old: Skipped delete as --dry-run is set (size 2Ki)\n'),
+        ]
+        captured = []
+        with mock.patch.dict(deploy.os.environ, env, clear=False), \
+             mock.patch.object(deploy.rclone_bin, 'ensure',
+                               return_value='/bin/rclone'), \
+             mock.patch.object(deploy.subprocess, 'Popen',
+                               return_value=_FakePopen(lines, 0)), \
+             mock.patch.object(deploy.sys, 'stdout') as out:
+            out.write.side_effect = lambda s: captured.append(s)
+            code = deploy.run(self.tmp, dry_run=True, log=lambda _m: None)
+        return code, captured
+
+    def test_json_sentinel_emitted_when_env_set(self):
+        code, captured = self._run_capture({'HERON_DEPLOY_SUMMARY': 'json'})
+        self.assertEqual(code, 0)
+        hits = [s for s in captured if s.startswith(deploy.SUMMARY_SENTINEL)]
+        self.assertEqual(len(hits), 1)
+        payload = json.loads(hits[0][len(deploy.SUMMARY_SENTINEL):])
+        self.assertEqual(payload['upload']['count'], 1)
+        self.assertEqual(payload['delete']['count'], 1)
+
+    def test_no_sentinel_without_env(self):
+        env = {k: v for k, v in deploy.os.environ.items()
+               if k != 'HERON_DEPLOY_SUMMARY'}
+        self._write_cfg()
+        lines = [_notice('a/x.webp: Skipped copy as --dry-run is set (size 1Ki)\n')]
+        captured = []
+        with mock.patch.dict(deploy.os.environ, env, clear=True), \
+             mock.patch.object(deploy.rclone_bin, 'ensure',
+                               return_value='/bin/rclone'), \
+             mock.patch.object(deploy.subprocess, 'Popen',
+                               return_value=_FakePopen(lines, 0)), \
+             mock.patch.object(deploy.sys, 'stdout') as out:
+            out.write.side_effect = lambda s: captured.append(s)
+            deploy.run(self.tmp, dry_run=True, log=lambda _m: None)
+        self.assertFalse(any(s.startswith(deploy.SUMMARY_SENTINEL)
+                             for s in captured))
+
+
 if __name__ == '__main__':
     unittest.main()
