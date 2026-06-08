@@ -48,8 +48,15 @@ def escape_html(s: str) -> str:
 # Custom syntax preprocessing  (parser-agnostic)
 # ════════════════════════════════════════════════════════════════
 
+# v1.14.1 견고화 — 자기 구분자를 본문에 품은 입력도 한 줄 imgBox 로 인식:
+#   alt  = `(.*?)`  게으름 → 첫 `]]` 에서 종료 (alt 안의 단일 `[`/`]` 허용)
+#   url  = `(.+?)`  게으름 → 뒤따르는 `)` 로 종료하되, 캡션이 있으면 캡션의
+#                   `)`(예: 파일명 `dog(1).png`, 캡션 `(좌)`)를 삼키지 않음
+#   cap  = `(.*)`   탐욕 → 줄 끝 직전 마지막 `}` 까지 (캡션 안의 `{`/`}` 허용)
+#   `^[ \t]*` 선행 가로 공백 허용 → 들여쓴 imgBox 가 코드블록으로 떨어지지 않게
+#            (치환이 줄 전체를 대체하므로 결과 div 는 컬럼0 으로 나옴).
 _IMGBOX_LINE_RE = re.compile(
-    r'^!\[\[([^\]]*)\]\]\(([^)]+)\)(?:\s+\{([^}]*)\})?\s*$',
+    r'^[ \t]*!\[\[(.*?)\]\]\((.+?)\)(?:\s+\{(.*)\})?\s*$',
     re.MULTILINE,
 )
 
@@ -125,11 +132,13 @@ def preprocess_md_custom_syntax(md: str) -> str:
         url = m.group(2)
         desc = m.group(3)
         alt_e = escape_html(alt)
+        # v1.14.1: 캡션은 이스케이프하지 않는다 — PHP 형(_simulate_imgbox)과
+        # 동일하게, 작성자가 캡션에 넣은 `<br>`·`<a …>` 등 raw HTML 을 그대로
+        # 살린다(두 형식의 산출물 패리티). `alt` 는 속성값이라 이스케이프 유지.
         if desc:
-            desc_e = escape_html(desc)
             return (f'<div class="imgBox">\n'
                     f'  <img src="{url}" alt="{alt_e}">\n'
-                    f'  <p class="caption">{desc_e}</p>\n'
+                    f'  <p class="caption">{desc}</p>\n'
                     f'</div>')
         return (f'<div class="imgBox">\n'
                 f'  <img src="{url}" alt="{alt_e}">\n'
@@ -520,9 +529,16 @@ def _simulate_php_block(interior: str, slug: str, article_dir: Path,
     return '\n'.join(parts), True
 
 
+# PHP 여는 태그. v1.14.1: PHP 렉서와 동일하게 `<?php` 를 **대소문자 무시**로
+# 인식(`<?PHP`/`<?Php` 도 실행됨)하고, 짧은 echo 태그 `<?=` 도 인식한다.
+# `<?= imgBox(...) ?>` 는 `echo imgBox(...)` 의미라 안의 호출을 그대로 펼친다.
+# (`<?` 짧은 태그는 short_open_tag 기본 off 라 의도적으로 제외.)
+_PHP_OPEN_RE = re.compile(r'<\?php|<\?=', re.IGNORECASE)
+
+
 def simulate_php_in_html(text: str, slug: str, article_dir: Path,
                          php_globals: dict = None) -> str:
-    """본문의 `<?php … ?>` 블록을 정적 HTML 로 펼친다.
+    """본문의 `<?php … ?>` / `<?= … ?>` 블록을 정적 HTML 로 펼친다.
 
     imgBox/imgSlideBox 호출(과 주석·`global`·`;`)만 든 블록은 통째로
     정적 HTML 로 치환되어 더 이상 라이브 PHP 가 아니다. 그 외 동적
@@ -532,16 +548,18 @@ def simulate_php_in_html(text: str, slug: str, article_dir: Path,
     out = []
     pos = 0
     while True:
-        idx = text.find('<?php', pos)
-        if idx == -1:
+        m = _PHP_OPEN_RE.search(text, pos)
+        if m is None:
             out.append(text[pos:])
             break
-        close = _find_php_block_end(text, idx + len('<?php'))
+        idx = m.start()
+        open_len = m.end() - m.start()    # `<?php`=5, `<?=`=3
+        close = _find_php_block_end(text, idx + open_len)
         if close == -1:
             out.append(text[pos:])        # 닫히지 않은 블록 — 원문 보존
             break
         block_end = close + 2             # `?>` 다음
-        interior = text[idx + len('<?php'):close]
+        interior = text[idx + open_len:close]
         html, ok = _simulate_php_block(interior, slug, article_dir,
                                        php_globals)
         out.append(text[pos:idx])
@@ -551,7 +569,10 @@ def simulate_php_in_html(text: str, slug: str, article_dir: Path,
 
 
 def has_live_php(html: str) -> bool:
-    return '<?php' in html or '<?=' in html
+    # v1.14.1: `<?PHP` 대소문자 변종·`<?=` 까지 라이브 PHP 로 본다 —
+    # simulate_php_in_html 와 동일 기준이어야 빌더의 .php/.html 분기가
+    # 시뮬레이션과 어긋나지 않는다(대문자 태그가 .html 로 새는 사고 방지).
+    return _PHP_OPEN_RE.search(html) is not None
 
 
 def parse_php_globals(raw) -> dict:

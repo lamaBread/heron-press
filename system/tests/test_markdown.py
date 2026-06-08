@@ -92,6 +92,49 @@ class PreprocessImgBoxTests(unittest.TestCase):
         self.assertIn('<div class="imgBox">', out)
         self.assertNotIn('class="caption"', out)
 
+    # ── v1.14.1 견고화 회귀 (자기 구분자를 본문에 품은 입력) ──────────
+    def test_imgbox_url_with_parens(self):
+        # B1: 파일명에 `)` (예: `dog(1).png`, `fig(final).png`) 가 있어도
+        # 첫 `)` 에서 끊기지 않고 한 줄 imgBox 로 인식.
+        out = preprocess_md_custom_syntax('![[d]](fig(final).png) {Figure 1}')
+        self.assertIn('<div class="imgBox">', out)
+        self.assertIn('<img src="fig(final).png" alt="d">', out)
+        self.assertIn('<p class="caption">Figure 1</p>', out)
+
+    def test_imgbox_caption_with_parens_not_eaten_by_url(self):
+        # B1 역방향: 캡션 속 `(좌)` 의 `)` 를 URL 이 삼키면 안 됨.
+        out = preprocess_md_custom_syntax('![[a]](dog(1).png) {see (left)}')
+        self.assertIn('<img src="dog(1).png" alt="a">', out)
+        self.assertIn('<p class="caption">see (left)</p>', out)
+
+    def test_imgbox_alt_with_single_brackets(self):
+        # B2: alt 안의 단일 `[`/`]` 가 `]]` 구분자보다 먼저 끊지 않게.
+        out = preprocess_md_custom_syntax('![[my [cat] pic]](dog.png) {c}')
+        self.assertIn('<img src="dog.png" alt="my [cat] pic">', out)
+        self.assertIn('<p class="caption">c</p>', out)
+
+    def test_imgbox_leading_indent(self):
+        # B3: 탭/공백 들여쓰기된 imgBox 도 인식하고, 결과 div 는 컬럼0.
+        for indent in ('\t', '  ', '    '):
+            out = preprocess_md_custom_syntax(indent + '![[cat]](dog.png) {cap}')
+            self.assertIn('<div class="imgBox">', out)
+            # 치환 결과는 줄 맨 앞(컬럼0)에서 시작해야 코드블록으로 안 떨어진다.
+            self.assertTrue(out.lstrip().startswith('<div class="imgBox">'))
+
+    def test_imgbox_caption_with_braces(self):
+        # B10: 캡션 안의 `{`/`}` (집합·중괄호 표기) 허용.
+        out = preprocess_md_custom_syntax('![[a]](d.png) {a {nested} cap}')
+        self.assertIn('<p class="caption">a {nested} cap</p>', out)
+
+    def test_imgbox_caption_raw_html_not_escaped(self):
+        # B9: 캡션 raw HTML(`<br>`·`<a>`)은 PHP 형과 동일하게 그대로 보존.
+        out = preprocess_md_custom_syntax('![[c]](d.png) {line1<br>line2}')
+        self.assertIn('<p class="caption">line1<br>line2</p>', out)
+        self.assertNotIn('&lt;br&gt;', out)
+        # alt 는 속성값이라 이스케이프 유지.
+        out2 = preprocess_md_custom_syntax('![[a<b]](d.png)')
+        self.assertIn('alt="a&lt;b"', out2)
+
 
 class SectionMarkerTests(unittest.TestCase):
 
@@ -264,6 +307,13 @@ class HasLivePhpTests(unittest.TestCase):
         self.assertTrue(has_live_php('<?php echo "x"; ?>'))
         self.assertTrue(has_live_php('<?= $x ?>'))
 
+    def test_detects_uppercase_php_open(self):
+        # v1.14.1 (B7): PHP 렉서는 여는 태그를 대소문자 무시로 받는다 —
+        # `<?PHP`/`<?Php` 도 라이브 PHP 로 잡혀야 빌더가 .php 로 떨군다
+        # (안 그러면 대문자 태그가 .html 페이지에 평문으로 샌다).
+        self.assertTrue(has_live_php('<?PHP echo "x"; ?>'))
+        self.assertTrue(has_live_php('<?Php $x ?>'))
+
     def test_negative(self):
         self.assertFalse(has_live_php('<p>no php here</p>'))
 
@@ -397,6 +447,29 @@ class SimulatePhpTests(unittest.TestCase):
     def test_unterminated_block_left_verbatim(self):
         src = '<p>a</p><?php imgBox("a.png","c")'   # 닫는 ?> 없음
         self.assertEqual(self.sim(src), src)
+
+    # ── v1.14.1: 짧은 echo 태그 + 대소문자 변종 여는 태그 ──
+    def test_short_echo_tag_imgbox_expanded(self):
+        # B5: `<?= imgBox(...) ?>` 는 echo 의미 — 안의 호출을 펼친다.
+        out = self.sim('<?= imgBox("a.png","cap","alt") ?>')
+        self.assertNotIn('<?=', out)
+        self.assertIn('<div class="imgBox">', out)
+        self.assertIn('<p class="caption">cap</p>', out)
+
+    def test_short_echo_dynamic_left_verbatim(self):
+        # 짧은 태그라도 동적 표현식은 보수적으로 원문 보존.
+        self.assertEqual(self.sim('<?= $x ?>'), '<?= $x ?>')
+        self.assertEqual(self.sim('<?= strtoupper($x) ?>'),
+                         '<?= strtoupper($x) ?>')
+
+    def test_uppercase_php_tag_imgbox_expanded(self):
+        # B7: `<?PHP`/`<?Php` 도 PHP 처럼 인식해 펼친다(평문 누수 방지).
+        out = self.sim('<?PHP imgBox("a.png","cap","alt") ?>')
+        self.assertNotIn('<?PHP', out)
+        self.assertNotIn('<?php', out.lower())
+        self.assertIn('<div class="imgBox">', out)
+        out2 = self.sim('<?Php imgBox("a.png","C") ?>')
+        self.assertIn('<p class="caption">C</p>', out2)
 
     # ── process_html 통합 (asset 재작성과 함께) ──
     def test_process_html_threads_globals(self):
