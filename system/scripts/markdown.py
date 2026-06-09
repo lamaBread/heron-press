@@ -135,10 +135,14 @@ def preprocess_md_custom_syntax(md: str) -> str:
         # v1.14.1: 캡션은 이스케이프하지 않는다 — PHP 형(_simulate_imgbox)과
         # 동일하게, 작성자가 캡션에 넣은 `<br>`·`<a …>` 등 raw HTML 을 그대로
         # 살린다(두 형식의 산출물 패리티). `alt` 는 속성값이라 이스케이프 유지.
+        # v1.14.2: 캡션을 `<p><small><b>` 로 감싼다 — 정본 imgBox 의 작고 굵은
+        # 캡션 마크업을 복원한다. 스타일이 (self-update 가 건드리지 않는) user
+        # CSS 가 아니라 마크업에서 나오므로 기존 사용자에게도 전파된다. 빈
+        # 캡션이면 `<p>` 자체를 생략. PHP 형과 byte 동일(_simulate_imgbox).
         if desc:
             return (f'<div class="imgBox">\n'
                     f'  <img src="{url}" alt="{alt_e}">\n'
-                    f'  <p class="caption">{desc}</p>\n'
+                    f'  <p><small><b>{desc}</b></small></p>\n'
                     f'</div>')
         return (f'<div class="imgBox">\n'
                 f'  <img src="{url}" alt="{alt_e}">\n'
@@ -298,14 +302,15 @@ def _simulate_imgbox(src: str, exp: str, alt: str, slug: str) -> str:
     의 imgBox 가 `{$exp}` 를 그대로 echo 했고, 작성자가 캡션에 `<br>`·
     `&nbsp;`·`<a …>` 와 서명 변수 보간을 의도적으로 넣기 때문이다(정적
     빌드가 원래 사이트와 같은 결과를 내야 함). `alt` 는 속성값이라
-    안전을 위해 이스케이프를 유지한다.
+    안전을 위해 이스케이프를 유지한다. v1.14.2: 캡션을 `<p><small><b>` 로
+    감싼다(정본의 작고 굵은 캡션 마크업) — 마크다운형과 byte 일치.
     """
     url = rewrite_asset_path(src, slug)
     alt = alt or ''
     if exp:
         return (f'<div class="imgBox">\n'
                 f'  <img src="{url}" alt="{escape_html(alt)}">\n'
-                f'  <p class="caption">{exp}</p>\n'
+                f'  <p><small><b>{exp}</b></small></p>\n'
                 f'</div>')
     return (f'<div class="imgBox">\n'
             f'  <img src="{url}" alt="{escape_html(alt)}">\n'

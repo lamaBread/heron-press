@@ -1,4 +1,4 @@
-# Heron v1.14.1 — User Guide
+# Heron v1.14.2 — User Guide
 
 **Heron** is a lightweight, **PHP-targeted static site generator**: keep **one folder per article** for its body and attachments, and `python Heron.py` builds the whole site once.
 
@@ -295,7 +295,7 @@ Write only the body fragment (no `<html>/<head>/<body>`). For migrating existing
 
 ```html
 <?php imgBox("./imgs/p.jpg", "caption", "alt") ?>
-  → <div class="imgBox"><img src="/my-slug/imgs/p.jpg" alt="alt"><p class="caption">caption</p></div>
+  → <div class="imgBox"><img src="/my-slug/imgs/p.jpg" alt="alt"><p><small><b>caption</b></small></p></div>
 
 <?php imgSlideBox("./src_slide") ?>
   → images in src_slide/ as an alphabetized slideshow (bottom-center dot indicator, built by JS at runtime)
@@ -472,7 +472,7 @@ Close to standard CommonMark — headings (`#`–`######`, Setext), inline (`**b
 
 ```markdown
 ===Section title===          section marker (§ 4-3). ====== (six equals) explicitly closes
-![[image alt]](./imgs/p.jpg) {caption}   → <div class="imgBox"><img …><p class="caption">caption</p></div>
+![[image alt]](./imgs/p.jpg) {caption}   → <div class="imgBox"><img …><p><small><b>caption</b></small></p></div>
 ```
 
 Omit `{...}` if no caption. The image-box syntax is converted to raw HTML and handed to the parser just before the build runs.
@@ -796,7 +796,8 @@ The `rsync` above is the manual path. From v1.7.0, **[Deploy] in Pond's top bar*
 
 | Version | Date | Summary |
 |---|---|---|
-| **v1.14.1** | 2026-06-09 | **imgBox parsing stabilization — the markdown form `![[alt]](url) {caption}` now survives content that holds its own delimiters, and the PHP form recognizes the `<?=` short-echo tag and case-insensitive `<?PHP`.** The single-line recognizer was rewritten so a `)` in the URL (e.g. a Windows-duplicated `dog(1).png`), a `[`/`]` in the alt, or a `{`/`}` in the caption no longer truncate the match, and a tab- or space-indented imgBox is recognized and emitted at column 0 instead of falling into a `<pre><code>` block. The markdown caption is no longer HTML-escaped, so raw `<br>`/`<a>` in a caption render identically to the PHP form (the two forms are now output-identical); `simulate_php_in_html`/`has_live_php` treat `<?= imgBox(…) ?>` and uppercase `<?PHP …` as live PHP — the latter previously leaked verbatim into `.html` pages. The Pond live preview and the build share this parser, so they stay byte-identical and already-valid content renders unchanged. No schema change (stamp 1.14.0 → 1.14.1); MANIFEST 88; 589 → 599 unit tests. |
+| **v1.14.2** | 2026-06-09 | **imgBox caption styling restored — the builder now wraps the caption in `<p><small><b>…</b></small></p>`, so captions render small and bold again, matching the original site.** The legacy `imgBox()` rendered a small, bold caption (browser-default `<small>` + `<b>`), but Heron's builder emitted a plain `<p class="caption">…</p>`, so captions came out full-size and unweighted — and the existing `.imgBox small` style hook matched nothing. Both emit sites in `markdown.py` (the markdown form `![[alt]](url) {caption}` and the simulated PHP `imgBox()`) now output `<p><small><b>{caption}</b></small></p>`, staying byte-identical to each other, and the pre-existing `.imgBox small` rule again supplies the original left margin. The fix lives in the builder (`system/`, which self-update overlays) rather than in `user/styles`, so existing sites pick it up on the next rebuild with **no migration and no user-CSS edit**; the rendered dist HTML for every captioned imgBox changes accordingly (intentionally not byte-identical — that is the fix). No schema change (stamp 1.14.1 → 1.14.2); MANIFEST 88; 599 unit tests. |
+| v1.14.1 | 2026-06-09 | imgBox parsing stabilization: the markdown form `![[alt]](url) {caption}` now survives a `)`/`[`/`]`/`{`/`}` inside the URL, alt, or caption (and a tab/space-indented box is emitted at column 0 instead of a `<pre><code>` block), and the markdown caption is no longer HTML-escaped, so the markdown and PHP forms are output-identical. `simulate_php_in_html`/`has_live_php` now treat `<?= imgBox(…) ?>` and uppercase `<?PHP …` as live PHP (the latter previously leaked into `.html` pages). The Pond live preview and the build share this parser, so they stay byte-identical. No schema change (stamp 1.14.0 → 1.14.1); MANIFEST 88; 589 → 599 unit tests. |
 | v1.14.0 | 2026-06-07 | Pond admin list: the per-row category dropdown now shows each post's actual category (current parent `selected`) and moving is immediate on change — the separate *Move* button is gone, guarded by a confirm, a Cancel-restores-prior (`data-cur`) revert, a wheel-scroll guard, and a server-side no-op guard. After a successful move the list reloads with the moved row's path highlighted once (~1.8s) and scrolled into view (`#moved`). Admin-UI only; builder and dist output byte-identical. No schema change (stamp 1.13.1 → 1.14.0); MANIFEST 88; 589 unit tests. |
 | v1.13.1 | 2026-06-06 | Deploy preview gained a fifth **Unchanged** card — the files that stay as-is (not transferred) — so a build/deploy decision no longer requires inferring "what's untouched" from Added/Modified/Deleted. Because a dry-run only emits lines for files it *changes*, the unchanged set is computed locally as the `dist/` walk minus (added ∪ modified), with no extra network; the summary JSON stays additive and the apply path is byte-identical. No schema change (stamp 1.13.0 → 1.13.1); MANIFEST 88; 583 → 589 unit tests. |
 | v1.13.0 | 2026-06-06 | Deploy preview: Added / Modified / Deleted / Warnings click-to-expand cards (splitting v1.12.0's single Upload card), with a per-file unified diff on modified files — clicking *View diff* fetches **just that one file** live via a new `Heron.py --deploy-diff` (relpath → `rclone cat`, Python `difflib`) behind a POST+CSRF `?a=deploy_diff` endpoint realpath-bounded under `dist/`, with text-only / 512 KiB / line-clamp safeguards. The summary JSON stays **additive** (kept `upload`; added `added`/`modified`/`*_files`/`*_more`/`remote_path`), so the v1.12.0 CLI one-liner and every prior test are unchanged, and the apply path is byte-identical. No schema change (stamp 1.12.0 → 1.13.0); MANIFEST 88; 568 → 583 unit tests. |
@@ -1052,4 +1053,4 @@ At the time of writing there may be more candidates that *were discussed but dro
 
 ---
 
-*Heron v1.14.1 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [§ 16](#16-changelog).*
+*Heron v1.14.2 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [§ 16](#16-changelog).*
