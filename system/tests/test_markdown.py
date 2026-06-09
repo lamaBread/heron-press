@@ -82,14 +82,14 @@ class PreprocessImgBoxTests(unittest.TestCase):
     def test_imgbox_inline(self):
         md = '![[alt]](pic.png) {caption}'
         out = preprocess_md_custom_syntax(md)
-        self.assertIn('<div class="imgBox">', out)
+        self.assertIn('<figure class="imgBox">', out)
         self.assertIn('<img src="pic.png" alt="alt">', out)
-        self.assertIn('<p><small><b>caption</b></small></p>', out)
+        self.assertIn('<figcaption><small>caption</small></figcaption>', out)
 
     def test_imgbox_no_caption(self):
         md = '![[alt]](pic.png)'
         out = preprocess_md_custom_syntax(md)
-        self.assertIn('<div class="imgBox">', out)
+        self.assertIn('<figure class="imgBox">', out)
         self.assertNotIn('<small>', out)
 
     # ── v1.14.1 견고화 회귀 (자기 구분자를 본문에 품은 입력) ──────────
@@ -97,39 +97,39 @@ class PreprocessImgBoxTests(unittest.TestCase):
         # B1: 파일명에 `)` (예: `dog(1).png`, `fig(final).png`) 가 있어도
         # 첫 `)` 에서 끊기지 않고 한 줄 imgBox 로 인식.
         out = preprocess_md_custom_syntax('![[d]](fig(final).png) {Figure 1}')
-        self.assertIn('<div class="imgBox">', out)
+        self.assertIn('<figure class="imgBox">', out)
         self.assertIn('<img src="fig(final).png" alt="d">', out)
-        self.assertIn('<p><small><b>Figure 1</b></small></p>', out)
+        self.assertIn('<figcaption><small>Figure 1</small></figcaption>', out)
 
     def test_imgbox_caption_with_parens_not_eaten_by_url(self):
         # B1 역방향: 캡션 속 `(좌)` 의 `)` 를 URL 이 삼키면 안 됨.
         out = preprocess_md_custom_syntax('![[a]](dog(1).png) {see (left)}')
         self.assertIn('<img src="dog(1).png" alt="a">', out)
-        self.assertIn('<p><small><b>see (left)</b></small></p>', out)
+        self.assertIn('<figcaption><small>see (left)</small></figcaption>', out)
 
     def test_imgbox_alt_with_single_brackets(self):
         # B2: alt 안의 단일 `[`/`]` 가 `]]` 구분자보다 먼저 끊지 않게.
         out = preprocess_md_custom_syntax('![[my [cat] pic]](dog.png) {c}')
         self.assertIn('<img src="dog.png" alt="my [cat] pic">', out)
-        self.assertIn('<p><small><b>c</b></small></p>', out)
+        self.assertIn('<figcaption><small>c</small></figcaption>', out)
 
     def test_imgbox_leading_indent(self):
-        # B3: 탭/공백 들여쓰기된 imgBox 도 인식하고, 결과 div 는 컬럼0.
+        # B3: 탭/공백 들여쓰기된 imgBox 도 인식하고, 결과 figure 는 컬럼0.
         for indent in ('\t', '  ', '    '):
             out = preprocess_md_custom_syntax(indent + '![[cat]](dog.png) {cap}')
-            self.assertIn('<div class="imgBox">', out)
+            self.assertIn('<figure class="imgBox">', out)
             # 치환 결과는 줄 맨 앞(컬럼0)에서 시작해야 코드블록으로 안 떨어진다.
-            self.assertTrue(out.lstrip().startswith('<div class="imgBox">'))
+            self.assertTrue(out.lstrip().startswith('<figure class="imgBox">'))
 
     def test_imgbox_caption_with_braces(self):
         # B10: 캡션 안의 `{`/`}` (집합·중괄호 표기) 허용.
         out = preprocess_md_custom_syntax('![[a]](d.png) {a {nested} cap}')
-        self.assertIn('<p><small><b>a {nested} cap</b></small></p>', out)
+        self.assertIn('<figcaption><small>a {nested} cap</small></figcaption>', out)
 
     def test_imgbox_caption_raw_html_not_escaped(self):
         # B9: 캡션 raw HTML(`<br>`·`<a>`)은 PHP 형과 동일하게 그대로 보존.
         out = preprocess_md_custom_syntax('![[c]](d.png) {line1<br>line2}')
-        self.assertIn('<p><small><b>line1<br>line2</b></small></p>', out)
+        self.assertIn('<figcaption><small>line1<br>line2</small></figcaption>', out)
         self.assertNotIn('&lt;br&gt;', out)
         # alt 는 속성값이라 이스케이프 유지.
         out2 = preprocess_md_custom_syntax('![[a<b]](d.png)')
@@ -349,12 +349,12 @@ class SimulatePhpTests(unittest.TestCase):
     def test_single_call_oneliner_unchanged(self):
         out = self.sim('<p>x</p>\n<?php imgBox("a.png", "cap") ?>\n')
         self.assertNotIn('<?php', out)
-        self.assertIn('<div class="imgBox">', out)
+        self.assertIn('<figure class="imgBox">', out)
         self.assertIn('<img src="/slug/a.png" alt="">', out)
-        self.assertIn('<p><small><b>cap</b></small></p>', out)
+        self.assertIn('<figcaption><small>cap</small></figcaption>', out)
         # 앞뒤 텍스트·개행은 그대로 보존
         self.assertTrue(out.startswith('<p>x</p>\n'))
-        self.assertTrue(out.endswith('</div>\n'))
+        self.assertTrue(out.endswith('</figure>\n'))
 
     # ── 핵심 버그: 다중 imgBox 블록 (배포 시 truncate 되던 형태) ──
     def test_multi_call_block_all_expanded_no_leak(self):
@@ -363,14 +363,14 @@ class SimulatePhpTests(unittest.TestCase):
                '    imgBox("./2.png", "B");\n?>\n<hr>\n')
         out = self.sim(src)
         self.assertNotIn('<?php', out)            # truncate 원인 제거
-        self.assertEqual(out.count('<div class="imgBox">'), 2)
-        self.assertIn('<p><small><b>A</b></small></p>', out)
-        self.assertIn('<p><small><b>B</b></small></p>', out)
+        self.assertEqual(out.count('<figure class="imgBox">'), 2)
+        self.assertIn('<figcaption><small>A</small></figcaption>', out)
+        self.assertIn('<figcaption><small>B</small></figcaption>', out)
         self.assertIn('<hr>', out)                # 블록 뒤 HTML 살아남음
 
     def test_two_calls_on_one_line(self):
         out = self.sim('<?php imgBox("a.png","A");imgBox("b.png","B"); ?>')
-        self.assertEqual(out.count('<div class="imgBox">'), 2)
+        self.assertEqual(out.count('<figure class="imgBox">'), 2)
         self.assertNotIn('<?php', out)
 
     # ── global 선언 제거 + {$var}/$var 보간 (u-hof / radish 케이스) ──
@@ -382,19 +382,19 @@ class SimulatePhpTests(unittest.TestCase):
         self.assertNotIn('<?php', out)
         self.assertNotIn('global', out)
         # 캡션은 이스케이프되지 않는다 — <br> 가 살아 있어야 함
-        self.assertIn('<p><small><b>Cap.<br>&nbsp;by An Illustrator</b></small></p>', out)
+        self.assertIn('<figcaption><small>Cap.<br>&nbsp;by An Illustrator</small></figcaption>', out)
 
     def test_bare_dollar_interpolation_double_quoted(self):
         out = self.sim('<?php imgBox("a.png", "x $v y") ?>', {'v': 'Z'})
-        self.assertIn('<p><small><b>x Z y</b></small></p>', out)
+        self.assertIn('<figcaption><small>x Z y</small></figcaption>', out)
 
     def test_undefined_var_becomes_empty(self):
         out = self.sim('<?php imgBox("a.png", "[{$missing}]") ?>', {})
-        self.assertIn('<p><small><b>[]</b></small></p>', out)
+        self.assertIn('<figcaption><small>[]</small></figcaption>', out)
 
     def test_single_quoted_arg_not_interpolated(self):
         out = self.sim("<?php imgBox('a.png', '$v {$v}') ?>", {'v': 'Z'})
-        self.assertIn('<p><small><b>$v {$v}</b></small></p>', out)
+        self.assertIn('<figcaption><small>$v {$v}</small></figcaption>', out)
 
     # ── 주석 처리 ──
     def test_fully_commented_block_disappears(self):
@@ -410,8 +410,8 @@ class SimulatePhpTests(unittest.TestCase):
                '  imgBox("a.png","C");\n?>')
         out = self.sim(src)
         self.assertNotIn('<?php', out)
-        self.assertEqual(out.count('<div class="imgBox">'), 1)
-        self.assertIn('<p><small><b>C</b></small></p>', out)
+        self.assertEqual(out.count('<figure class="imgBox">'), 1)
+        self.assertIn('<figcaption><small>C</small></figcaption>', out)
 
     # ── 보수성: 알 수 없는 동적 구문은 블록 원문 보존 ──
     def test_unknown_dynamic_php_left_verbatim(self):
@@ -436,7 +436,7 @@ class SimulatePhpTests(unittest.TestCase):
     def test_close_tag_inside_string_does_not_end_block(self):
         # 문자열 안 '?>' 가 블록을 조기 종료하면 안 됨
         out = self.sim('<?php imgBox("a.png", "arrow ?> here") ?>X')
-        self.assertIn('<p><small><b>arrow ?> here</b></small></p>', out)
+        self.assertIn('<figcaption><small>arrow ?> here</small></figcaption>', out)
         self.assertTrue(out.endswith('X'))
         self.assertNotIn('<?php', out)
 
@@ -453,8 +453,8 @@ class SimulatePhpTests(unittest.TestCase):
         # B5: `<?= imgBox(...) ?>` 는 echo 의미 — 안의 호출을 펼친다.
         out = self.sim('<?= imgBox("a.png","cap","alt") ?>')
         self.assertNotIn('<?=', out)
-        self.assertIn('<div class="imgBox">', out)
-        self.assertIn('<p><small><b>cap</b></small></p>', out)
+        self.assertIn('<figure class="imgBox">', out)
+        self.assertIn('<figcaption><small>cap</small></figcaption>', out)
 
     def test_short_echo_dynamic_left_verbatim(self):
         # 짧은 태그라도 동적 표현식은 보수적으로 원문 보존.
@@ -467,16 +467,16 @@ class SimulatePhpTests(unittest.TestCase):
         out = self.sim('<?PHP imgBox("a.png","cap","alt") ?>')
         self.assertNotIn('<?PHP', out)
         self.assertNotIn('<?php', out.lower())
-        self.assertIn('<div class="imgBox">', out)
+        self.assertIn('<figure class="imgBox">', out)
         out2 = self.sim('<?Php imgBox("a.png","C") ?>')
-        self.assertIn('<p><small><b>C</b></small></p>', out2)
+        self.assertIn('<figcaption><small>C</small></figcaption>', out2)
 
     # ── process_html 통합 (asset 재작성과 함께) ──
     def test_process_html_threads_globals(self):
         rr = process_html('<?php imgBox("p.png", "{$c}") ?>',
                           'sl', self.DIR, {'c': 'CR'})
         self.assertIn('<img src="/sl/p.png"', rr.html)
-        self.assertIn('<p><small><b>CR</b></small></p>', rr.html)
+        self.assertIn('<figcaption><small>CR</small></figcaption>', rr.html)
         self.assertFalse(has_live_php(rr.html))
 
 

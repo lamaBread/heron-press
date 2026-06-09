@@ -1,4 +1,4 @@
-# Heron v1.14.3 — User Guide
+# Heron v1.14.4 — User Guide
 
 **Heron** is a lightweight, **PHP-targeted static site generator**: keep **one folder per article** for its body and attachments, and `python Heron.py` builds the whole site once.
 
@@ -295,7 +295,7 @@ Write only the body fragment (no `<html>/<head>/<body>`). For migrating existing
 
 ```html
 <?php imgBox("./imgs/p.jpg", "caption", "alt") ?>
-  → <div class="imgBox"><img src="/my-slug/imgs/p.jpg" alt="alt"><p><small><b>caption</b></small></p></div>
+  → <figure class="imgBox"><img src="/my-slug/imgs/p.jpg" alt="alt"><figcaption><small>caption</small></figcaption></figure>
 
 <?php imgSlideBox("./src_slide") ?>
   → images in src_slide/ as an alphabetized slideshow (bottom-center dot indicator, built by JS at runtime)
@@ -472,7 +472,7 @@ Close to standard CommonMark — headings (`#`–`######`, Setext), inline (`**b
 
 ```markdown
 ===Section title===          section marker (§ 4-3). ====== (six equals) explicitly closes
-![[image alt]](./imgs/p.jpg) {caption}   → <div class="imgBox"><img …><p><small><b>caption</b></small></p></div>
+![[image alt]](./imgs/p.jpg) {caption}   → <figure class="imgBox"><img …><figcaption><small>caption</small></figcaption></figure>
 ```
 
 Omit `{...}` if no caption. The image-box syntax is converted to raw HTML and handed to the parser just before the build runs.
@@ -796,7 +796,8 @@ The `rsync` above is the manual path. From v1.7.0, **[Deploy] in Pond's top bar*
 
 | Version | Date | Summary |
 |---|---|---|
-| **v1.14.3** | 2026-06-09 | **Deploy stops re-uploading the whole site after a one-file edit — the builder now writes each `dist/` text output only when its bytes actually change, preserving the file's mtime otherwise.** Every build rewrote all text outputs (article/category/home/404 HTML, `feed.rss`/`feed.atom`, `sitemap.xml`, `robots.txt`, `ads.txt`, `search.php`) unconditionally, bumping their mtime even when the content was byte-identical; because `deploy.py` runs `rclone sync` with the default modtime+size comparison (no `--checksum`), every rebuilt file was flagged *modified*, so editing a single document surfaced ~70 changed files in the deploy preview and re-uploaded the entire site. A new `_write_text_if_changed()` helper (read existing bytes, skip the write — and the mtime bump — when identical, atomic `tmp→replace` otherwise) now backs all 11 `dist/` write sites, mirroring the `_copy_if_newer` mtime guard already used for images/CSS. A no-change rebuild now churns **0** output mtimes (was all of them) and editing one article touches only that article's page; the deploy argv is untouched, so the `--sftp-disable-hashcheck` alias optimization stands. No schema change (stamp 1.14.2 → 1.14.3); MANIFEST 89; 599 → 606 unit tests. |
+| **v1.14.4** | 2026-06-09 | **imgBox captions are now standards-compliant semantic markup — the non-standard `<div>` + `<p><small><b>` combo is replaced by `<figure class="imgBox">` + `<figcaption><small>`.** Both emit sites in `markdown.py` (the markdown form `![[alt]](url) {caption}` and the simulated PHP `imgBox()`) now wrap the image in `<figure class="imgBox">` and the caption in `<figcaption><small>…</small></figcaption>` — because `<figcaption>` is only valid HTML as a child of `<figure>`, the container is lifted from `div` to `figure` too so the result validates. The `.imgBox` / `.imgBox img` / `.imgBox small` rules are all class/descendant selectors, so they keep applying with no migration and no user-CSS edit (the left-margin stays); the caption is just no longer bold (the `<b>` is gone, by design). The two emit sites stay byte-identical, so the Pond preview and the build still match; the dist HTML of every captioned imgBox changes accordingly (intentionally not byte-identical — that is the change). No schema change (stamp 1.14.3 → 1.14.4); MANIFEST 89; 606 unit tests. |
+| v1.14.3 | 2026-06-09 | Deploy stops re-uploading the whole site after a one-file edit — the builder now writes each `dist/` text output only when its bytes actually change (new `_write_text_if_changed()`), preserving the mtime otherwise. Previously every build rewrote all text outputs unconditionally, bumping their mtime, and `rclone sync`'s default modtime+size comparison flagged them all *modified*, so editing one document re-uploaded the entire site. No schema change (stamp 1.14.2 → 1.14.3); MANIFEST 89; 599 → 606 unit tests. |
 | v1.14.2 | 2026-06-09 | imgBox caption styling restored — both emit sites in `markdown.py` (the markdown form `![[alt]](url) {caption}` and the simulated PHP `imgBox()`) now wrap the caption in `<p><small><b>…</b></small></p>`, so captions render small and bold again and the pre-existing `.imgBox small` rule supplies the original left margin. The fix lives in the builder (`system/`, overlaid by self-update) rather than in `user/styles`, so existing sites pick it up on the next rebuild with no migration and no user-CSS edit; the dist HTML of every captioned imgBox changes accordingly (intentionally not byte-identical — that is the fix). No schema change (stamp 1.14.1 → 1.14.2); MANIFEST 88; 599 unit tests. |
 | v1.14.1 | 2026-06-09 | imgBox parsing stabilization: the markdown form `![[alt]](url) {caption}` now survives a `)`/`[`/`]`/`{`/`}` inside the URL, alt, or caption (and a tab/space-indented box is emitted at column 0 instead of a `<pre><code>` block), and the markdown caption is no longer HTML-escaped, so the markdown and PHP forms are output-identical. `simulate_php_in_html`/`has_live_php` now treat `<?= imgBox(…) ?>` and uppercase `<?PHP …` as live PHP (the latter previously leaked into `.html` pages). The Pond live preview and the build share this parser, so they stay byte-identical. No schema change (stamp 1.14.0 → 1.14.1); MANIFEST 88; 589 → 599 unit tests. |
 | v1.14.0 | 2026-06-07 | Pond admin list: the per-row category dropdown now shows each post's actual category (current parent `selected`) and moving is immediate on change — the separate *Move* button is gone, guarded by a confirm, a Cancel-restores-prior (`data-cur`) revert, a wheel-scroll guard, and a server-side no-op guard. After a successful move the list reloads with the moved row's path highlighted once (~1.8s) and scrolled into view (`#moved`). Admin-UI only; builder and dist output byte-identical. No schema change (stamp 1.13.1 → 1.14.0); MANIFEST 88; 589 unit tests. |
@@ -1054,4 +1055,4 @@ At the time of writing there may be more candidates that *were discussed but dro
 
 ---
 
-*Heron v1.14.3 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [§ 16](#16-changelog).*
+*Heron v1.14.4 — build with Python + Pillow, runtime PHP (OPcache recommended). Full release history in [§ 16](#16-changelog).*

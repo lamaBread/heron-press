@@ -123,7 +123,7 @@ def preprocess_md_custom_syntax(md: str) -> str:
     """프로젝트 고유 마크다운 확장을 raw HTML 로 치환.
 
     현재 지원:
-      ![[alt]](url) {desc}  → <div class="imgBox">…</div>
+      ![[alt]](url) {desc}  → <figure class="imgBox">…</figure>
       ===제목===            → 섹션 시작 (sentinel 주석)
       ======                → 섹션 끝   (sentinel 주석)
     """
@@ -135,18 +135,19 @@ def preprocess_md_custom_syntax(md: str) -> str:
         # v1.14.1: 캡션은 이스케이프하지 않는다 — PHP 형(_simulate_imgbox)과
         # 동일하게, 작성자가 캡션에 넣은 `<br>`·`<a …>` 등 raw HTML 을 그대로
         # 살린다(두 형식의 산출물 패리티). `alt` 는 속성값이라 이스케이프 유지.
-        # v1.14.2: 캡션을 `<p><small><b>` 로 감싼다 — 정본 imgBox 의 작고 굵은
-        # 캡션 마크업을 복원한다. 스타일이 (self-update 가 건드리지 않는) user
-        # CSS 가 아니라 마크업에서 나오므로 기존 사용자에게도 전파된다. 빈
-        # 캡션이면 `<p>` 자체를 생략. PHP 형과 byte 동일(_simulate_imgbox).
+        # v1.14.4: 컨테이너를 `<figure class="imgBox">`, 캡션을
+        # `<figcaption><small>` 로 출력한다 — HTML 표준(figcaption 은 figure
+        # 의 자식일 때만 유효)에 맞춘 시맨틱 마크업. `.imgBox`/`.imgBox small`
+        # CSS 는 클래스·자손 선택자라 그대로 적용된다(굵게는 `<b>` 제거로 빠짐).
+        # 빈 캡션이면 figcaption 생략. PHP 형과 byte 동일(_simulate_imgbox).
         if desc:
-            return (f'<div class="imgBox">\n'
+            return (f'<figure class="imgBox">\n'
                     f'  <img src="{url}" alt="{alt_e}">\n'
-                    f'  <p><small><b>{desc}</b></small></p>\n'
-                    f'</div>')
-        return (f'<div class="imgBox">\n'
+                    f'  <figcaption><small>{desc}</small></figcaption>\n'
+                    f'</figure>')
+        return (f'<figure class="imgBox">\n'
                 f'  <img src="{url}" alt="{alt_e}">\n'
-                f'</div>')
+                f'</figure>')
 
     md = _preprocess_section_markers(md)
     return _IMGBOX_LINE_RE.sub(replace_imgbox, md)
@@ -296,25 +297,27 @@ def _interpolate_php(s: str, php_globals: dict) -> str:
 
 
 def _simulate_imgbox(src: str, exp: str, alt: str, slug: str) -> str:
-    """imgBox PHP 호출 → 정적 `<div class="imgBox">`.
+    """imgBox PHP 호출 → 정적 `<figure class="imgBox">`.
 
     `exp`(캡션) 는 **이스케이프하지 않는다** — 정본 GlobalFunctions.php
     의 imgBox 가 `{$exp}` 를 그대로 echo 했고, 작성자가 캡션에 `<br>`·
     `&nbsp;`·`<a …>` 와 서명 변수 보간을 의도적으로 넣기 때문이다(정적
     빌드가 원래 사이트와 같은 결과를 내야 함). `alt` 는 속성값이라
-    안전을 위해 이스케이프를 유지한다. v1.14.2: 캡션을 `<p><small><b>` 로
-    감싼다(정본의 작고 굵은 캡션 마크업) — 마크다운형과 byte 일치.
+    안전을 위해 이스케이프를 유지한다. v1.14.4: 컨테이너를
+    `<figure class="imgBox">`, 캡션을 `<figcaption><small>` 로 출력한다 —
+    HTML 표준(figcaption 은 figure 의 자식일 때만 유효)에 맞춘 시맨틱
+    마크업. 마크다운형(replace_imgbox)과 byte 일치.
     """
     url = rewrite_asset_path(src, slug)
     alt = alt or ''
     if exp:
-        return (f'<div class="imgBox">\n'
+        return (f'<figure class="imgBox">\n'
                 f'  <img src="{url}" alt="{escape_html(alt)}">\n'
-                f'  <p><small><b>{exp}</b></small></p>\n'
-                f'</div>')
-    return (f'<div class="imgBox">\n'
+                f'  <figcaption><small>{exp}</small></figcaption>\n'
+                f'</figure>')
+    return (f'<figure class="imgBox">\n'
             f'  <img src="{url}" alt="{escape_html(alt)}">\n'
-            f'</div>')
+            f'</figure>')
 
 
 def _simulate_imgslidebox(dir_path: str, slug: str, article_dir: Path) -> str:
