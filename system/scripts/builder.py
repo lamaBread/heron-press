@@ -584,6 +584,29 @@ def _copy_if_newer(src: Path, dst: Path):
     shutil.copy2(src, dst)
 
 
+def _write_text_if_changed(path: Path, text: str):
+    """dist 텍스트 산출물 — 기존 파일과 바이트가 같으면 쓰지 않는다(mtime 보존).
+
+    빌더는 매 빌드마다 모든 텍스트 산출물(글·카테고리·홈·404·feed·sitemap·
+    robots·ads·search)을 다시 만든다. 내용이 그대로면 mtime 까지 그대로 둬야
+    한다 — 배포(deploy.py 의 ``rclone sync``)는 ``--checksum`` 없이 mtime+size 로
+    비교하므로, 내용 동일·mtime 갱신만으로도 파일을 '변경됨'으로 보고 전부 재업로드
+    한다. 문서 한 편만 고쳐도 사이트 전체가 변경으로 잡히던 원인이 이것. 바이트
+    비교로 무변경 파일의 쓰기를 건너뛰면 mtime 이 유지돼 rclone 이 진짜 바뀐
+    파일만 잡는다 (이미지·CSS 는 _copy_if_newer 가 이미 mtime 가드).
+
+    쓸 때는 원자적(tmp→replace) — 부분 쓰기/동시성 사고 방지. version.py·
+    make_manifest.py·deploy.write_example 과 같은 관례.
+    """
+    data = text.encode('utf-8')
+    if path.exists() and path.read_bytes() == data:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + '.heron_tmp')
+    tmp.write_bytes(data)
+    tmp.replace(path)
+
+
 def _image_worker(args):
     """ProcessPoolExecutor 워커 — 이미지 한 장을 webp 변종으로 변환.
 
@@ -2395,7 +2418,7 @@ class Builder:
                         out_dir = self.dist / m.slug
                         out_dir.mkdir(parents=True, exist_ok=True)
                         out_file = out_dir / f'index.{hit.output_ext}'
-                        out_file.write_text(hit.output, encoding='utf-8')
+                        _write_text_if_changed(out_file, hit.output)
                         # v1.4.0: PHP 빌드 글 목록 — 캐시 hit 경로에서도 등록.
                         if hit.output_ext == 'php':
                             self.report.note_php_built(m.slug)
@@ -2654,7 +2677,7 @@ class Builder:
             out_dir = self.dist / m.slug
             out_dir.mkdir(parents=True, exist_ok=True)
             out_file = out_dir / f'index.{ext}'
-            out_file.write_text(page_html, encoding='utf-8')
+            _write_text_if_changed(out_file, page_html)
 
             # v1.4.0: PHP 빌드 글 목록 등록 (cache miss 경로).
             if ext == 'php':
@@ -3271,7 +3294,7 @@ class Builder:
 
         out_dir = self.dist.joinpath(*cat.slug_path)
         out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / 'index.html').write_text(page_html, encoding='utf-8')
+        _write_text_if_changed(out_dir / 'index.html', page_html)
 
     def _build_categories(self):
         """v0.4.5: 톱레벨 + 모든 서브카테고리에 대해 인덱스 페이지 생성.
@@ -3398,7 +3421,7 @@ class Builder:
             tr=self.tool_tr,
         )
         self.dist.mkdir(parents=True, exist_ok=True)
-        (self.dist / 'index.html').write_text(page_html, encoding='utf-8')
+        _write_text_if_changed(self.dist / 'index.html', page_html)
 
     # ── [9] Site assets ───────────────────────────────────────
 
@@ -3525,15 +3548,13 @@ class Builder:
         }
         page_html = _render_template(tpl, vars_, report=self.report)
         self.dist.mkdir(parents=True, exist_ok=True)
-        (self.dist / '404.html').write_text(page_html, encoding='utf-8')
+        _write_text_if_changed(self.dist / '404.html', page_html)
 
     # ── [11] robots.txt + ads.txt ────────────────────────────
 
     def _build_robots(self):
         self.dist.mkdir(parents=True, exist_ok=True)
-        (self.dist / 'robots.txt').write_text(
-            self.site.robots_txt_main, encoding='utf-8'
-        )
+        _write_text_if_changed(self.dist / 'robots.txt', self.site.robots_txt_main)
 
     def _build_ads_txt(self):
         """v1.1.3: Google AdSense `dist/ads.txt` 생성.
@@ -3549,7 +3570,7 @@ class Builder:
         dst = self.dist / 'ads.txt'
         if ads_txt:
             self.dist.mkdir(parents=True, exist_ok=True)
-            dst.write_text(ads_txt, encoding='utf-8')
+            _write_text_if_changed(dst, ads_txt)
         elif dst.exists():
             dst.unlink()
 
@@ -3563,7 +3584,7 @@ class Builder:
             self.articles, self.categories, self.site, self.home_meta,
         )
         self.dist.mkdir(parents=True, exist_ok=True)
-        (self.dist / 'sitemap.xml').write_text(xml, encoding='utf-8')
+        _write_text_if_changed(self.dist / 'sitemap.xml', xml)
 
     # ── [12b] feed.atom + feed.rss (v0.5.3) ───────────────────
 
@@ -3611,8 +3632,8 @@ class Builder:
                     p.unlink()
             return
 
-        (self.dist / 'feed.atom').write_text(render_atom(doc), encoding='utf-8')
-        (self.dist / 'feed.rss').write_text(render_rss(doc), encoding='utf-8')
+        _write_text_if_changed(self.dist / 'feed.atom', render_atom(doc))
+        _write_text_if_changed(self.dist / 'feed.rss', render_rss(doc))
 
     # ── [13] Search index inlined into search.php ────────────
     #
@@ -3708,7 +3729,7 @@ class Builder:
                 self.site_tr.t('site.footer.rights')),
         }
         page = _render_template(tpl, vars_, report=self.report)
-        (self.dist / 'search.php').write_text(page, encoding='utf-8')
+        _write_text_if_changed(self.dist / 'search.php', page)
 
     @staticmethod
     def _php_squote(s: str) -> str:
