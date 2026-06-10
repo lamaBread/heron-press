@@ -16,39 +16,10 @@ admin_head($isApply ? t('admin.deploy_run.title.apply') : t('admin.deploy_run.ti
   <?= $isApply
       ? t('admin.deploy_run.banner.apply.desc')
       : t('admin.deploy_run.banner.preview.desc') ?>
-  <?= t('admin.deploy_run.banner.tail') ?>
+  <?= t('admin.log.stream_note') ?>
 </div>
 
-<div class="logbar">
-  <span class="ttl"><?= h(t('admin.deploy_run.log.title')) ?></span>
-  <button type="button" id="logtoggle"
-          data-expand="<?= h(t('admin.deploy_run.log.expand')) ?>"
-          data-collapse="<?= h(t('admin.deploy_run.log.collapse')) ?>"><?= h(t('admin.deploy_run.log.expand')) ?></button>
-</div>
-<script>
-  // 스트리밍 중 라이브 추적 + 접기/펼치기. <pre> 보다 먼저 와 즉시 실행되며,
-  // 접힌(log-peek) 상태일 때만 하단을 따라가고 응답 완료(load) 시 멈춘다.
-  (function(){
-    var $ = function(id){ return document.getElementById(id); };
-    var btn = $('logtoggle');
-    if (btn) btn.addEventListener('click', function(){
-      var p = $('log'); if (!p) return;
-      var full = p.classList.toggle('log-full');
-      p.classList.toggle('log-peek', !full);
-      btn.textContent = full ? btn.dataset.collapse : btn.dataset.expand;
-      if (full) p.scrollTop = 0;
-    });
-    var follow = setInterval(function(){
-      var p = $('log');
-      if (p && p.classList.contains('log-peek')) p.scrollTop = p.scrollHeight;
-    }, 200);
-    window.addEventListener('load', function(){
-      clearInterval(follow);
-      var p = $('log');
-      if (p && p.classList.contains('log-peek')) p.scrollTop = p.scrollHeight;
-    });
-  })();
-</script>
+<?php admin_log_widget_head(t('admin.log.title'), t('admin.log.expand'), t('admin.log.collapse')); ?>
 <pre id="log" class="log-peek"><?php
 flush();
 $SENTINEL = "\x1eHERON_DEPLOY_SUMMARY\x1e";

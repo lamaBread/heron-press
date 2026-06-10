@@ -77,14 +77,25 @@ function admin_suggest_slug(string $name): array {
             'non_ascii' => (bool)($j['non_ascii'] ?? false)];
 }
 
-/** 원클릭 빌드: python Heron.py [--clean]. 반환 [code,out,err]. */
-function admin_run_build(bool $clean): array {
+/**
+ * 원클릭 빌드 스트리밍: python Heron.py [--clean] (v1.14.5).
+ * 빌더는 단계 헤더([ n/16])를 print(flush=True) 로 실시간으로 내므로, 블로킹
+ * admin_proc 대신 deploy 와 같은 줄 단위 스트리밍으로 받아 '빌드 끝나야 로그가
+ * 한꺼번에 뜨는' UX 를 고친다. 이슈 리포트·[ABORT] 는 stderr 로 나오므로
+ * mergeStderr 로 한 파이프에 합쳐 순서대로 + 데드락 없이 흘려보낸다.
+ * PYTHONUNBUFFERED 는 드문 무flush print(--clean 안내 등) 안전벨트.
+ * 반환: Heron.py exit code (0=완료(fail-soft 이슈 포함), 1=[ABORT]/크래시).
+ */
+function admin_run_build_stream(bool $clean, callable $onLine): int {
     $argv = array_merge(
         admin_python(),
         [admin_base_dir() . DIRECTORY_SEPARATOR . 'Heron.py']
     );
     if ($clean) $argv[] = '--clean';
-    return admin_proc($argv, null, admin_base_dir());
+    $env = getenv();
+    if (!is_array($env)) $env = [];
+    $env['PYTHONUNBUFFERED'] = '1';
+    return admin_proc_stream($argv, admin_base_dir(), $onLine, $env, true);
 }
 
 /**
@@ -110,12 +121,19 @@ function admin_run_heron(array $flags): array {
  * 먹으므로 stdout 블로킹 fgets 루프를 쓴다. 자식(deploy.run)이 rclone stderr
  * 를 자기 stdout 으로 합치고 자체 로그도 stdout 으로 내므로 거의 모든 출력이
  * pipe1 로 온다 — 남은 stderr(예외/argparse)는 종료 후 드레인. 반환: exit code.
+ *
+ * $mergeStderr (v1.14.5): 자식이 stderr 를 스스로 합치지 *않는* 명령(빌드 —
+ * 이슈 리포트·[ABORT] 가 stderr)은 종료-후-드레인으로는 stderr 가 파이프
+ * 버퍼(Windows ~4KB)를 넘는 순간 상호 대기에 빠질 수 있다. true 면 fd2 를
+ * fd1 로 redirect 해 한 파이프로 받는다 — 데드락 제거 + 출력 순서 보존.
+ * deploy 는 sentinel 파싱 경로를 건드리지 않도록 기본값 false 유지.
  */
-function admin_proc_stream(array $argv, ?string $cwd, callable $onLine, ?array $env = null): int {
+function admin_proc_stream(array $argv, ?string $cwd, callable $onLine,
+                           ?array $env = null, bool $mergeStderr = false): int {
     $desc = [
         0 => ['pipe', 'r'],
         1 => ['pipe', 'w'],
-        2 => ['pipe', 'w'],
+        2 => $mergeStderr ? ['redirect', 1] : ['pipe', 'w'],
     ];
     // $env=null 이면 부모 환경을 그대로 상속. 비-null 이면 proc_open 이 자식 환경을
     // 통째로 교체하므로 호출부가 getenv() 병합본을 넘겨야 한다(PATH 등 유실 방지).
@@ -129,12 +147,14 @@ function admin_proc_stream(array $argv, ?string $cwd, callable $onLine, ?array $
     }
     fclose($pipes[1]);
 
-    stream_set_blocking($pipes[2], true);
-    $err = stream_get_contents($pipes[2]);
-    fclose($pipes[2]);
-    if ($err !== '' && $err !== false) {
-        foreach (preg_split('/\r?\n/', rtrim($err)) as $l) {
-            if ($l !== '') $onLine($l);
+    if (!$mergeStderr) {
+        stream_set_blocking($pipes[2], true);
+        $err = stream_get_contents($pipes[2]);
+        fclose($pipes[2]);
+        if ($err !== '' && $err !== false) {
+            foreach (preg_split('/\r?\n/', rtrim($err)) as $l) {
+                if ($l !== '') $onLine($l);
+            }
         }
     }
     return proc_close($proc);

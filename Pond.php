@@ -318,15 +318,15 @@ if ($action === 'delete') {
     redirect('?a=list&deleted=1');
 }
 
-// ── 원클릭 빌드 ──────────────────────────────────────────────────
+// ── 원클릭 빌드 (v1.14.5 스트리밍) ───────────────────────────────
 if ($action === 'build') {
     want_post(); check_csrf();
     $clean = !empty($_POST['clean']);
-    [$code, $out, $err] = admin_run_build($clean);
-    $title = t('admin.build.title', ['result' => $code === 0
-        ? t('admin.build.title.ok')
-        : t('admin.build.title.fail', ['code' => $code])]);
-    $bodyOut = trim($out . "\n" . $err);
+    // 스트리밍 응답: 출력 버퍼를 끄고 빌더의 단계 헤더([ n/16])를 한 줄씩
+    // 흘려보낸다 (deploy 와 동일 패턴 — 종전 블로킹 admin_proc 는 빌드가
+    // 끝나야 로그가 한꺼번에 떠 화면이 로딩 중에 멈춰 보였다).
+    while (ob_get_level() > 0) { @ob_end_flush(); }
+    ob_implicit_flush(true);
     require __DIR__ . '/system/admin/views/build.php';
     exit;
 }

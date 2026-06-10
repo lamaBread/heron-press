@@ -187,6 +187,14 @@ admin.deploy.note.slow: "<strong>The first deploy is slow</strong> — the initi
 admin.deploy.back: "← List"
 admin.deploy.preview_btn: "① Preview (dry-run)"
 
+# ── 공유: 스트리밍 로그 위젯 (deploy_run.php · build.php) ──────────
+# v1.14.5: admin.deploy_run.log.* / banner.tail 을 admin.log.* 로 일반화
+# (빌드 스트리밍 전환으로 두 뷰가 같은 위젯을 쓴다 — layout.php 헬퍼).
+admin.log.title: "Live log"
+admin.log.expand: "Expand ⌄"
+admin.log.collapse: "Collapse ⌃"
+admin.log.stream_note: "The progress log streams below in real time."
+
 # ── deploy_run.php (deploy run/streaming) ──────────────────────────
 admin.deploy_run.title.apply: "Deploy — Apply"
 admin.deploy_run.title.preview: "Deploy — Preview"
@@ -194,7 +202,6 @@ admin.deploy_run.banner.apply: "② Real sync in progress"
 admin.deploy_run.banner.preview: "① Preview (dry-run)"
 admin.deploy_run.banner.apply.desc: "This actually updates the server (transfers changed files + deletes orphan files on the server)."
 admin.deploy_run.banner.preview.desc: "Does not change the server; only computes the “to send/to delete” list."
-admin.deploy_run.banner.tail: "The progress log streams below in real time."
 admin.deploy_run.result.apply.ok: "Deploy complete"
 admin.deploy_run.result.preview.ok: "Preview complete"
 admin.deploy_run.result.fail: "Failed (exit {code})"
@@ -205,10 +212,7 @@ admin.deploy_run.back: "← List"
 admin.deploy_run.again: "Preview again"
 admin.deploy_run.apply.confirm: "This actually updates the server (including deleting orphan files on the server). Have you reviewed the preview list above?"
 admin.deploy_run.apply_btn: "② Apply as-is (real deploy)"
-# v1.12.0: 접이식 라이브 로그 + dry-run 요약 시각화
-admin.deploy_run.log.title: "Live log"
-admin.deploy_run.log.expand: "Expand ⌄"
-admin.deploy_run.log.collapse: "Collapse ⌃"
+# v1.12.0: 접이식 라이브 로그(→ v1.14.5 admin.log.* 로 이동) + dry-run 요약 시각화
 admin.deploy_run.summary.title: "Preview summary"
 admin.deploy_run.summary.upload: "Upload"
 admin.deploy_run.summary.delete: "Delete"
@@ -288,9 +292,12 @@ admin.settings.locale.save: "Save language"
 admin.locale.name.ko: "한국어 (ko)"
 admin.locale.name.en: "English (en)"
 
-# ── build.php (build result) ───────────────────────────────────────
+# ── build.php (build run/streaming — v1.14.5 스트리밍 전환) ─────────
+admin.build.title.run: "Build — Run"
+admin.build.banner.running: "Build in progress"
 admin.build.banner: "— <code class=\"k\">python Heron.py</code> (cwd = version folder)."
 admin.build.banner.ok: " dist/ has been updated."
+admin.build.result.fail.hint: "— Check the log above for [ABORT] or a traceback."
 admin.build.back: "← List"
 admin.build.again: "Build again"
 admin.build.again.clean: "Build again (--clean)"

@@ -187,6 +187,14 @@ admin.deploy.note.slow: "<strong>첫 배포는 느립니다</strong> — 전체 
 admin.deploy.back: "← 목록"
 admin.deploy.preview_btn: "① 미리보기 (dry-run)"
 
+# ── 공유: 스트리밍 로그 위젯 (deploy_run.php · build.php) ──────────
+# v1.14.5: admin.deploy_run.log.* / banner.tail 을 admin.log.* 로 일반화
+# (빌드 스트리밍 전환으로 두 뷰가 같은 위젯을 쓴다 — layout.php 헬퍼).
+admin.log.title: "라이브 로그"
+admin.log.expand: "전체 펼치기 ⌄"
+admin.log.collapse: "접기 ⌃"
+admin.log.stream_note: "진행 로그가 아래에 실시간으로 흐릅니다."
+
 # ── deploy_run.php (배포 실행/스트리밍) ─────────────────────────────
 admin.deploy_run.title.apply: "배포 — 적용"
 admin.deploy_run.title.preview: "배포 — 미리보기"
@@ -194,7 +202,6 @@ admin.deploy_run.banner.apply: "② 실제 동기화 진행 중"
 admin.deploy_run.banner.preview: "① 미리보기 (dry-run)"
 admin.deploy_run.banner.apply.desc: "서버를 실제로 갱신합니다 (바뀐 파일 전송 + 서버 고아 파일 삭제)."
 admin.deploy_run.banner.preview.desc: "서버는 변경하지 않고 “보낼/지울” 목록만 계산합니다."
-admin.deploy_run.banner.tail: "진행 로그가 아래에 실시간으로 흐릅니다."
 admin.deploy_run.result.apply.ok: "배포 완료"
 admin.deploy_run.result.preview.ok: "미리보기 완료"
 admin.deploy_run.result.fail: "실패 (exit {code})"
@@ -205,10 +212,7 @@ admin.deploy_run.back: "← 목록"
 admin.deploy_run.again: "다시 미리보기"
 admin.deploy_run.apply.confirm: "서버를 실제로 갱신합니다 (서버 고아 파일 삭제 포함). 위 미리보기 목록을 확인했나요?"
 admin.deploy_run.apply_btn: "② 이대로 적용 (실제 배포)"
-# v1.12.0: 접이식 라이브 로그 + dry-run 요약 시각화
-admin.deploy_run.log.title: "라이브 로그"
-admin.deploy_run.log.expand: "전체 펼치기 ⌄"
-admin.deploy_run.log.collapse: "접기 ⌃"
+# v1.12.0: 접이식 라이브 로그(→ v1.14.5 admin.log.* 로 이동) + dry-run 요약 시각화
 admin.deploy_run.summary.title: "미리보기 요약"
 admin.deploy_run.summary.upload: "업로드"
 admin.deploy_run.summary.delete: "삭제"
@@ -287,9 +291,12 @@ admin.settings.locale.save: "언어 저장"
 admin.locale.name.ko: "한국어 (ko)"
 admin.locale.name.en: "English (en)"
 
-# ── build.php (빌드 결과) ───────────────────────────────────────────
+# ── build.php (빌드 실행/스트리밍 — v1.14.5 전환) ───────────────────
+admin.build.title.run: "빌드 — 실행"
+admin.build.banner.running: "빌드 진행 중"
 admin.build.banner: "— <code class=\"k\">python Heron.py</code> (cwd = 버전 폴더)."
 admin.build.banner.ok: " dist/ 가 갱신되었습니다."
+admin.build.result.fail.hint: "— 위 로그에서 [ABORT] 또는 traceback 을 확인하세요."
 admin.build.back: "← 목록"
 admin.build.again: "다시 빌드"
 admin.build.again.clean: "다시 빌드 (--clean)"

@@ -67,7 +67,7 @@ function admin_head(string $title): void {
   iframe.pv{width:100%;height:640px;border:1px solid var(--bd);border-radius:8px;
        background:#fff}
   code.k{background:#eef;padding:1px 5px;border-radius:4px}
-  /* 배포 실행 로그 + dry-run 요약 (deploy_run.php) */
+  /* 실행 로그 위젯 (deploy_run.php · build.php 공유) + dry-run 요약 */
   pre#log{background:#0d0d12;color:#d6d6dc;padding:14px 16px;border-radius:8px;
        overflow:auto;white-space:pre-wrap;margin:0;
        font:12px/1.5 ui-monospace,Consolas,monospace}
@@ -149,6 +149,47 @@ function admin_head(string $title): void {
   </form>
 </header>
 <main>
+<?php
+}
+
+/**
+ * 스트리밍 로그 위젯 머리 (v1.14.5 — deploy_run.php 인라인을 공유 헬퍼로 추출).
+ * logbar(제목+펼치기 버튼) + 라이브 추적/접기 스크립트를 내고, 호출부 뷰가
+ * 바로 뒤에 <pre id="log" class="log-peek"> 를 열어 줄을 흘려보낸다
+ * (CSS 가 pre#log 에 id 스코프 — id 는 반드시 "log"). 스크립트는 <pre> 보다
+ * 먼저 와 즉시 실행되며, 접힌(log-peek) 상태일 때만 하단을 따라가고 응답
+ * 완료(load) 시 멈춘다.
+ */
+function admin_log_widget_head(string $title, string $expand, string $collapse): void {
+    ?>
+<div class="logbar">
+  <span class="ttl"><?= h($title) ?></span>
+  <button type="button" id="logtoggle"
+          data-expand="<?= h($expand) ?>"
+          data-collapse="<?= h($collapse) ?>"><?= h($expand) ?></button>
+</div>
+<script>
+  (function(){
+    var $ = function(id){ return document.getElementById(id); };
+    var btn = $('logtoggle');
+    if (btn) btn.addEventListener('click', function(){
+      var p = $('log'); if (!p) return;
+      var full = p.classList.toggle('log-full');
+      p.classList.toggle('log-peek', !full);
+      btn.textContent = full ? btn.dataset.collapse : btn.dataset.expand;
+      if (full) p.scrollTop = 0;
+    });
+    var follow = setInterval(function(){
+      var p = $('log');
+      if (p && p.classList.contains('log-peek')) p.scrollTop = p.scrollHeight;
+    }, 200);
+    window.addEventListener('load', function(){
+      clearInterval(follow);
+      var p = $('log');
+      if (p && p.classList.contains('log-peek')) p.scrollTop = p.scrollHeight;
+    });
+  })();
+</script>
 <?php
 }
 
