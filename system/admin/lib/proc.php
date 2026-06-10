@@ -99,7 +99,25 @@ function admin_run_build_stream(bool $clean, callable $onLine): int {
 }
 
 /**
- * python Heron.py <flags...> 호출 (v1.6.0 — 버전/업데이트 액션).
+ * 자가 업데이트 스트리밍: python Heron.py --update (v1.14.6).
+ * 빌드(v1.14.5)와 동일 패턴 — 다운로드→무결성→백업→오버레이→마이그레이션의
+ * 단계 로그를 줄 단위로 흘려보낸다. 예외 트레이스백은 stderr 로 나오므로
+ * mergeStderr 로 합치고, PYTHONUNBUFFERED 는 flush 안전벨트.
+ * 반환: Heron.py exit code (0=성공/이미 최신, 1=실패).
+ */
+function admin_run_update_stream(callable $onLine): int {
+    $argv = array_merge(
+        admin_python(),
+        [admin_base_dir() . DIRECTORY_SEPARATOR . 'Heron.py', '--update']
+    );
+    $env = getenv();
+    if (!is_array($env)) $env = [];
+    $env['PYTHONUNBUFFERED'] = '1';
+    return admin_proc_stream($argv, admin_base_dir(), $onLine, $env, true);
+}
+
+/**
+ * python Heron.py <flags...> 호출 (v1.6.0 — 버전/업데이트확인 액션).
  * 빌드와 동일 패턴 — 로직은 Python 엔진에, Pond 는 얇은 트리거.
  * 반환 [code,out,err].
  */

@@ -303,8 +303,11 @@ admin.build.again: "Build again"
 admin.build.again.clean: "Build again (--clean)"
 admin.build.empty: "(no output)"
 
-# ── update.php (update result) ─────────────────────────────────────
+# ── update.php (update run/streaming — switched in v1.14.6) ────────
+admin.update.title.run: "Update — Run"
+admin.update.banner.running: "Update in progress"
 admin.update.banner: "— <code class=\"k\">python Heron.py --update</code> (GitHub lamaBread/heron-press)."
+admin.update.result.fail.hint: "— Check the log above for the error message."
 admin.update.restart.title: "A restart is required."
 admin.update.restart.body: "Pond.php and system/ were just replaced, but the currently running PHP process still holds the old code in memory. In the terminal press <code class=\"k\">Ctrl+C</code> then restart with <code class=\"k\">php -S 127.0.0.1:8001 Pond.php</code>. (user/ content is unchanged, and a snapshot from just before the update is backed up to <code class=\"k\">user/.heron/backups/</code>.)"
 admin.update.back: "← List"

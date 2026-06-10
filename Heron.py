@@ -192,7 +192,9 @@ def _action_check_update(base: Path) -> int:
 
 def _action_update(base: Path) -> int:
     from scripts import update
-    r = update.self_update(base, log=print)
+    # flush=True: Pond 가 파이프로 받을 때 단계 로그가 실시간으로 흐르도록
+    # (블록 버퍼링 방지 — _action_fetch_rclone 과 같은 이유).
+    r = update.self_update(base, log=lambda m: print(m, flush=True))
     return 0 if r['ok'] else 1
 
 

@@ -426,14 +426,15 @@ if ($action === 'checkupdate') {
     redirect('?a=list&checked=1');
 }
 
-// ── 업데이트 실행 (v1.6.0) — 다운로드 → 오버레이 → 마이그레이션 ──────────
+// ── 업데이트 실행 (v1.6.0; v1.14.6 스트리밍) — 다운로드 → 오버레이 → 마이그레이션
 if ($action === 'update') {
     want_post(); check_csrf();
-    [$code, $out, $err] = admin_run_heron(['--update']);
-    $title = t('admin.update.title', ['result' => $code === 0
-        ? t('admin.update.title.ok')
-        : t('admin.update.title.fail', ['code' => $code])]);
-    $bodyOut = trim($out . "\n" . $err);
+    // 스트리밍 응답 (빌드와 동일 패턴). 부가 효과: 뷰·layout·proc 가 오버레이
+    // *전에* 전부 로드되므로(i18n 테이블도 요청 시작 시 메모리 적재) 페이지
+    // 전체가 구버전 코드의 일관 상태로 렌더된다 — 종전 구조는 오버레이가 끝난
+    // 뒤 뷰를 require 해 새 버전 뷰를 구버전 Pond 가 파싱하는 잠재 위험이 있었다.
+    while (ob_get_level() > 0) { @ob_end_flush(); }
+    ob_implicit_flush(true);
     require __DIR__ . '/system/admin/views/update.php';
     exit;
 }

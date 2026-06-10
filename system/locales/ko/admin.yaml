@@ -302,8 +302,11 @@ admin.build.again: "다시 빌드"
 admin.build.again.clean: "다시 빌드 (--clean)"
 admin.build.empty: "(출력 없음)"
 
-# ── update.php (업데이트 결과) ──────────────────────────────────────
+# ── update.php (업데이트 실행/스트리밍 — v1.14.6 전환) ──────────────
+admin.update.title.run: "업데이트 — 실행"
+admin.update.banner.running: "업데이트 진행 중"
 admin.update.banner: "— <code class=\"k\">python Heron.py --update</code> (GitHub lamaBread/heron-press)."
+admin.update.result.fail.hint: "— 위 로그에서 오류 메시지를 확인하세요."
 admin.update.restart.title: "재시작이 필요합니다."
 admin.update.restart.body: "Pond.php·system/ 이 방금 교체되었지만 지금 실행 중인 PHP 프로세스는 옛 코드를 메모리에 들고 있습니다. 터미널에서 <code class=\"k\">Ctrl+C</code> 후 <code class=\"k\">php -S 127.0.0.1:8001 Pond.php</code> 로 다시 시작하세요. (user/ 콘텐츠는 그대로이며, 업데이트 직전 스냅샷이 <code class=\"k\">user/.heron/backups/</code> 에 백업되어 있습니다.)"
 admin.update.back: "← 목록"
