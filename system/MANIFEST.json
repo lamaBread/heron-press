@@ -2,8 +2,8 @@
   "files": {
     "Heron.py": "e5f80a404275c129188f9b9e8fef54e3366e81717def64898c3d01e824fe3f4c",
     "Pond.php": "b187ee97253b886179fad57596e82afa13067843e23120aac52416056e433220",
-    "README.ko.md": "93936e1da2cf16d3e2d042d67fc4f0c0095237ba7bce04dcdb266401ab9c392d",
-    "README.md": "f4ff1b3864eff7d20e9ac6bdc9969fa1ea4fbc05274367def177250fa00bc4ea",
+    "README.ko.md": "9434d809d100d15dbe5f8bd5d3ed425664d6532b45b4372fc4364fb69e79adf4",
+    "README.md": "f77b0c4dad70b49d551fdd7d4cb6e58b55baa87245e30271748eedc2365b6374",
     "system/admin/lib/articles.php": "6f6bbdae372e008c35f78e83b4141b82a7b850d2b7a6b263ee5f1bcaa5e69858",
     "system/admin/lib/fs.php": "95a6a63b7e15b3676ed41ff08afa7dbc8419a449783de0fadd9ef29fadce26b9",
     "system/admin/lib/i18n.php": "360bb5b3728063f689cec6561c726c522b3abf094dc18baa8614defe62ffa2dd",
@@ -13,7 +13,7 @@
     "system/admin/slug_one.py": "3df2706394f0fabc6055e926cf99d9320b67639c615b313eabf6c8876b362904",
     "system/admin/views/build.php": "50252377e1a045f591783f62ab1b93e8737795c012b1a4eb1ea8987d0d59db58",
     "system/admin/views/deploy.php": "595cb5afe27e3fde95221ee05cbe0a76483511b1eefe8ce697fd2a0a20e2ec8e",
-    "system/admin/views/deploy_run.php": "93790c42b50e6299bc22e03ad561784c8b633f3f80178f77767019a0b0e3544e",
+    "system/admin/views/deploy_run.php": "768e03c7050d0aa7f77dcbebff2b190ece4f1e6cd3da38efccc96e6072ad16ab",
     "system/admin/views/edit.php": "478b2bc9e01bc0cc499774e7445ead75e304e5a2281f1c7a617233d59e3062f9",
     "system/admin/views/home.php": "fefce6d2fa5904514ae9eefb96513d53fb5f70a0546e3d6013b861001fd2f497",
     "system/admin/views/layout.php": "9c6284f79c6ee3f656b88d5e4d3fb4483b3ec557ea737655363b6883380de0c1",
@@ -34,10 +34,10 @@
     "system/runtime/search.php": "23c5354d6a1eb50b0d425cf6f55e14fba9596abb6d7c2d237e07f86d559800bb",
     "system/runtime/search_bm25.php": "df3563df8a3c38ef55147c41043521557748e9c1f83952fa8610a574404fe0e9",
     "system/runtime/search_tokenize.php": "a00c999e478d6af71bdeab39ff859d3a902ee0bf69ded18d45640666b02c6221",
-    "system/scripts/__init__.py": "6f82fe628c8a2e9b02fbd7408b1c3b9ead4db372c19e168007e7eb4c76aa7840",
+    "system/scripts/__init__.py": "6cf737092414b0addda3788f4ae688b08a3dafe25a0e250be96b14dedd0ff680",
     "system/scripts/builder.py": "c0c884ac21b195a4f55db73a1e530b5b15f67457384b760171e36e51f92a4d99",
     "system/scripts/cache.py": "4fa2479409e40c2cc3e56aae42565ac8a499e702c6b6ebb6f432e4755f353f85",
-    "system/scripts/deploy.py": "70fc89591dbda1f14699e67bb72ccc17abbedfd0e4fcbba5367c6eded792ee0a",
+    "system/scripts/deploy.py": "6b3bec727be07cea52fce48a67c9133349b66a96e6a83d82e974180622040d1a",
     "system/scripts/feed.py": "4c142a09647b0e07180e31a3df5aac85705b4035d81f3095cb20e17a41f1a800",
     "system/scripts/i18n.py": "2a187f533ff049ae9fe460cead1e1eab5b76f46f336a555a8aa555abacc5f934",
     "system/scripts/images.py": "0107056e7f732cebfc465b7cb90db52d19b532e501e740ea5498c251191bd880",
@@ -67,7 +67,7 @@
     "system/tests/test_build_cli.py": "ae61fac29cb063ab53615f4dff4226498b9acca3c5a796c9ac32e7c88edff8b5",
     "system/tests/test_builder.py": "3135dcf5b4a0bc3e504259b1865e6788bebff821a300a288dc7ca26cf7bc3e24",
     "system/tests/test_cache.py": "f09fe54dfba00900fad309879801005ad44e4add2cba25bd41b318c1c04931dd",
-    "system/tests/test_deploy.py": "ceb87758c662414f48e139b2dae31fe13b295e85a58ed7f3dc1bbc8c77b86f12",
+    "system/tests/test_deploy.py": "699d75076cb8c0d4116f42b3453e511bd24e9b18552cf77c2ebd5c42864f51e9",
     "system/tests/test_feed.py": "b96b70ed62a9e9ee60b7128f67c00682f563d98cc99df9646178defeefbdb7a6",
     "system/tests/test_i18n.py": "4ce7f527af810fb8d3788928f7422c59084223f684f1b03f613011f43746f625",
     "system/tests/test_jsonld.py": "4df4ac187f75947a29ee046e822d3ce0f25fecfef2535347bf8b1df13b9fb635",
@@ -90,5 +90,5 @@
     "system/tests/test_version.py": "b9e25216744822a79438ac69d3ef7a786e3e2694dd52a2fc2909acb66eb96910",
     "system/tests/test_yaml_parser.py": "5e6fbfd12d67e3e12a5b3e2fad6e95474363191d6bd9e2f91bb0691d9232d8d3"
   },
-  "version": "1.14.6"
+  "version": "1.14.7"
 }

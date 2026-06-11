@@ -252,6 +252,30 @@ class TestArgvFlagsAgainstRealRclone(_Base):
         self.assertEqual(unknown, [],
                          f'rclone 가 모르는 플래그: {unknown}')
 
+    def test_cat_emitted_flags_exist_in_rclone(self):
+        # v1.14.7: cat_remote 도 글로벌 플래그(_CAT_TIMEOUT_FLAGS)를 내보내기
+        # 시작했으므로 build_argv 와 같은 회귀 가드 — 손으로 적은 타임아웃
+        # 플래그가 실제 rclone 표면에 존재하는지 대조한다(오타 방어).
+        rclone = _find_rclone()
+        if not rclone:
+            self.skipTest('rclone 바이너리 없음 (미다운로드/미지원 플랫폼)')
+        known = _rclone_long_flags(rclone)
+        self.assertIn('--sftp-host', known,
+                      'rclone help flags 파싱 실패 — 플래그 표면이 비었다')
+        captured = {}
+
+        def fake_popen(argv, **kw):
+            captured['argv'] = argv
+            return _FakeCatPopen(out=b'', code=0)
+
+        cfg = {'remote_path': '/var/www/site', 'ssh_alias': 'lama'}
+        with mock.patch.object(deploy.subprocess, 'Popen', side_effect=fake_popen):
+            deploy.cat_remote(self.tmp, 'a/x.html', cfg, str(rclone))
+        emitted = [a for a in captured['argv'] if a.startswith('--')]
+        unknown = [f for f in emitted if f not in known]
+        self.assertEqual(unknown, [],
+                         f'rclone 가 모르는 플래그: {unknown}')
+
 
 class TestExample(unittest.TestCase):
     def setUp(self):
@@ -658,6 +682,10 @@ class TestCatRemote(_Base):
         self.assertEqual(captured['argv'][:3],
                          ['/bin/rclone', 'cat', ':sftp:/var/www/site/a/x.html'])
         self.assertIn('--sftp-ssh', captured['argv'])   # 연결 좌표 공유
+        # v1.14.7: 연결 스톨 시 Pond 동결을 막는 짧은 타임아웃 (sync 엔 미적용).
+        self.assertIn('--contimeout', captured['argv'])
+        self.assertIn('--timeout', captured['argv'])
+        self.assertIn('--retries', captured['argv'])
 
     def test_truncates_oversize_and_kills(self):
         cfg = {'remote_path': '/var/www/site', 'ssh_alias': 'lama'}

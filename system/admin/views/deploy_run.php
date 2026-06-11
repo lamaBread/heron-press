@@ -270,7 +270,7 @@ $code = admin_deploy_stream($dryRun, static function (string $line) use (&$summa
 </script>
 <?php endif; /* summary viz */ ?>
 
-<div class="flash <?= $code === 0 ? 'ok' : 'err' ?>">
+<div class="flash <?= $code === 0 ? 'ok' : 'err' ?>" style="margin-top:14px">
   <strong><?= $code === 0
       ? ($isApply ? t('admin.deploy_run.result.apply.ok') : t('admin.deploy_run.result.preview.ok'))
       : t('admin.deploy_run.result.fail', ['code' => $code]) ?></strong>

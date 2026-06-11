@@ -243,6 +243,16 @@ _DIFF_CONTEXT = 3       # unified hunk 앞뒤 맥락 줄 수.
 _DIFF_MAX_LINES = 4000  # hunk 줄 총합 상한(초과 시 truncated). JSON/DOM 폭증 방지.
 _LINE_CLIP = 2000       # 한 줄 표시 최대 글자(초과분 절단).
 
+# cat(파일별 diff) 전용 타임아웃 (v1.14.7). sync 와 달리 이 경로는 Pond 의 블로킹
+# AJAX(admin_proc → stream_get_contents)라, 연결이 끊기지 않고 멈춘 호스트(노트북
+# 절전 복귀·VPN/Wi-Fi 단절)에서 rclone 기본값(contimeout 1m·IO timeout 5m·retries
+# 3·low-level 10)에 맡기면 cat 한 번이 수 분 매달리고, 단일 워커 php -S 가 그동안
+# 점유돼 Pond 전체(다른 페이지·preview AJAX)가 동결된다. 작은 단일 파일(≤_DIFF_CAP)
+# 받기이므로 짧게 잡아 빨리 실패시킨다 — 장시간 정상 동작인 sync(build_argv)는
+# 손대지 않는다. 네 플래그 모두 실제 rclone 글로벌 플래그(test 회귀 가드로 대조).
+_CAT_TIMEOUT_FLAGS = ['--contimeout', '10s', '--timeout', '30s',
+                      '--retries', '1', '--low-level-retries', '2']
+
 # admin(PHP)이 스트림에서 가로채는 기계용 요약 한 줄의 접두 sentinel. 제어문자
 # (RS)라 rclone/Heron 의 어떤 정상 출력과도 충돌하지 않는다.
 SUMMARY_SENTINEL = '\x1eHERON_DEPLOY_SUMMARY\x1e'
@@ -556,11 +566,13 @@ def cat_remote(base, rel: str, cfg: dict, rclone, *,
     """원격의 한 파일을 ``rclone cat`` 으로 받는다(바이너리, 연결 좌표는 sync 와 공유).
 
     cap+1 바이트까지만 읽고 초과 시 프로세스를 끊어 대용량·원격 DoS·메모리 폭주를
-    막는다. rel 은 호출 전 _safe_relpath 통과 전제. 반환:
+    막는다. 연결 스톨로 Pond(단일 워커)가 동결되지 않도록 _CAT_TIMEOUT_FLAGS 로
+    짧은 타임아웃을 건다(v1.14.7). rel 은 호출 전 _safe_relpath 통과 전제. 반환:
     (data:bytes, returncode:int, truncated:bool, stderr_text:str).
     """
     remote = f":sftp:{cfg['remote_path']}/{rel}"
-    argv = [str(rclone), 'cat', remote] + _connection_flags(cfg)
+    argv = ([str(rclone), 'cat', remote]
+            + _connection_flags(cfg) + _CAT_TIMEOUT_FLAGS)
     proc = subprocess.Popen(argv, cwd=str(base),
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert proc.stdout is not None and proc.stderr is not None
