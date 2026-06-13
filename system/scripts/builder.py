@@ -2297,11 +2297,13 @@ class Builder:
         prev_a, next_a = self._prev_next_for(article, sibs_by_parent)
         if prev_a is None and next_a is None:
             return ''
-        parts = ['<nav class="prev-next-nav" aria-label="다른 글">']
+        tr = self.site_tr
+        parts = [f'<nav class="prev-next-nav" '
+                 f'aria-label="{escape_html(tr.t("site.prev_next.aria"))}">']
         if prev_a is not None:
             parts.append(
                 f'<a class="prev-next-link prev" href="/{prev_a.meta.slug}/" rel="prev">'
-                f'<span class="prev-next-dir">‹ 이전 글</span>'
+                f'<span class="prev-next-dir">{escape_html(tr.t("site.prev_next.prev"))}</span>'
                 f'<span class="prev-next-title">{escape_html(prev_a.meta.title)}</span>'
                 f'</a>'
             )
@@ -2312,7 +2314,7 @@ class Builder:
         if next_a is not None:
             parts.append(
                 f'<a class="prev-next-link next" href="/{next_a.meta.slug}/" rel="next">'
-                f'<span class="prev-next-dir">다음 글 ›</span>'
+                f'<span class="prev-next-dir">{escape_html(tr.t("site.prev_next.next"))}</span>'
                 f'<span class="prev-next-title">{escape_html(next_a.meta.title)}</span>'
                 f'</a>'
             )

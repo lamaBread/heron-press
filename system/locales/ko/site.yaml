@@ -19,6 +19,10 @@ site.pagination.next_aria: "Next page"
 site.article.published: "{date} 발행"
 site.article.updated: "{date} 수정"
 
+site.prev_next.aria: "다른 글"
+site.prev_next.prev: "‹ 이전 글"
+site.prev_next.next: "다음 글 ›"
+
 site.home.recent: "Recent posts"
 
 site.category.no_articles: "No articles found"

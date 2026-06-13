@@ -19,6 +19,10 @@ site.pagination.next_aria: "Next page"
 site.article.published: "Published {date}"
 site.article.updated: "Updated {date}"
 
+site.prev_next.aria: "More posts"
+site.prev_next.prev: "‹ Previous"
+site.prev_next.next: "Next ›"
+
 site.home.recent: "Recent posts"
 
 site.category.no_articles: "No articles found"
