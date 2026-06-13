@@ -12,6 +12,8 @@ __pycache__/
 /RELEASE-HARNESS.md
 # 로컬 전용 운영 방침 (always-on 컨텍스트). 단일 정본 트리라 로컬에만 둔다.
 /CLAUDE.md
+# 로컬 Claude Code 설정·훅 (release-gate 등). 단일 정본 트리라 로컬에만 둔다.
+/.claude/
 
 # v1.6.0: Heron 인스턴스 상태. user/.heron/version (스키마 스탬프) 은 커밋하되
 # 업데이트 체크 캐시와 마이그레이션 백업은 기계 생성물이라 제외.
