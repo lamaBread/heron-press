@@ -2,8 +2,8 @@
   "files": {
     "Heron.py": "5464156acd1cf90d0746452f2fbf58925f5e26ac6f600bb09a675b50900dd59c",
     "Pond.php": "1deeae9d40a8b8dbdb893ebdbb4e892b6480f51e679f63abf0bc569707cfe4ae",
-    "README.ko.md": "9b6f60aeef28c6482d43a18f469248d193d0c17321950159e26ac3f46ca6f15e",
-    "README.md": "e27384c2b8a5f55094502e7e7d2559ea59a8a4f4d57860bd624125b6a1105c32",
+    "README.ko.md": "fdb1f4d8b05c39c88f26179fe94a452a74795dc3324991bfc2ec2f7767a17cc0",
+    "README.md": "b7930301ea982cf117386b959494aa9f4b0c679fbf96773bcc33673989695586",
     "system/admin/lib/articles.php": "6f6bbdae372e008c35f78e83b4141b82a7b850d2b7a6b263ee5f1bcaa5e69858",
     "system/admin/lib/fs.php": "ac09f515c8a088e0fd27c938779eae4d77ce59170fc355153dc1f138d9ba6361",
     "system/admin/lib/i18n.php": "360bb5b3728063f689cec6561c726c522b3abf094dc18baa8614defe62ffa2dd",
@@ -35,7 +35,7 @@
     "system/runtime/search.php": "23c5354d6a1eb50b0d425cf6f55e14fba9596abb6d7c2d237e07f86d559800bb",
     "system/runtime/search_bm25.php": "df3563df8a3c38ef55147c41043521557748e9c1f83952fa8610a574404fe0e9",
     "system/runtime/search_tokenize.php": "a00c999e478d6af71bdeab39ff859d3a902ee0bf69ded18d45640666b02c6221",
-    "system/scripts/__init__.py": "cd8611106bd1e9dac4ac24c4d10e0e5511148485dfcb793610a92a82b11da6de",
+    "system/scripts/__init__.py": "f84a1949267e9b87a666c38edecfe9d67dd30d31316080363ae8d49abe97793b",
     "system/scripts/builder.py": "2ec10383f35935f2247401d9619f6a05278499e49a47b8513e27f65dafa12d91",
     "system/scripts/cache.py": "4fa2479409e40c2cc3e56aae42565ac8a499e702c6b6ebb6f432e4755f353f85",
     "system/scripts/check_release.py": "d0ac978d08aa43ca0d9d0e9b93993acddee4ed1cc110f18e268eac2ce2c5b228",
@@ -93,5 +93,5 @@
     "system/tests/test_version.py": "b9e25216744822a79438ac69d3ef7a786e3e2694dd52a2fc2909acb66eb96910",
     "system/tests/test_yaml_parser.py": "5e6fbfd12d67e3e12a5b3e2fad6e95474363191d6bd9e2f91bb0691d9232d8d3"
   },
-  "version": "1.14.11"
+  "version": "1.14.12"
 }
