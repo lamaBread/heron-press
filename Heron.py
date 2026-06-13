@@ -139,6 +139,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--new-locale', metavar='CODE',
         help=i18n.t('cli.help.new_locale'))
+    # v1.14.11: 릴리스 정합성 게이트 (MANIFEST 동기 + 버전 참조). 릴리스 엔지니어링
+    # 전용이라 i18n 비대상 — 평문 help (로케일 팩 패리티와 무관).
+    parser.add_argument(
+        '--release-check', action='store_true',
+        help='release gate: MANIFEST in sync with disk + README version refs '
+             'match __version__ (exit 1 on drift). See RELEASE-HARNESS.md.')
     return parser
 
 
@@ -346,6 +352,12 @@ def _action_new_locale(base: Path, code) -> int:
     return locale_tools.scaffold(code, log=lambda m: print(m, flush=True))
 
 
+def _action_release_check(base: Path) -> int:
+    """릴리스 정합성 게이트 (MANIFEST 동기 + 버전 참조). 0=통과, 1=드리프트."""
+    from scripts import check_release
+    return check_release.run(base, log=lambda m: print(m, flush=True))
+
+
 def main(argv=None) -> int:
     # 콘솔/파이프 인코딩을 UTF-8 로 고정 — Windows 기본 cp949 에서 한글/em-dash
     # 출력이 깨지거나 UnicodeEncodeError 로 죽는 것을 막는다. Pond 는 출력 파이프
@@ -393,6 +405,8 @@ def main(argv=None) -> int:
         return _action_check_locale(base, args.check_locale)
     if args.new_locale is not None:
         return _action_new_locale(base, args.new_locale)
+    if args.release_check:
+        return _action_release_check(base)
 
     # --clean wipes .build_cache/ as well as dist/ (a full rebuild).
     if args.clean:
