@@ -419,6 +419,82 @@ if ($action === 'settings_locale') {
     redirect('?a=settings&locale_saved=1');
 }
 
+// ── 페이지 설정 편집기 (v1.14.8) — 홈/카테고리 meta.yaml 원문 편집 ──────────
+// site.yaml 편집과 같은 raw 편집 패턴 미러: 주석 풍부한 YAML + styles 자유형 키라
+// 구조화 폼 대신 원문 그대로. 저장 게이트는 Heron.py --check-page-meta 로 빌드와
+// 동일 검증(_parse_category_meta_file). $cat='' = 홈, 그 외 = 카테고리 상대경로.
+if ($action === 'pagemeta') {
+    $cat = admin_safe_rel((string)($_GET['cat'] ?? ''));
+    $cats = admin_scan()['categories'];
+    if ($cat === null || !in_array($cat, $cats, true)) {
+        $_SESSION['flash_errs'] = [t('admin.pagemeta.err.bad_cat')];
+        redirect('?a=settings');
+    }
+    $isHome = ($cat === '');
+    $path = admin_page_meta_path($cat);
+    $fileExists = $path !== null && is_file($path);
+    // 검증 실패로 돌아온 편집 버퍼(같은 cat)면 그것을(편집 보존), 없으면 디스크
+    // 원문, 그도 없으면 시드 템플릿. 버퍼/에러는 한 번 쓰고 즉시 소거.
+    $bufCat = $_SESSION['pagemeta_buffer_cat'] ?? null;
+    if (isset($_SESSION['pagemeta_buffer']) && $bufCat === $cat) {
+        $pageMetaYaml = (string)$_SESSION['pagemeta_buffer'];
+    } elseif ($fileExists) {
+        $pageMetaYaml = (string)@file_get_contents($path);
+    } else {
+        $pageMetaYaml = meta_page_template($isHome, $cat);
+    }
+    $pageMetaErr = ($bufCat === $cat) ? (string)($_SESSION['pagemeta_err'] ?? '') : '';
+    unset($_SESSION['pagemeta_buffer'], $_SESSION['pagemeta_err'],
+          $_SESSION['pagemeta_buffer_cat']);
+    $saved = !empty($_GET['saved']);
+    $deleted = !empty($_GET['deleted']);
+    require __DIR__ . '/system/admin/views/pagemeta.php';
+    exit;
+}
+
+// ── 페이지 설정 저장 (v1.14.8) — 빌드와 동일 검증 통과해야 commit (직전본 백업) ──
+if ($action === 'pagemeta_save') {
+    want_post(); check_csrf();
+    $cat = admin_safe_rel((string)($_POST['cat'] ?? ''));
+    $path = $cat === null ? null : admin_page_meta_path($cat);
+    if ($cat === null || $path === null || !in_array($cat, admin_scan()['categories'], true)) {
+        $_SESSION['flash_errs'] = [t('admin.pagemeta.err.bad_cat')];
+        redirect('?a=settings');
+    }
+    $candidate = str_replace("\r\n", "\n", (string)($_POST['meta'] ?? ''));
+
+    // 빈 본문 = meta.yaml 제거(기본값 복원). 카테고리/홈 meta 는 선택 파일이라
+    // '없는 상태'로 되돌리는 길을 둔다 — 삭제 전에도 백업. 파일이 없으면 무효과.
+    if (trim($candidate) === '') {
+        $removed = false;
+        if (is_file($path)) {
+            if (!admin_backup_file($path, 'pagemeta') || !@unlink($path)) {
+                $_SESSION['pagemeta_buffer'] = $candidate;
+                $_SESSION['pagemeta_buffer_cat'] = $cat;
+                $_SESSION['pagemeta_err'] = t('admin.pagemeta.err.write');
+                redirect('?a=pagemeta&cat=' . rawurlencode($cat));
+            }
+            $removed = true;
+        }
+        redirect('?a=pagemeta&cat=' . rawurlencode($cat) . ($removed ? '&deleted=1' : ''));
+    }
+
+    [$valid, $msg] = admin_validate_page_meta($candidate, $cat);
+    if (!$valid) {
+        $_SESSION['pagemeta_buffer'] = $candidate;   // 편집 보존 — 디스크 불변.
+        $_SESSION['pagemeta_buffer_cat'] = $cat;
+        $_SESSION['pagemeta_err'] = $msg;
+        redirect('?a=pagemeta&cat=' . rawurlencode($cat));
+    }
+    if (!admin_backup_file($path, 'pagemeta') || !admin_atomic_write($path, $candidate)) {
+        $_SESSION['pagemeta_buffer'] = $candidate;
+        $_SESSION['pagemeta_buffer_cat'] = $cat;
+        $_SESSION['pagemeta_err'] = t('admin.pagemeta.err.write');
+        redirect('?a=pagemeta&cat=' . rawurlencode($cat));
+    }
+    redirect('?a=pagemeta&cat=' . rawurlencode($cat) . '&saved=1');
+}
+
 // ── 업데이트 확인 (v1.6.0) — GitHub 최신 버전 조회, 캐시 갱신 후 목록 복귀 ─
 if ($action === 'checkupdate') {
     want_post(); check_csrf();

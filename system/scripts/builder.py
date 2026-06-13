@@ -1848,11 +1848,18 @@ class Builder:
         return self._parse_category_meta_file(cat_dir / 'meta.yaml')
 
     def _parse_category_meta_file(self, meta_file: Path,
-                                  scope: str = 'category') -> CategoryMeta:
+                                  scope: str = 'category',
+                                  text: Optional[str] = None) -> CategoryMeta:
         """임의 경로의 meta.yaml 을 CategoryMeta 로 파싱 (v0.4.6 helper).
 
         `Articles/meta.yaml` (루트 = 메인페이지) 와 카테고리 폴더의 meta.yaml
         둘 다에 동일한 파싱 로직 적용.
+
+        v1.14.8: `text` 인자 — 주어지면 디스크 대신 그 문자열을 파싱한다 (Pond
+        의 `--check-page-meta` 저장 게이트용). `meta_file` 경로는 그대로 받아
+        styles 외부 CSS·template 상대경로 검증의 기준 폴더(`meta_file.parent`)를
+        유지하므로 '검증 통과 → 빌드 경고' 불일치가 없다. 파일이 아직 없어도
+        (새 카테고리 meta) `text` 가 있으면 빈 폴백으로 빠지지 않는다.
 
         v0.5.4: `title` / `seo` / `nav_priority` 도 파싱한다. `title` 은
         페이지 자체의 `<title>` 본문이고, `seo.title_prefix` / `seo.title_suffix`
@@ -1867,7 +1874,7 @@ class Builder:
         유효해짐 — 글과 같은 _validate_stylesheets 헬퍼로 검증. use_common_css
         토글과 template 키도 글과 같은 의미로 파싱.
         """
-        if not meta_file.exists():
+        if text is None and not meta_file.exists():
             return CategoryMeta()
 
         # issue 의 target 은 페이지 종류 별로 다름 — home 은 '' (단일), category
@@ -1878,7 +1885,8 @@ class Builder:
             target = str(meta_file.parent.name)
 
         try:
-            raw = yaml_load(meta_file.read_text(encoding='utf-8'))
+            src = text if text is not None else meta_file.read_text(encoding='utf-8')
+            raw = yaml_load(src)
         except Exception as e:
             self._issue(
                 scope, target,

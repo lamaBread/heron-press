@@ -136,4 +136,15 @@ $dv = static fn(string $k, $def = '') => h((string)($d[$k] ?? $def));
     </div>
   </form>
 </section>
+
+<!-- ── ④ 페이지 설정 (홈·카테고리 meta.yaml) ───────────────────────── -->
+<section style="margin:32px 0 0">
+  <h3 style="margin:0 0 4px"><?= t('admin.settings.pagemeta.heading') ?></h3>
+  <p class="muted" style="font-size:13px;margin:0 0 12px">
+    <?= t('admin.settings.pagemeta.intro') ?>
+  </p>
+  <div class="row" style="margin:6px 0">
+    <a class="btn" href="<?= h($self) ?>?a=pagemeta&cat="><?= h(t('admin.settings.pagemeta.open')) ?></a>
+  </div>
+</section>
 <?php admin_foot();

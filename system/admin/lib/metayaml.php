@@ -147,3 +147,45 @@ function meta_new_template(array $f, string $relId): string {
     $L[] = '  description: ' . meta_q($f['description'] ?? '');
     return implode("\n", $L) . "\n";
 }
+
+/**
+ * 홈/카테고리 페이지 meta.yaml 시드 (v1.14.8 — 파일이 아직 없을 때 편집기 초기값).
+ * 대부분 주석이라 그대로 저장해도(=빈 의미) 유효하다 — 사용자가 필요한 키만
+ * 주석 해제. 키 어휘 자체가 영어(slug/title/...)라 본문도 영어로 둔다(데모 페이지
+ * meta.yaml 과 동일 관례). $isHome=true 면 홈 전용 키(excludes_categories) 포함,
+ * 카테고리 전용 키(priority/nav_priority/template)는 제외. $relLabel 은 헤더
+ * 주석의 경로 표기용 ('' = 홈).
+ */
+function meta_page_template(bool $isHome, string $relLabel = ''): string {
+    $L = [];
+    if ($isHome) {
+        $L[] = '# Home page settings (user/articles/meta.yaml).';
+        $L[] = '# The home page is special: it has no slug/date. Only the keys below apply.';
+        $L[] = '# Uncomment and edit only the keys you need; an empty file means all defaults.';
+        $L[] = '';
+        $L[] = '# title: My Site            # <title> + home heading (else site.name)';
+        $L[] = '# per_page: 10              # articles shown on the home feed (newest first)';
+        $L[] = '# excludes_categories: []   # top-level categories to hide from the home feed';
+    } else {
+        $rel = str_replace('\\', '/', $relLabel);
+        $L[] = '# Category page settings (user/articles/' . $rel . '/meta.yaml).';
+        $L[] = '# This file is optional — without it the category uses all defaults.';
+        $L[] = '# Uncomment and edit only the keys you need; an empty file means all defaults.';
+        $L[] = '';
+        $L[] = '# title: ' . ($rel === '' ? 'My Category' : basename($rel))
+             . '            # <title> override for this category page';
+        $L[] = '# per_page: 10              # articles per page in this category feed';
+        $L[] = '# layout: list              # list | grid';
+        $L[] = '# priority: 0               # sort weight among sibling categories (higher = earlier)';
+        $L[] = '# nav_priority: 0           # top-level nav ordering (separate axis from priority)';
+        $L[] = '# template:                 # custom template ref (omit for default)';
+    }
+    $L[] = '# use_common_css: true      # include the shared stylesheet';
+    $L[] = '# seo:';
+    $L[] = '#   description: ...';
+    $L[] = '#   og_image: /assets/default-og.png';
+    $L[] = '# styles:';
+    $L[] = '#   p:';
+    $L[] = '#     line-height: 1.75em';
+    return implode("\n", $L) . "\n";
+}

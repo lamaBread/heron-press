@@ -36,7 +36,10 @@ if (!empty($ui['error'])):
 <?php // (배너 종료) ?>
 <div class="row" style="justify-content:space-between;margin-bottom:14px">
   <h2 style="margin:0"><?= h(t('admin.list.heading')) ?> <span class="muted">(<?= count($scan['posts']) ?>)</span></h2>
-  <a class="btn" href="<?= h($self) ?>?a=new"><?= h(t('admin.nav.new')) ?></a>
+  <div class="row">
+    <a class="btn" href="<?= h($self) ?>?a=pagemeta&cat=" title="<?= h(t('admin.list.pagemeta.title')) ?>"><?= h(t('admin.list.pagemeta')) ?></a>
+    <a class="btn" href="<?= h($self) ?>?a=new"><?= h(t('admin.nav.new')) ?></a>
+  </div>
 </div>
 <table>
   <thead><tr><th><?= h(t('admin.list.col.title')) ?></th><th><?= h(t('admin.list.col.path')) ?></th><th><?= h(t('admin.list.col.status')) ?></th>

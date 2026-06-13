@@ -19,6 +19,7 @@ cli.help.update: "Download the latest release, overlay it, migrate, then exit."
 cli.help.fetch_rclone: "Pre-fetch the rclone binary (download + SHA256 verify), then exit. Idempotent."
 cli.help.deploy: "Incrementally sync dist/ to the server, then exit (preview with --dry-run)."
 cli.help.check_config: "Parse/validate a candidate site.yaml from stdin exactly as the build does, then exit (0=valid). Does not touch the on-disk site.yaml — Pond's settings save gate."
+cli.help.check_page_meta: "Parse/validate a candidate page meta.yaml (home/category) from stdin exactly as the build does, then exit (0=valid). REL: empty=home, otherwise a category relative path. Does not touch disk — Pond's page-settings save gate."
 cli.help.deploy_diff: "Print a unified diff (JSON) of one modified file (dist-relative path from stdin) vs the live server, then exit. Pond-only — used by the deploy preview's Modified panel."
 cli.help.check_locale: "Check locale packs against the canonical (en) key set, then exit. Bare = all locales; --check-locale ja = one. Reports missing/extra/stray-backslash keys (0=clean)."
 cli.help.new_locale: "Scaffold a new locale CODE under system/locales/ (verbatim copy of the canonical pack), then exit. Edit the copies, then run --check-locale CODE."
@@ -73,6 +74,14 @@ cli.checkupdate.uptodate: "You are up to date (v{current})."
 # ── Heron.py --check-config ────────────────────────────────────────
 cli.checkconfig.ok: "site.yaml validation passed — valid as build configuration."
 cli.checkconfig.review_item: "  · To review: {message}"
+
+# ── Heron.py --check-page-meta (home/category meta.yaml validation) ─
+cli.checkpagemeta.ok: "Page meta.yaml validation passed — valid as build configuration."
+cli.checkpagemeta.review_item: "  · To review: {message}"
+cli.checkpagemeta.failed: "Page meta.yaml validation failed — fix the items below and save again:"
+cli.checkpagemeta.issue_item: "  · {message}"
+cli.checkpagemeta.is_article: "This is an article (slug+date) meta.yaml — home/category page settings have no slug/date."
+cli.checkpagemeta.bad_rel: "Invalid category path: {rel}"
 
 # ── Heron.py --clean / general ─────────────────────────────────────
 cli.build.cleaned: "Cleaned: {path}"

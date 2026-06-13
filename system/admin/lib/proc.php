@@ -306,3 +306,23 @@ function admin_validate_site_yaml(string $candidate): array {
     $msg = trim($out . "\n" . $err);
     return [$code === 0, $msg];
 }
+
+/**
+ * 후보 페이지 meta.yaml(홈/카테고리) 텍스트를 빌드와 동일 경로로 검증 (v1.14.8).
+ * Heron.py --check-page-meta <REL> 에 stdin 으로 후보를 흘려 보내 디스크
+ * meta.yaml 을 건드리지 않고 빌드와 같은 _parse_category_meta_file 로 파싱·검증만
+ * 돌린다 — Pond 저장 게이트. $rel='' = 홈, 그 외 = 카테고리 상대경로. 반환:
+ * [ok:bool, message:string] (검증 통과 시 OK 메시지, 실패 시 이슈/오류 그대로).
+ */
+function admin_validate_page_meta(string $candidate, string $rel): array {
+    // --check-page-meta 는 nargs='?' — 홈(빈 rel)은 값 없이, 카테고리는 REL 인자.
+    $flag = $rel === '' ? ['--check-page-meta'] : ['--check-page-meta', $rel];
+    $argv = array_merge(
+        admin_python(),
+        [admin_base_dir() . DIRECTORY_SEPARATOR . 'Heron.py'],
+        $flag
+    );
+    [$code, $out, $err] = admin_proc($argv, $candidate, admin_base_dir());
+    $msg = trim($out . "\n" . $err);
+    return [$code === 0, $msg];
+}

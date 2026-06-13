@@ -18,6 +18,7 @@ cli.help.update: "최신 릴리스를 받아 오버레이 후 마이그레이션
 cli.help.fetch_rclone: "rclone 바이너리를 선확보(다운로드+SHA256 검증)하고 종료. 멱등."
 cli.help.deploy: "dist/ 를 서버에 증분 동기화하고 종료 (--dry-run 으로 미리보기)."
 cli.help.check_config: "stdin 의 site.yaml 후보를 빌드와 동일하게 파싱·검증하고 종료 (0=유효). 디스크 site.yaml 은 건드리지 않음 — Pond 설정 저장 게이트."
+cli.help.check_page_meta: "stdin 의 페이지 meta.yaml 후보(홈/카테고리)를 빌드와 동일하게 파싱·검증하고 종료 (0=유효). REL: 빈 값=홈, 그 외=카테고리 상대경로. 디스크는 건드리지 않음 — Pond 페이지 설정 저장 게이트."
 cli.help.deploy_diff: "수정 파일 한 개(stdin 의 dist 상대경로)를 라이브 서버와 비교한 unified diff 를 JSON 으로 출력하고 종료. Pond 전용 — 배포 미리보기 '수정' 패널이 사용."
 cli.help.check_locale: "로케일 팩을 정본(en) 키 집합과 대조하고 종료. 인자 없으면 전체, --check-locale ja 면 하나. missing/extra/잔존 백슬래시 키를 보고 (0=결함 없음)."
 cli.help.new_locale: "system/locales/ 아래에 새 로케일 CODE 를 스캐폴딩(정본 팩 그대로 복사)하고 종료. 복사본을 번역한 뒤 --check-locale CODE 로 점검."
@@ -72,6 +73,14 @@ cli.checkupdate.uptodate: "최신입니다 (v{current})."
 # ── Heron.py --check-config ────────────────────────────────────────
 cli.checkconfig.ok: "site.yaml 검증 통과 — 빌드 설정으로 유효합니다."
 cli.checkconfig.review_item: "  · 살펴볼 사항: {message}"
+
+# ── Heron.py --check-page-meta (홈/카테고리 meta.yaml 검증) ──────────
+cli.checkpagemeta.ok: "페이지 meta.yaml 검증 통과 — 빌드 설정으로 유효합니다."
+cli.checkpagemeta.review_item: "  · 살펴볼 사항: {message}"
+cli.checkpagemeta.failed: "페이지 meta.yaml 검증 실패 — 아래 항목을 고친 뒤 다시 저장하세요:"
+cli.checkpagemeta.issue_item: "  · {message}"
+cli.checkpagemeta.is_article: "글(slug+date) meta.yaml 형식입니다 — 홈/카테고리 페이지 설정에는 slug/date 가 없습니다."
+cli.checkpagemeta.bad_rel: "잘못된 카테고리 경로입니다: {rel}"
 
 # ── Heron.py --clean / 일반 ────────────────────────────────────────
 cli.build.cleaned: "정리됨: {path}"

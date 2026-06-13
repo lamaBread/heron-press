@@ -118,6 +118,18 @@ function admin_site_yaml_path(): string {
 }
 
 /**
+ * 페이지 meta.yaml 경로 (v1.14.8 — 홈/카테고리 설정 편집기). $rel='' = 홈
+ * (user/articles/meta.yaml), 그 외 = 카테고리 폴더 상대경로의 meta.yaml.
+ * null = 거부된 rel (admin_safe_rel 실패). 호출부는 $rel 을 먼저 화이트리스트
+ * (admin_scan()['categories']) 로 검증한다.
+ */
+function admin_page_meta_path(string $rel): ?string {
+    $abs = admin_abs($rel);
+    if ($abs === null) return null;
+    return $abs . DIRECTORY_SEPARATOR . 'meta.yaml';
+}
+
+/**
  * 덮어쓰기 전 안전 백업 (v1.8.0 설정 저장 게이트용). $absPath 를
  * user/.heron/backups/settings/<Ymd-His>__<tag>__<basename> 으로 복사한다.
  * 마이그레이션 백업(user/.heron/backups/)과 같은 보관소·타임스탬프 관례.

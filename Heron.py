@@ -127,6 +127,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--deploy-diff', action='store_true',
         help=i18n.t('cli.help.deploy_diff'))
+    # v1.14.8: 후보 페이지 meta.yaml(stdin)을 빌드와 동일 경로로 검증 (Pond 의 홈·
+    # 카테고리 설정 저장 게이트). 인자 REL: 빈 문자열=홈, 그 외=카테고리 상대경로.
+    parser.add_argument(
+        '--check-page-meta', nargs='?', const='', default=None, metavar='REL',
+        help=i18n.t('cli.help.check_page_meta'))
     # v1.9.7: 로케일 팩 점검(키 패리티/잔존 백슬래시) + 새 로케일 스캐폴딩.
     parser.add_argument(
         '--check-locale', nargs='?', const='*', metavar='CODE',
@@ -246,6 +251,65 @@ def _action_check_config(base: Path) -> int:
     return 0
 
 
+def _action_check_page_meta(base: Path, rel: str) -> int:
+    """stdin 의 페이지 meta.yaml 후보(홈/카테고리)를 빌드와 동일 경로로 검증 (v1.14.8).
+
+    rel='' = 홈(Articles/meta.yaml), 그 외 = 카테고리 폴더 상대경로. Pond 가
+    편집 중인 버퍼를 stdin 으로 흘려보내면 디스크를 건드리지 않고 빌드와 같은
+    Builder._parse_category_meta_file 로 파싱·검증만 한다 — 통과(exit 0)해야 Pond
+    가 저장(commit)한다. styles 외부 CSS·template 상대경로 검증이 실제 폴더를
+    기준으로 동작하도록 meta_file 경로는 실제 Articles/<rel>/meta.yaml 을 쓴다.
+
+    이 파서는 빌드에서 fail-soft(이슈 → 폴백 + 리포트, 빌드 중단 없음)지만, 저장
+    게이트에서는 이슈가 1건이라도 있으면 exit 1 로 거부한다 — site.yaml 게이트와
+    UX 일관 + '저장은 됐는데 빌드 리포트에 경고가 쌓이는' 상황 차단. 또 글
+    meta(slug+date 동시 존재)를 카테고리/홈에 잘못 붙여넣은 경우 파서는 조용히 빈
+    CategoryMeta 로 폴백하므로 여기서 명시적으로 거부한다.
+    """
+    from scripts.yaml_parser import yaml_load
+    text = sys.stdin.read()
+
+    b = Builder(base, enable_cache=False)
+    articles = b.articles_dir
+
+    # rel 정규화 + Articles/ 경계 재검증 (Pond 가 화이트리스트로 거르지만 직접
+    # 호출/오류 입력 방어 — 벗어나면 거부). 빈 rel = 홈.
+    if rel:
+        try:
+            target_dir = (articles / rel).resolve()
+            target_dir.relative_to(articles.resolve())
+        except (ValueError, OSError):
+            print(i18n.t('cli.checkpagemeta.bad_rel', rel=rel), file=sys.stderr)
+            return 1
+        scope = 'category'
+    else:
+        target_dir = articles
+        scope = 'home'
+    meta_file = target_dir / 'meta.yaml'
+
+    # 글 meta(slug+date)를 카테고리/홈 meta 로 잘못 붙여넣은 경우 명시 거부.
+    raw = yaml_load(text)
+    if isinstance(raw, dict) and 'slug' in raw and 'date' in raw:
+        print(i18n.t('cli.checkpagemeta.is_article'), file=sys.stderr)
+        return 1
+
+    b._parse_category_meta_file(meta_file, scope=scope, text=text)
+
+    issues = [e for e in b.report.entries if e.severity == 'issue']
+    if issues:
+        print(i18n.t('cli.checkpagemeta.failed'), file=sys.stderr)
+        for e in issues:
+            print(i18n.t('cli.checkpagemeta.issue_item', message=e.message),
+                  file=sys.stderr)
+        return 1
+
+    print(i18n.t('cli.checkpagemeta.ok'))
+    for e in b.report.entries:
+        if e.severity == 'warning':
+            print(i18n.t('cli.checkpagemeta.review_item', message=e.message))
+    return 0
+
+
 def _action_deploy_diff(base: Path) -> int:
     """stdin 의 dist 상대경로 한 개의 unified diff 를 JSON 한 줄로 출력 (v1.13.0).
 
@@ -321,6 +385,8 @@ def main(argv=None) -> int:
         return _action_deploy(base, dry_run=args.dry_run)
     if args.check_config:
         return _action_check_config(base)
+    if args.check_page_meta is not None:
+        return _action_check_page_meta(base, args.check_page_meta)
     if args.deploy_diff:
         return _action_deploy_diff(base)
     if args.check_locale is not None:
